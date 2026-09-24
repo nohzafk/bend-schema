@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.js";
-import { check0 as check, conforms0, type BendMaybe, type Raw, type Schema } from "../dist-core/core.js";
+import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.js";
 import { BUDGET, KEYS_MAX, errText, toRaw } from "./codec";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
@@ -159,5 +159,88 @@ describe("the check at run time", () => {
   test("a list of numbers reports the element that is wrong", () => {
     const r = check({ $: "SList", elem: nat }, toRaw([1, 2, -3]));
     expect(r.$ === "None" ? null : errText(r.value)).toBe("[2]: must be a whole number from 0 to 281474976710655");
+  });
+});
+
+// The three constructors a host can build without a Bend program: SBool,
+// SNatIn{lo, hi} and SStrLen{lo, hi, s}. Each one's laws are in LAWS.bend
+// (sbool_meaning, snat_in_meaning, sstr_len_meaning), so what is tested here
+// is the run-time side: the reason a value is refused, and what enc writes.
+describe("a bound a host can write", () => {
+  const bool: Schema = { $: "SBool" };
+  const inSix: Schema = { $: "SNatIn", lo: 1n, hi: 6n };
+  const three: Schema = { $: "SStrLen", lo: 1n, hi: 3n, s: { $: "SStr" } };
+  const names = (...ns: string[]): Schema => {
+    let l: BendList<string> = { $: "Nil" };
+    for (let i = ns.length - 1; i >= 0; i--) l = { $: "Con", head: ns[i], tail: l };
+    return { $: "SEnum", names: l };
+  };
+
+  test("SBool accepts both booleans, and says so of anything else", () => {
+    expect(conforms0(bool, toRaw(true))).toBe(true);
+    expect(conforms0(bool, toRaw(false))).toBe(true);
+    expect(first(bool, true)).toBe(null);
+    expect(first(bool, false)).toBe(null);
+    expect(first(bool, 0)).toBe("the value: must be a boolean");
+    expect(first(bool, "true")).toBe("the value: must be a boolean");
+    expect(first(bool, null)).toBe("the value: must be a boolean");
+    expect(first({ $: "SList", elem: bool }, [true, 1])).toBe("[1]: must be a boolean");
+    expect(conforms0({ $: "SList", elem: bool }, toRaw([true, false]))).toBe(true);
+  });
+
+  test("SNatIn accepts the numbers in its bounds, both ends included", () => {
+    expect(conforms0(inSix, toRaw(1))).toBe(true);
+    expect(conforms0(inSix, toRaw(6))).toBe(true);
+    expect(conforms0(inSix, toRaw(0))).toBe(false);
+    expect(first(inSix, 0)).toBe("the value: must be from 1 to 6");
+    expect(first(inSix, 7)).toBe("the value: must be from 1 to 6");
+    // a value that is not a number at all is refused as one
+    expect(first(inSix, "3")).toBe("the value: must be a whole number from 0 to 281474976710655");
+    expect(first({ $: "SField", name: "n", s: inSix, rest: end }, {})).toBe(".n: missing");
+  });
+
+  test("lo past hi is an empty range, not an error: nothing is in bounds", () => {
+    const none: Schema = { $: "SNatIn", lo: 3n, hi: 1n };
+    expect(conforms0(none, toRaw(0))).toBe(false);
+    expect(conforms0(none, toRaw(1))).toBe(false);
+    expect(conforms0(none, toRaw(2))).toBe(false);
+    expect(first(none, 2)).toBe("the value: must be from 3 to 1");
+    // and the same for a string
+    const noLength: Schema = { $: "SStrLen", lo: 2n, hi: 1n, s: { $: "SStr" } };
+    expect(conforms0(noLength, toRaw("a"))).toBe(false);
+    expect(first(noLength, "a")).toBe("the value: must be 2 to 1 characters long");
+  });
+
+  test("SStrLen is a string in the bounds that also satisfies its schema", () => {
+    expect(conforms0(three, toRaw("a"))).toBe(true);
+    expect(conforms0(three, toRaw("abc"))).toBe(true);
+    expect(conforms0(three, toRaw(""))).toBe(false);
+    expect(first(three, "")).toBe("the value: must be 1 to 3 characters long");
+    expect(first(three, "abcd")).toBe("the value: must be 1 to 3 characters long");
+    // the shape comes first, as at every kind
+    expect(first(three, 1)).toBe("the value: must be a string");
+    // the schema it wraps is checked too
+    const named: Schema = { $: "SStrLen", lo: 2n, hi: 2n, s: names("ab", "cd") };
+    expect(first(named, "ab")).toBe(null);
+    expect(first(named, "cd")).toBe(null);
+    expect(first(named, "ef")).toBe("the value: is not one of the allowed names");
+    // the schema the value must satisfy is checked first, as at a rule
+    expect(first(named, "a")).toBe("the value: is not one of the allowed names");
+  });
+
+  test("the three constructors round-trip through enc and dec", () => {
+    expect(dec(bool, enc(bool, true))).toEqual({ $: "Some", value: true });
+    expect(dec(bool, enc(bool, false))).toEqual({ $: "Some", value: false });
+    expect(dec(inSix, enc(inSix, 6n))).toEqual({ $: "Some", value: 6n });
+    expect(dec(three, enc(three, "abc"))).toEqual({ $: "Some", value: "abc" });
+  });
+
+  test("a value outside a bound is written out as it is, and check refuses it", () => {
+    // encode_conforms carries the bound as a premise (LAWS.bend): the encoder
+    // writes the meaning unchanged, and a host that holds a value past a bound
+    // is the one at fault -- parse reports it, with the bound's own reason.
+    expect(dec(three, enc(three, "abcd"))).toEqual({ $: "Some", value: "abcd" });
+    const r = check(three, enc(three, "abcd"));
+    expect(r.$ === "None" ? null : errText(r.value)).toBe("the value: must be 1 to 3 characters long");
   });
 });
