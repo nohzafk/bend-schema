@@ -2,6 +2,8 @@
 # bend-schema's gate. Each step checks one claim, and each can fail:
 #
 #   1. the laws are proved, with no unsafe code, and each fails when made false
+#   1b. and each law holds on the concrete instances of it that
+#      core/falsify/spec.ts generates, edge cases first
 #   2. the core builds into a typed module, and what it builds is what is
 #      committed in dist-core/
 #   3. the tools' fixtures build into modules, and the tests pass: the codec,
@@ -42,6 +44,24 @@ if ! bun core/check_mutants.ts > /tmp/bend-schema-mutants.log 2>&1; then
   exit 1
 fi
 cat /tmp/bend-schema-mutants.log
+
+echo "== 1b. the laws on concrete instances =="
+# Before a proof is written, a law is falsified on literal instances of it
+# (core/falsify/spec.ts): the checker runs the code on them, so an instance
+# that holds is one the law really covers. Each law is checked alone, because
+# the checker stops at the first failing instance and the one that fails names
+# the law it belongs to. A falsifier that has never failed proves nothing:
+# tools/falsify.ts takes CORE=<path> as C to point it at a mutated copy of the
+# core, which is how that is shown.
+for L in exact accurate enum_accepts enum_admits variant strict tuple tagged \
+         too_large rules sbool_meaning snat_in_meaning sstr_len_meaning; do
+  if ! OUT=$(LAW=$L bun tools/falsify.ts core/falsify/spec.ts 2>&1); then
+    echo "$OUT"
+    echo "FAIL: $L does not hold on the instances it is checked over"
+    exit 1
+  fi
+  echo "  $L: $OUT"
+done
 
 echo "== 2. the module =="
 # dist-core/ is committed and pinned: build it fresh elsewhere and diff, so a

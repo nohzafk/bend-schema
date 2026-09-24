@@ -1,5 +1,6 @@
-// Literal instances of the laws, for tools/falsify.ts
-// (LAW=exact|accurate|enum_accepts|enum_admits|variant).
+// Literal instances of the laws, for tools/falsify.ts. One LAW value checks
+// one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|strict|tuple|
+// tagged|too_large|rules|sbool_meaning|snat_in_meaning|sstr_len_meaning.
 //   bun ../../tools/falsify.ts spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -126,4 +127,44 @@ for (const [lo, hi] of bounds) for (const n of [0, 1, 2, 3, 4, 9, 10]) {
 }
 for (const r of [STR, NUL, BAD, list([]), obj([])])
   instances.push(...(!law || law === "rules" ? [{ name: `nat_in_other_${instances.length}`, claim: `{Maybe.is_none(&2, C.Err, C.nat_in(1n, 2n, ${r})) == True{} : Bool}` }] : []));
+// ---- the meaning laws of the three constructors that carry their bound ----
+//
+// Each is that law's statement at literals: conforms must agree with what the
+// constructor's name claims. Edge cases come first, since the checker stops at
+// the first failing instance: a lo past hi is an empty range, not an error, so
+// lo > hi is a case here, and so are the empty string and n = 0.
+const meaningBounds = [[0, 0], [3, 1], [0, 3], [1, 3], [2, 2], [5, 9]];
+// sbool_meaning: SBool accepts a boolean and nothing else. No rule is read at
+// an SBool, so one rule stands for all of them.
+const sboolRaws: R[] = [TRUE, FALSE, BAD, BIG, "C.RMissing{}", N(0), STR, NUL, list([]), obj([])];
+sboolRaws.forEach((r, i) => instances.push(...(!law || law === "sbool_meaning" ? [{
+  name: `sbool_meaning_${i}`,
+  claim: `{C.conforms(~H.no_rule, C.SBool{}, ${r}, None{}) == C.is_bool(${r}) : Bool}`,
+}] : [])));
+// snat_in_meaning: SNatIn{lo, hi} accepts a number in the bounds, both ends
+// included -- and nothing else.
+const meaningNums = [0, 1, 2, 3, 4, 9, 10];
+const notNums: R[] = [STR, NUL, BAD, BIG, "C.RMissing{}", list([]), obj([]), TRUE];
+meaningBounds.forEach(([lo, hi], bi) => meaningNums.forEach((n, ni) => instances.push(...(!law || law === "snat_in_meaning" ? [{
+  name: `snat_in_meaning_${bi}_${ni}`,
+  claim: `{C.conforms(~H.no_rule, C.SNatIn{${lo}n, ${hi}n}, C.RNum{${n}n}, None{}) == Bool.and(Nat.is_le(${lo}n, ${n}n), Nat.is_le(${n}n, ${hi}n)) : Bool}`,
+}] : []))));
+notNums.forEach((r, i) => instances.push(...(!law || law === "snat_in_meaning" ? [{
+  name: `snat_in_meaning_other_${i}`,
+  claim: `{C.conforms(~H.no_rule, C.SNatIn{0n, 3n}, ${r}, None{}) == False{} : Bool}`,
+}] : [])));
+// sstr_len_meaning: SStrLen{lo, hi, s} accepts a string whose length is in the
+// bounds and that also satisfies s. SStr, SNat and SEnum under it read both
+// halves: the inner check, and the length.
+const meaningStrs = ["", "a", "ab", "abc", "abcd", "日本"];
+const meaningInner = [S.str, S.nat, enumS];
+const notStrs: R[] = [BIG, "C.RMissing{}", NUL, BAD, TRUE, FALSE, N(1), list([]), obj([])];
+meaningBounds.forEach(([lo, hi], bi) => meaningStrs.forEach((x, xi) => meaningInner.forEach((s, si) => instances.push(...(!law || law === "sstr_len_meaning" ? [{
+  name: `sstr_len_meaning_${bi}_${xi}_${si}`,
+  claim: `{C.conforms(~H.no_rule, C.SStrLen{${lo}n, ${hi}n, ${s}}, C.RStr{"${x}"}, None{}) == Bool.and(C.conforms(~H.no_rule, ${s}, C.RStr{"${x}"}, None{}), Bool.and(Nat.is_le(${lo}n, String.length("${x}")), Nat.is_le(String.length("${x}"), ${hi}n))) : Bool}`,
+}] : [])))));
+notStrs.forEach((r, i) => meaningInner.forEach((s, si) => instances.push(...(!law || law === "sstr_len_meaning" ? [{
+  name: `sstr_len_meaning_other_${i}_${si}`,
+  claim: `{C.conforms(~H.no_rule, C.SStrLen{0n, 3n, ${s}}, ${r}, None{}) == False{} : Bool}`,
+}] : []))));
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };
