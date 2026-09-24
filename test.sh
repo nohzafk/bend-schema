@@ -4,8 +4,9 @@
 #   1. the laws are proved, with no unsafe code, and each fails when made false
 #   2. the core builds into a typed module, and what it builds is what is
 #      committed in dist-core/
-#   3. the tests pass: the codec, and the check at run time
-#   4. the host typechecks
+#   3. the tools' fixtures build into modules, and the tests pass: the codec,
+#      the two tools built on fixtures, and the check at run time
+#   4. the hosts typecheck: this package's src/, and the tools' fixture host
 #   5. the Base facts this core's proofs import are proved, and one of them is
 #      made false to show that check can fail
 #
@@ -58,6 +59,18 @@ fi
 echo "dist-core/ is what $(cat dist-core/BEND-VERSION) builds"
 
 echo "== 3. the tests =="
+# tools/test/ is bend2-play's tools/test/: this repository's tools/ is that
+# one, so the tools are tested the same way here (bend_lib.ts on Base's
+# generic types, case_arms.ts on a fixture's case table). Each test file
+# imports the module tools/bend_lib.ts builds from its fixture, so build them
+# beside the tests first -- gitignored, as there: dist-core/ is what the
+# package ships, and none of this is published.
+for f in generics uses templated dependent dependent_user; do
+  tools/bend-check "tools/test/$f.bend"
+  bun tools/bend_lib.ts "tools/test/$f.bend" tools/test/dist > /dev/null
+done
+# `bun test` discovers every *.test.ts below the root, tools/test/ included,
+# so the fixtures' tests run here and are not run a second time.
 if ! bun test > /tmp/bend-schema-tests.log 2>&1; then
   tail -20 /tmp/bend-schema-tests.log
   echo "FAIL: a test failed"
@@ -67,6 +80,8 @@ tail -3 /tmp/bend-schema-tests.log
 
 echo "== 4. the types =="
 bunx tsc -p .
+# the tools' fixture host, against the module those fixtures just built
+bunx tsc -p tools/test
 
 echo "== 5. the facts this core rests on =="
 sh core/base-facts/test.sh
