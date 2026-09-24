@@ -1,0 +1,211 @@
+import Base
+import ./core.bend as C
+
+# The laws of bend-schema, for every schema, every value and every rule:
+# proved once, and every schema built from these combinators has them.
+#
+#   check_exact     check finds nothing exactly when the value conforms: it
+#                   neither lets a bad value through nor refuses a good one.
+#                   At an SRule the value must conform to the rule's schema,
+#                   and the rule must report nothing.
+#   check_accurate  what check reports is there: following its path, every
+#                   value passed on the way conforms, and at the end the value
+#                   is wrong in the way it says. At an SRule, the schema's
+#                   shape was not the defect and the rule itself reported
+#                   this error at the path it names.
+#   enum_accepts    every name in an SEnum's list is accepted.
+#   enum_admits     a string SEnum accepts is one of its names, and here is
+#                   where. Together they pin in_names, which check and
+#                   conforms share.
+#   variant_meaning for a chain of SVariant keys ending in SVEnd, a value
+#                   conforms exactly when it is an object, exactly one of the
+#                   keys is in it, and the value under that key conforms: a
+#                   second reading by counting, which pins none_present.
+#   too_large_reported
+#                   a node the codec refused to build is reported where it
+#                   stands, with TooLarge: the one thing the core can be told
+#                   about a size.
+#
+# bounds_meaning died with SBounds: the bounded list is billing's rule now,
+# and its meaning is billing's law.
+#
+# Decided by the human with these laws (acl, 2026-09-24): an SVariant object
+# with none of its keys, or with two of them, is an error, and a key's value
+# is checked by its own schema (so {any: false} is refused by STrue).
+#
+# Decided by the human with these laws: a key the schema names must be
+# present, and an optional value is written null; keys the schema does not
+# name are ignored; the first error is depth first, by position. A rule runs
+# only after the shape it refines holds, and its error's path is relative to
+# the value it was given. Not pinned by a law: with a key repeated in an
+# object, lookup reads the first (a JSON object has no repeated keys).
+
+law check_exact:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  for +prev: Maybe<&2, Nat>
+  {Maybe.is_none(&2, C.Err, C.check(~rule, s, r, prev)) == C.conforms(~rule, s, r, prev) : Bool}
+
+law check_accurate:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for +path: List<&2, C.Step>
+  for +why: C.Why
+  for h: {C.check(~rule, s, r, prev) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}
+  {C.defect(~rule, s, r, prev, path) == Some{why} : Maybe<&2, C.Why>}
+
+law enum_accepts:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +pre: List<&2, String>
+  for +n: String
+  for +post: List<&2, String>
+  {C.conforms(~rule, C.SEnum{List.append(&2, String, pre, n <> post)}, C.RStr{n}, None{}) == True{} : Bool}
+
+def OneOf(ns: List<&2, String>, x: String) -> Type:
+  &pre: List<&2, String> -> &n: String -> &post: List<&2, String> ->
+    {ns == List.append(&2, String, pre, n <> post) : List<&2, String>} & {String.eq(x, n) == True{} : Bool}
+
+law enum_admits:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +ns: List<&2, String>
+  for +x: String
+  for h: {C.conforms(~rule, C.SEnum{ns}, C.RStr{x}, None{}) == True{} : Bool}
+  OneOf(ns, x)
+
+law variant_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  for hc: {C.is_chain(s) == True{} : Bool}
+  {C.conforms(~rule, s, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(s, r), 1n), C.present_conform(~rule, s, r))) : Bool}
+
+# A tuple conforms exactly when the value is a list, as long as the tuple,
+# and each position conforms. Without it, a bug shared by check and conforms
+# (both skipping a position) passes the two laws above.
+law tuple_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +ss: List<&2, C.Schema>
+  for +r: C.Raw
+  {C.conforms(~rule, C.tuple_of(ss), r, None{}) == Bool.and(C.raw_list(r), Bool.and(Nat.is_eq(C.raw_len(r), List.length(&2, C.Schema, ss)), C.each_pos(~rule, ss, r, 0n))) : Bool}
+
+# ---- a strict object ----
+#
+# SStrict{s} is s, and no key but the ones s names. The right side counts
+# the unknown keys (count_unknown), a second walk that shares only in_names
+# with the core, and in_names is pinned by the enum laws.
+
+law strict_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  {C.conforms(~rule, C.SStrict{s}, r, None{}) == Bool.and(C.conforms(~rule, s, r, None{}), Nat.is_eq(C.count_unknown(C.key_names(s), r), 0n)) : Bool}
+
+# ---- a tagged union ----
+#
+# tagged_meaning: at a case, a value whose tag is the case's name conforms
+# exactly when the object without the tag conforms to the case; any other
+# value is the rest's to decide. At the chain's end nothing conforms.
+# drop_meaning pins drop_key, which conforms, check and dec share: what it
+# leaves under k is what was under k after the first one (so a single tag
+# key is gone), and every other key reads as before.
+
+law tagged_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +k: String
+  for +n: String
+  for +cs: C.Schema
+  for +rest: C.Schema
+  for +r: C.Raw
+  {C.conforms(~rule, C.STagged{k, n, cs, rest}, r, None{}) == C.pick_bool(C.is_tag(k, n, r), C.conforms(~rule, cs, C.drop_key(k, r), None{}), C.conforms(~rule, rest, r, None{})) : Bool}
+
+law tag_end_refuses:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +k: String
+  for +r: C.Raw
+  {C.conforms(~rule, C.STagEnd{k}, r, None{}) == False{} : Bool}
+
+law drop_first:
+  for +k: String
+  for +v: C.Raw
+  for +o: C.Raw
+  {C.drop_key(k, C.RKey{k, v, o}) == o : C.Raw}
+
+law drop_other:
+  for +k: String
+  for +j: String
+  for +r: C.Raw
+  for h: {False{} == String.eq(k, j) : Bool}
+  {C.lookup(j, C.drop_key(k, r)) == C.lookup(j, r) : C.Raw}
+
+# ---- ready-made rules ----
+#
+# Each pins its rule to what it means: on the value it is about, it reports
+# nothing exactly when the value is in the bounds (both ends included).
+
+law str_len_in_meaning:
+  for +lo: Nat
+  for +hi: Nat
+  for +x: String
+  {Maybe.is_none(&2, C.Err, C.str_len_in(lo, hi, C.RStr{x})) == Bool.and(Nat.is_le(lo, String.length(x)), Nat.is_le(String.length(x), hi)) : Bool}
+
+law nat_in_meaning:
+  for +lo: Nat
+  for +hi: Nat
+  for +n: Nat
+  {Maybe.is_none(&2, C.Err, C.nat_in(lo, hi, C.RNum{n})) == Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)) : Bool}
+
+# ---- a value too big to walk ----
+
+# The codec refuses to build a value past its budget and puts one RTooBig in
+# place of the list or object that ran past it (codec.ts); nothing else in the
+# core knows a size. So the claim about that node is local: it conforms to
+# nothing, and the walk that reaches it reports it right there (the empty
+# path, for the value it was given) with TooLarge -- never the schema kind's
+# own reason, which would say the host sent the wrong shape when what it sent
+# was too much of the right one. A node further down is reported one step
+# along by check's own step machinery, which check_accurate covers, and the
+# codec's budget (that a value inside it converts unchanged) is a run-time
+# test, since the codec is TypeScript.
+law too_large_reported:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +prev: Maybe<&2, Nat>
+  {C.check(~rule, s, C.RTooBig{}, prev) == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}
+
+# ---- a schema's meaning: the decoder, derived from the schema ----
+#
+# Meaning, enc and dec are written once for every schema (core.bend), so a
+# project stops writing its reader and its round trip. The three laws below
+# were approved with the design: wf is a premise (a schema is the
+# programmer's, not the wire's), and an enum means its string.
+
+# What was written reads back as itself.
+law decode_encode:
+  for +s: C.Schema
+  for +x: C.Meaning(s)
+  for hw: {C.wf(s) == True{} : Bool}
+  {C.dec(s, C.enc(s, x)) == Some{x} : Maybe<&2, C.Meaning(s)>}
+
+
+# A value check accepts can be read: a project's reader needs no
+# "cannot happen" default.
+law checked_decodes:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  for hc: {C.conforms(~rule, s, r, None{}) == True{} : Bool}
+  {Maybe.is_some(&2, C.Meaning(s), C.dec(s, r)) == True{} : Bool}
+
+
+# What is written is accepted by the schema (with no rule: a rule is the
+# project's, and not the encoder's to satisfy), as long as each enum value is
+# one of its names.
+law encode_conforms:
+  for +s: C.Schema
+  for +x: C.Meaning(s)
+  for hw: {C.wf(s) == True{} : Bool}
+  for hn: {C.names_ok(s, x) == True{} : Bool}
+  {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}
