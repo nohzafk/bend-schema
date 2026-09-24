@@ -318,6 +318,6 @@ call. The gate cannot skip it: it is the shape that binds the budget.
 
 | command | what it settles |
 |---|---|
-| `sh test.sh` | the gate: the laws (no unsafe code) and their mutants, the module (rebuilt and diffed against `dist-core/`), the tests, the types |
+| `sh test.sh` | the gate: the laws (no unsafe code) and their mutants, every law on its concrete instances (`core/falsify/`), the module (rebuilt and diffed against `dist-core/`), the tests (codec, API, examples, and the tools on `tools/test/` fixtures), the types, the base facts |
 | `bun tools/bend_lib.ts core/core.bend dist-core` | the build: the core as a typed ES module, into the committed `dist-core/` |
 | `LAW=exact bun tools/falsify.ts core/falsify/spec.ts` | a law on literal instances (from `core/falsify/`) |
