@@ -107,6 +107,8 @@ export function whyText(w: Why): string {
       return `must be a whole number from 0 to ${NAT_MAX}`;
     case "NotString":
       return "must be a string";
+    case "NotBool":
+      return "must be a boolean";
     case "NotList":
       return "must be a list";
     case "NotObject":

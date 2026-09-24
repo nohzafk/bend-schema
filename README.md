@@ -13,7 +13,7 @@ project's own refinements are rules it passes in (`SRule`, below).
 ```
 core/core.bend    Raw (any JSON value), Schema, check and conforms, and defect,
                   the predicate the laws state
-core/LAWS.bend    17 laws, for every schema, every rule and every value
+core/LAWS.bend    20 laws, for every schema, every rule and every value
 core/PROOF.bend   their proofs; imports ./base-facts
 core/base-facts/  the base facts those proofs import
 core/falsify/     literal instances of the laws, for tools/falsify.ts
@@ -38,7 +38,10 @@ The Bend sources are the library; `dist-core/` is what a host imports, and
 | schema | a value conforms when |
 |---|---|
 | `SNat{}` | it is a whole number from 0 to 2^48-1 |
+| `SNatIn{lo, hi}` | it is a whole number from `lo` to `hi`, both included |
 | `SStr{}` | it is a string |
+| `SStrLen{lo, hi, s}` | it is a string of `lo` to `hi` characters (`sstr_len_meaning`) that also conforms to s |
+| `SBool{}` | it is a boolean |
 | `SOpt{s}` | it is null, or conforms to s |
 | `SList{e}` | it is a list, each element conforming to e |
 | `SField{name, s, rest}`, `SEnd{}` | it is an object whose `name` conforms to s, and so on |
@@ -126,7 +129,8 @@ gives `a == b`.
 
 `Meaning(s)` is the Bend type a schema describes (a record is nested
 `Both<A, B>` ending in `Unit`, a variant chain nested `Either`s ending in
-`Empty`, `SOpt` a `Maybe`, `SEnum` a `String`, `SRule` its shape's meaning).
+`Empty`, `SOpt` a `Maybe`, `SEnum` a `String`, `SBool` a `Bool`, `SNatIn` a
+`Nat`, `SRule` and `SStrLen` their shape's meaning).
 `enc(s, x)` writes a meaning as the host would; `dec(s, r)` reads one. A
 project writes no reader: it matches the meaning into its own types.
 
@@ -135,7 +139,8 @@ project writes no reader: it matches the meaning into its own types.
 - `checked_decodes`: a value that conforms is read (so a reader has no
   "cannot happen" default to be wrong about).
 - `encode_conforms`: on a well-formed schema, what `enc` writes conforms, if
-  every enum value is one of its names (`names_ok`).
+  every enum value is one of its names (`names_ok`) and every value is inside
+  the bounds its constructors state (`bounds_ok`).
 
 `wf` asks that a key be named once in its record or chain and that an optional
 value not be itself nullable. Without either, the round trip fails (a mutant
@@ -185,6 +190,21 @@ def my_rule(tag: Nat, r: S.Raw) -> Maybe<&2, S.Err>:
 
 Both bounds are included. Each looks only at the value it is about and passes
 any other, so wrap the schema that fixes the kind: `SRule{SStr{}, 0n}`.
+
+A bound a host writes itself — no Bend program and no rule — is a constructor
+instead: `SNatIn{lo, hi}` and `SStrLen{lo, hi, s}` carry the numbers, which a
+rule's tag cannot. The two bounds are the rules' own tests, stated once
+(`str_len_ok`, `num_ok`, shared with `str_len_in` and `nat_in`), and their
+meaning is the rules' too: `snat_in_meaning` restates `nat_in_meaning`,
+`sstr_len_meaning` restates `str_len_in_meaning`. Both ends are included, and
+`lo` past `hi` is not an error but an empty range: nothing is in bounds, and
+the laws hold for every `lo` and `hi`. A value of another kind is refused as
+that kind (`NotString`, `NotNat`); `SBool` is `sbool_meaning` and `NotBool`.
+
+A bound is a subset of the shape the encoder writes, so `encode_conforms`
+carries `bounds_ok` as a premise beside `names_ok`: `enc` writes the value it
+was given, and a host that holds one outside a bound is the one at fault —
+`check` reports it on the way back.
 
 ## How large a value may be
 

@@ -44,7 +44,9 @@ type Raw is Data:
 
 type Schema is Data:
   SNat{}
+  SNatIn{lo: Nat, hi: Nat}
   SStr{}
+  SStrLen{lo: Nat, hi: Nat, s: Schema}
   SOpt{inner: Schema}
   SList{elem: Schema}
   SField{name: String, s: Schema, rest: Schema}
@@ -53,6 +55,7 @@ type Schema is Data:
   SStrict{s: Schema}
   STagged{key: String, name: String, s: Schema, rest: Schema}
   STagEnd{key: String}
+  SBool{}
   STrue{}
   SEnum{names: List<&2, String>}
   SVariant{name: String, s: Schema, rest: Schema}
@@ -75,6 +78,7 @@ type Why is Data:
   Missing{}
   NotNat{}
   NotString{}
+  NotBool{}
   NotList{}
   NotObject{}
   NoElements{}
@@ -197,14 +201,79 @@ def is_str(+n: String, v: Raw) -> Bool:
 def is_tag(+k: String, +n: String, r: Raw) -> Bool:
   is_str(n, lookup(k, r))
 
+# ---- a bound, as a test and as a reason ----
+#
+# SStrLen{lo, hi, s} is a string in the bounds that also satisfies s, SNatIn is
+# a number in the bounds, and SBool is a boolean. The bound travels with the
+# schema instead of with a rule's tag, which is what lets a host build one (a
+# rule is chosen by a number, and a number carries no bounds).
+#
+# A rule and a constructor state the same bounds, and these defs are where they
+# are written once: str_len_ok and num_ok are the tests, in_err is how a failing
+# test becomes an error at the value's own path, and len_ok is the same test
+# read as a Bool (what conforms asks at an SStrLen). Both ends are included;
+# lo > hi is not an error but an empty range, in which nothing is in bounds.
+
+def in_err(b: Bool, w: Why) -> Maybe<&2, Err>:
+  match b:
+    case True{}:
+      None{}
+    case False{}:
+      Some{Err{Nil{}, w}}
+
+def str_len_ok(+lo: Nat, +hi: Nat, +x: String) -> Bool:
+  Bool.and(Nat.is_le(lo, String.length(x)), Nat.is_le(String.length(x), hi))
+
+def num_ok(+lo: Nat, +hi: Nat, +n: Nat) -> Bool:
+  Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi))
+
+# r is a string whose length is in the bounds: what conforms reads at an
+# SStrLen, and what len_err refuses exactly when it fails.
+def len_ok(+lo: Nat, +hi: Nat, r: Raw) -> Bool:
+  match r:
+    case RStr{+x}:
+      str_len_ok(lo, hi, x)
+    case _:
+      False{}
+
+# The same bounds as ready-made rules: a project's rule calls them by tag
+# (`case 0n: str_len_in(1n, 64n, r)`), since a tag carries no numbers. Each
+# refuses only the value it is about -- a string, a number -- and leaves any
+# other kind to the schema's own check; the constructors below read the tests
+# directly, because their bound is in the schema.
+def str_len_in(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
+  match r:
+    case RStr{+x}:
+      in_err(str_len_ok(lo, hi, x), LengthNotIn{lo, hi})
+    case _:
+      None{}
+
+def nat_in(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
+  match r:
+    case RNum{+n}:
+      in_err(num_ok(lo, hi, n), NotIn{lo, hi})
+    case _:
+      None{}
+
+def is_bool(r: Raw) -> Bool:
+  match r:
+    case RBool{b}:
+      True{}
+    case _:
+      False{}
+
 # ---- what a valid value is ----
 
 def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>) -> Bool:
   match s r:
     case SNat{} RNum{n}:
       True{}
+    case SNatIn{+lo, +hi} RNum{+n}:
+      num_ok(lo, hi, n)
     case SStr{} RStr{x}:
       True{}
+    case SStrLen{+lo, +hi, +s2} +x:
+      Bool.and(conforms(~rule, s2, x, prev), len_ok(lo, hi, x))
     case SOpt{inner} RNull{}:
       True{}
     case SOpt{inner} x:
@@ -229,6 +298,8 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
       pick_bool(is_tag(k, n, x), conforms(~rule, cs, drop_key(k, x), None{}), conforms(~rule, rest, x, None{}))
     case STagEnd{k} x:
       False{}  # the end of a tagged chain: no case matched
+    case SBool{} RBool{b}:
+      True{}  # any boolean is a boolean, and nothing else is
     case STrue{} RBool{b}:
       b
     case SEnum{names} RStr{+x}:
@@ -256,6 +327,20 @@ def under(+st: Step, m: Maybe<&2, Err>) -> Maybe<&2, Err>:
       None{}
     case Some{Err{p, w}}:
       Some{Err{st <> p, w}}
+
+# At an SStrLen the shape comes first, as everywhere else: a value that is not
+# a string is NotString, a string out of its bounds is LengthNotIn, and a node
+# the codec refused to build or that is absent reads as it does at every kind.
+def len_err(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
+  match r:
+    case RStr{+x}:
+      in_err(str_len_ok(lo, hi, x), LengthNotIn{lo, hi})
+    case RMissing{}:
+      here(Missing{})
+    case RTooBig{}:
+      here(TooLarge{})
+    case _:
+      here(NotString{})
 
 # An error found further along a list is one element further: its first
 # step, if it counts elements, counts one more. A plain list's steps are
@@ -385,6 +470,12 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       None{}
     case SStr{} x:
       here(missing_or(x, NotString{}))
+    case SNatIn{+lo, +hi} RNum{+n}:
+      nat_in(lo, hi, RNum{n})
+    case SNatIn{lo_, hi_} +x:
+      here(missing_or(x, NotNat{}))
+    case SStrLen{+lo, +hi, +s2} +x:
+      first(check(~rule, s2, x, prev), len_err(lo, hi, x))
     case SOpt{inner} RNull{}:
       None{}
     case SOpt{inner} x:
@@ -415,6 +506,10 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       pick_err(is_tag(k, n, x), check(~rule, cs, drop_key(k, x), None{}), check(~rule, rest, x, None{}))
     case STagEnd{k} x:
       tag_err(k, x)
+    case SBool{} RBool{b}:
+      None{}
+    case SBool{} +x:
+      here(missing_or(x, NotBool{}))
     case STrue{} RBool{b}:
       true_err(b)
     case STrue{} x:
@@ -460,6 +555,29 @@ def guard(b: Bool, m: Maybe<&2, Why>) -> Maybe<&2, Why>:
     case True{}:
       m
     case False{}:
+      None{}
+
+# The same two reasons at an SNatIn and an SBool, replayed along a path: the
+# value's own kind is the defect when the path ends here, and it is not a
+# defect at all further along (the walk passed it).
+def nat_in_defect(+lo: Nat, +hi: Nat, r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
+  match r p:
+    case RNum{+n} Nil{}:
+      guard(Bool.not(num_ok(lo, hi, n)), Some{NotIn{lo, hi}})
+    case RNum{n} st <> q:
+      None{}
+    case x Nil{}:
+      Some{missing_or(x, NotNat{})}
+    case x st <> q:
+      None{}
+
+def bool_defect(r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
+  match r p:
+    case RBool{b} _:
+      None{}
+    case x Nil{}:
+      Some{missing_or(x, NotBool{})}
+    case x st <> q:
       None{}
 
 # ---- a rule, its replay, and the closed forms ----
@@ -633,6 +751,10 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       nat_defect(x, q)
     case SStr{} x q:
       str_defect(x, q)
+    case SNatIn{+lo, +hi} x q:
+      nat_in_defect(lo, hi, x, q)
+    case SStrLen{+lo, +hi, +s2} +x +q:
+      pick_why(conforms(~rule, s2, x, prev), rule_defect(len_err(lo, hi, x), q), defect(~rule, s2, x, prev, q))
     case SOpt{inner} RNull{} q:
       None{}
     case SOpt{inner} x q:
@@ -675,6 +797,8 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       pick_why(is_tag(k, n, x), defect(~rule, cs, drop_key(k, x), None{}, q), defect(~rule, rest, x, None{}, q))
     case STagEnd{k} x q:
       tag_defect(k, x, q)
+    case SBool{} x q:
+      bool_defect(x, q)
     case STrue{} x q:
       true_defect(x, q)
     case SEnum{names} x q:
@@ -722,34 +846,6 @@ def check0(s: Schema, r: Raw) -> Maybe<&2, Err>:
 
 def conforms0(s: Schema, r: Raw) -> Bool:
   conforms(~no_rule, s, r, None{})
-
-# ---- ready-made rules: a project's rule calls them by tag ----
-#
-# A rule takes only a tag, so a bound cannot be a parameter of the schema;
-# the project's rule passes it: `case 0n: str_len_in(1n, 64n, r)`. Each
-# refuses only the value it is about (a string, a number) and leaves any
-# other to the schema's own check.
-
-def in_err(b: Bool, w: Why) -> Maybe<&2, Err>:
-  match b:
-    case True{}:
-      None{}
-    case False{}:
-      Some{Err{Nil{}, w}}
-
-def str_len_in(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
-  match r:
-    case RStr{+x}:
-      in_err(Bool.and(Nat.is_le(lo, String.length(x)), Nat.is_le(String.length(x), hi)), LengthNotIn{lo, hi})
-    case _:
-      None{}
-
-def nat_in(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
-  match r:
-    case RNum{+n}:
-      in_err(Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)), NotIn{lo, hi})
-    case _:
-      None{}
 
 # ---- the claims the choice laws make ----
 #
@@ -877,8 +973,12 @@ def Meaning(s: Schema) -> Data:
   match s:
     case SNat{}:
       Nat
+    case SNatIn{lo, hi}:
+      Nat
     case SStr{}:
       String
+    case SStrLen{lo, hi, s2}:
+      Meaning(s2)
     case SOpt{i}:
       Maybe<&2, Meaning(i)>
     case SList{e}:
@@ -895,6 +995,8 @@ def Meaning(s: Schema) -> Data:
       Either<&2, &2, Meaning(cs), Meaning(rest)>
     case STagEnd{k}:
       Empty
+    case SBool{}:
+      Bool
     case STrue{}:
       Unit
     case SEnum{names}:
@@ -912,8 +1014,12 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
   match s x:
     case SNat{} n:
       RNum{n}
+    case SNatIn{lo_, hi_} n:
+      RNum{n}
     case SStr{} x:
       RStr{x}
+    case SStrLen{lo_, hi_, s2} v:
+      enc(s2, v)
     case SOpt{i} None{}:
       RNull{}
     case SOpt{i} Some{v}:
@@ -938,6 +1044,8 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
       Empty.absurd(Raw, e)
     case STrue{} Unit{}:
       RBool{True{}}
+    case SBool{} b:
+      RBool{b}
     case SEnum{names} x:
       RStr{x}
     case SVariant{n, vs, rest} Inl{a}:
@@ -1013,8 +1121,12 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
   match s r:
     case SNat{} RNum{n}:
       Some{n}
+    case SNatIn{lo_, hi_} RNum{n}:
+      Some{n}
     case SStr{} RStr{x}:
       Some{x}
+    case SStrLen{lo_, hi_, s2} x:
+      dec(s2, x)
     case SOpt{+i} +x:
       pick_m(Maybe<&2, Maybe<&2, Meaning(i)>>, nullish(x), Some{None{}}, opt_some(Meaning(i), dec(i, x)))
     case SList{e} RNil{}:
@@ -1033,6 +1145,8 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       pick_m(Maybe<&2, Either<&2, &2, Meaning(cs), Meaning(rest)>>, is_tag(k, n, x), map_inl(Meaning(cs), Meaning(rest), dec(cs, drop_key(k, x))), map_inr(Meaning(cs), Meaning(rest), dec(rest, x)))
     case STrue{} RBool{b}:
       true_unit(b)
+    case SBool{} RBool{b}:
+      Some{b}
     case SEnum{names} RStr{x}:
       Some{x}
     case SVariant{+n, +vs, +rest} +x:
@@ -1053,6 +1167,8 @@ def nullable(s: Schema) -> Bool:
     case SRule{s2, tag}:
       nullable(s2)
     case SStrict{s2}:
+      nullable(s2)
+    case SStrLen{lo, hi, s2}:
       nullable(s2)
     case STagged{k, n, cs, rest}:
       nullable(rest)
@@ -1117,6 +1233,8 @@ def wf(s: Schema) -> Bool:
       Bool.and(Bool.not(nullable(i)), wf(i))
     case SList{e}:
       wf(e)
+    case SStrLen{lo_, hi_, s2}:
+      wf(s2)
     case SField{+n, fs, +rest}:
       Bool.and(wf(fs), Bool.and(fresh_f(n, rest), wf(rest)))
     case SRule{s2, tag}:
@@ -1149,6 +1267,8 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
       names_ok(s2, v)
     case SStrict{s2} v:
       names_ok(s2, v)
+    case SStrLen{lo_, hi_, s2} v:
+      names_ok(s2, v)
     case STagged{k, n, cs, rest} Inl{a}:
       names_ok(cs, a)
     case STagged{k, n, cs, rest} Inr{b}:
@@ -1161,5 +1281,44 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
       names_ok(rest, b)
     case STuple{ts, rest} Both{a, b}:
       Bool.and(names_ok(ts, a), names_ok(rest, b))
+    case _ _:
+      True{}
+
+# Every bound a constructor states holds of the value that will be written, at
+# every place one sits in the schema (encode_conforms' second premise, beside
+# names_ok). The encoder writes the meaning unchanged, so a value outside a
+# bound is written out as it is and refused by check on the way back: the host
+# that built it is at fault, and this is where it says so. An SStrLen's bound
+# is read off the string its own schema writes, which is why enc appears here.
+def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
+  match s x:
+    case SOpt{i} None{}:
+      True{}
+    case SOpt{i} Some{v}:
+      bounds_ok(i, v)
+    case SList{e} Nil{}:
+      True{}
+    case SList{+e} h <> t:
+      Bool.and(bounds_ok(e, h), bounds_ok(SList{e}, t))
+    case SField{n, fs, rest} Both{a, b}:
+      Bool.and(bounds_ok(fs, a), bounds_ok(rest, b))
+    case SRule{s2, tag} v:
+      bounds_ok(s2, v)
+    case SStrict{s2} v:
+      bounds_ok(s2, v)
+    case STagged{k, n, cs, rest} Inl{a}:
+      bounds_ok(cs, a)
+    case STagged{k, n, cs, rest} Inr{b}:
+      bounds_ok(rest, b)
+    case SNatIn{+lo, +hi} n:
+      num_ok(lo, hi, n)
+    case SStrLen{+lo, +hi, +s2} +v:
+      Bool.and(bounds_ok(s2, v), len_ok(lo, hi, enc(s2, v)))
+    case SVariant{n, vs, rest} Inl{a}:
+      bounds_ok(vs, a)
+    case SVariant{n, vs, rest} Inr{b}:
+      bounds_ok(rest, b)
+    case STuple{ts, rest} Both{a, b}:
+      Bool.and(bounds_ok(ts, a), bounds_ok(rest, b))
     case _ _:
       True{}

@@ -25,6 +25,15 @@ import ./core.bend as C
 #                   a node the codec refused to build is reported where it
 #                   stands, with TooLarge: the one thing the core can be told
 #                   about a size.
+#   sbool_meaning   SBool accepts a boolean and nothing else.
+#   sstr_len_meaning
+#                   SStrLen{lo, hi, s} accepts a string whose length is in the
+#                   bounds and that also satisfies s -- str_len_in_meaning,
+#                   restated for the constructor.
+#   snat_in_meaning SNatIn{lo, hi} accepts a number in the bounds --
+#                   nat_in_meaning, restated for the constructor.
+#                   A lo past hi is an empty range, not an error: nothing is in
+#                   bounds, and each of these laws holds for every lo and hi.
 #
 # bounds_meaning died with SBounds: the bounded list is billing's rule now,
 # and its meaning is billing's law.
@@ -157,6 +166,48 @@ law nat_in_meaning:
   for +n: Nat
   {Maybe.is_none(&2, C.Err, C.nat_in(lo, hi, C.RNum{n})) == Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)) : Bool}
 
+# ---- a bound is a constructor ----
+#
+# Approved with these constructors (D4): a bound belongs to the schema, not to
+# a rule's tag, so a host can build "a number from 1 to 6" or "a string of 1 to
+# 64 characters" without a Bend program. Each one keeps the meaning of the rule
+# it comes from -- str_len_in_meaning and nat_in_meaning restated -- and adds a
+# shape of its own. lo > hi is an empty range: nothing is in bounds, and the
+# laws still hold for every lo and hi (nothing in the core refuses the schema
+# itself, it just accepts no value).
+#
+# Every other law covers them too: check_exact, check_accurate,
+# too_large_reported, decode_encode, checked_decodes and encode_conforms are
+# stated for every schema, so the new constructors are cases of them (see
+# encode_conforms: a value outside a bound is written out unchanged, which is
+# why it is a premise of that law rather than something the encoder can know).
+
+# SBool accepts a boolean and nothing else: any b, and no other value.
+law sbool_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +r: C.Raw
+  {C.conforms(~rule, C.SBool{}, r, None{}) == C.is_bool(r) : Bool}
+
+# SStrLen{lo, hi, s} accepts a string whose length is in the bounds, and that
+# also satisfies s: the length part is str_len_in_meaning's, restated for the
+# constructor (both ends included).
+law sstr_len_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +lo: Nat
+  for +hi: Nat
+  for +s: C.Schema
+  for +x: String
+  {C.conforms(~rule, C.SStrLen{lo, hi, s}, C.RStr{x}, None{}) == Bool.and(C.conforms(~rule, s, C.RStr{x}, None{}), Bool.and(Nat.is_le(lo, String.length(x)), Nat.is_le(String.length(x), hi))) : Bool}
+
+# SNatIn{lo, hi} accepts a number in the bounds, both ends included:
+# nat_in_meaning's, restated for the constructor.
+law snat_in_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +lo: Nat
+  for +hi: Nat
+  for +n: Nat
+  {C.conforms(~rule, C.SNatIn{lo, hi}, C.RNum{n}, None{}) == Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)) : Bool}
+
 # ---- a value too big to walk ----
 
 # The codec refuses to build a value past its budget and puts one RTooBig in
@@ -202,10 +253,14 @@ law checked_decodes:
 
 # What is written is accepted by the schema (with no rule: a rule is the
 # project's, and not the encoder's to satisfy), as long as each enum value is
-# one of its names.
+# one of its names and each bound a constructor states holds of the value. A
+# bound is a subset of the encoding's own shape, so the encoder -- which
+# writes the meaning unchanged -- can write a value outside one; the host that
+# built that value is the one at fault, and check refuses it on the way back.
 law encode_conforms:
   for +s: C.Schema
   for +x: C.Meaning(s)
   for hw: {C.wf(s) == True{} : Bool}
   for hn: {C.names_ok(s, x) == True{} : Bool}
+  for hb: {C.bounds_ok(s, x) == True{} : Bool}
   {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}

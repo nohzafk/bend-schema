@@ -32,6 +32,44 @@ def none_first(m: Maybe<&2, C.Err>, n: Maybe<&2, C.Err>) -> {Bool.and(Maybe.is_n
     case Some{e}:
       {==}
 
+# is_none(in_err(b, w)) is b: a failing test becomes an error, and the error
+# was made only where the test failed. A rule's bound and a constructor's are
+# the same test, so both readings use this.
+def in_err_none(b: Bool, +w: C.Why) -> {Maybe.is_none(&2, C.Err, C.in_err(b, w)) == b : Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# is_none(len_err(lo, hi, r)) is len_ok(lo, hi, r), for every value: at an
+# SStrLen the bound is the same test read two ways, and a value that is not a
+# string is not in bounds (it is refused as NotString, and len_ok is False).
+def len_err_none(+lo: Nat, +hi: Nat, r: C.Raw) -> {Maybe.is_none(&2, C.Err, C.len_err(lo, hi, r)) == C.len_ok(lo, hi, r) : Bool}:
+  match r:
+    case C.RNum{n_}:
+      {==}
+    case C.RBool{b_}:
+      {==}
+    case C.RNull{}:
+      {==}
+    case C.RStr{+x}:
+      in_err_none(C.str_len_ok(lo, hi, x), C.LengthNotIn{lo, hi})
+    case C.RBad{}:
+      {==}
+    case C.RTooBig{}:
+      {==}
+    case C.RMissing{}:
+      {==}
+    case C.RNil{}:
+      {==}
+    case C.RCons{h_, t_}:
+      {==}
+    case C.REnd{}:
+      {==}
+    case C.RKey{k_, v_, o_}:
+      {==}
+
 def none_under(+st: C.Step, m: Maybe<&2, C.Err>) -> {Maybe.is_none(&2, C.Err, m) == Maybe.is_none(&2, C.Err, C.under(st, m)) : Bool}:
   match m:
     case None{}:
@@ -89,7 +127,11 @@ def none_dup(s: C.Schema, +r: C.Raw) -> {Maybe.is_none(&2, C.Err, C.dup_err(s, r
   match s:
     case C.SNat{}:
       {==}
+    case C.SNatIn{lo_, hi_}:
+      {==}
     case C.SStr{}:
+      {==}
+    case C.SStrLen{lo_, hi_, s_}:
       {==}
     case C.SOpt{inner_}:
       {==}
@@ -106,6 +148,8 @@ def none_dup(s: C.Schema, +r: C.Raw) -> {Maybe.is_none(&2, C.Err, C.dup_err(s, r
     case C.STagged{key_, name_, s_, rest_}:
       {==}
     case C.STagEnd{key_}:
+      {==}
+    case C.SBool{}:
       {==}
     case C.STrue{}:
       {==}
@@ -220,6 +264,28 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
       {==}
     case C.SNat{} C.RKey{k, v, o}:
       {==}
+    case C.SNatIn{+lo, +hi} C.RNum{+n}:
+      in_err_none(C.num_ok(lo, hi, n), C.NotIn{lo, hi})
+    case C.SNatIn{+lo, +hi} C.RBool{bb}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RNull{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RStr{x}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RBad{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RTooBig{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RMissing{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RNil{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RCons{h, t}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.REnd{}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RKey{k, v, o}:
+      {==}
     case C.SStr{} C.RNum{n}:
       {==}
     case C.SStr{} C.RBool{bb}:
@@ -241,6 +307,11 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
     case C.SStr{} C.REnd{}:
       {==}
     case C.SStr{} C.RKey{k, v, o}:
+      {==}
+    case C.SStrLen{+lo, +hi, +s2} +x:
+      %none_first(C.check(~rule, s2, x, prev), C.len_err(lo, hi, x)) : {_ == Bool.and(C.conforms(~rule, s2, x, prev), C.len_ok(lo, hi, x)) : Bool}
+      %exact(~rule, s2, x, prev) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, s2, x, prev)), Maybe.is_none(&2, C.Err, C.len_err(lo, hi, x))) == Bool.and(_, C.len_ok(lo, hi, x)) : Bool}
+      %len_err_none(lo, hi, x) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, s2, x, prev)), Maybe.is_none(&2, C.Err, C.len_err(lo, hi, x))) == Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, s2, x, prev)), _) : Bool}
       {==}
     case C.SOpt{inner} C.RNum{n}:
       exact(~rule, inner, C.RNum{n}, None{})
@@ -377,6 +448,28 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
     case C.STagEnd{key_} C.REnd{}:
       {==}
     case C.STagEnd{key_} C.RKey{k, v, o}:
+      {==}
+    case C.SBool{} C.RNum{n}:
+      {==}
+    case C.SBool{} C.RBool{bb}:
+      {==}
+    case C.SBool{} C.RNull{}:
+      {==}
+    case C.SBool{} C.RStr{x}:
+      {==}
+    case C.SBool{} C.RBad{}:
+      {==}
+    case C.SBool{} C.RTooBig{}:
+      {==}
+    case C.SBool{} C.RMissing{}:
+      {==}
+    case C.SBool{} C.RNil{}:
+      {==}
+    case C.SBool{} C.RCons{h, t}:
+      {==}
+    case C.SBool{} C.REnd{}:
+      {==}
+    case C.SBool{} C.RKey{k, v, o}:
       {==}
     case C.STrue{} C.RNum{n}:
       {==}
@@ -700,6 +793,19 @@ def strict_acc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err
 def none_some(-x: C.Err, h: {None{} == Some{x} : Maybe<&2, C.Err>}) -> Empty:
   to_empty(Equal.sym(Bool, True{}, False{}, Equal.cong(Maybe<&2, C.Err>, Bool, m => Maybe.is_none(&2, C.Err, m), None{}, Some{x}, h)))
 
+
+# An SNatIn whose check reported an error: the test failed (a passing test
+# reports nothing), so the reason is NotIn at the value's own path.
+def acc_num_in(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +lo: Nat, +hi: Nat, +n: Nat, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, eb: {b == C.num_ok(lo, hi, n) : Bool}, +h: {C.in_err(b, C.NotIn{lo, hi}) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}) -> {C.nat_in_defect(lo, hi, C.RNum{n}, path) == Some{why} : Maybe<&2, C.Why>}:
+  match b:
+    case True{}:
+      Empty.absurd({C.nat_in_defect(lo, hi, C.RNum{n}, path) == Some{why} : Maybe<&2, C.Why>}, none_some(C.Err{path, why}, h))
+    case False{}:
+      %same_path(Nil{}, C.NotIn{lo, hi}, path, why, h) : {C.nat_in_defect(lo, hi, C.RNum{n}, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotIn{lo, hi}, path, why, h) : {C.nat_in_defect(lo, hi, C.RNum{n}, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      %eb : {C.guard(Bool.not(_), Some{C.NotIn{lo, hi}}) == Some{C.NotIn{lo, hi}} : Maybe<&2, C.Why>}
+      {==}
+
 def list_path(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, p2: List<&2, C.Step>, +w2: C.Why, +e: C.Schema, +h1: C.Raw, +t: C.Raw, +prev: Maybe<&2, Nat>, +ex1: {True{} == C.conforms(~rule, e, h1, None{}) : Bool}, ih: {C.defect(~rule, C.SList{e}, t, None{}, p2) == Some{w2} : Maybe<&2, C.Why>}) -> {C.defect(~rule, C.SList{e}, C.RCons{h1, t}, prev, C.later_l_path(p2)) == Some{w2} : Maybe<&2, C.Why>}:
   match p2:
     case Nil{}:
@@ -959,7 +1065,11 @@ def dup_shape(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.du
   match s:
     case C.SNat{}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
     case C.SStr{}:
+      Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
+    case C.SStrLen{lo_, hi_, s_}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
     case C.SOpt{inner_}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
@@ -976,6 +1086,8 @@ def dup_shape(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.du
     case C.STagged{key_, name_, s_, rest_}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
     case C.STagEnd{key_}:
+      Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
+    case C.SBool{}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
     case C.STrue{}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
@@ -1031,8 +1143,12 @@ def dup_acc(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.dup_
   match s:
     case C.SNat{}:
       Empty.absurd({C.dup_defect(C.SNat{}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({C.dup_defect(C.SNatIn{lo_, hi_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.SStr{}:
       Empty.absurd({C.dup_defect(C.SStr{}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
+    case C.SStrLen{lo_, hi_, s_}:
+      Empty.absurd({C.dup_defect(C.SStrLen{lo_, hi_, s_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.SOpt{inner_}:
       Empty.absurd({C.dup_defect(C.SOpt{inner_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.SList{elem_}:
@@ -1049,6 +1165,8 @@ def dup_acc(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.dup_
       Empty.absurd({C.dup_defect(C.STagged{key_, name_, s_, rest_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.STagEnd{key_}:
       Empty.absurd({C.dup_defect(C.STagEnd{key_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
+    case C.SBool{}:
+      Empty.absurd({C.dup_defect(C.SBool{}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.STrue{}:
       Empty.absurd({C.dup_defect(C.STrue{}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.SEnum{names_}:
@@ -1111,7 +1229,7 @@ def var_acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: 
 # arms leaf: %same_path(Nil{}, $W, path, why, h) : {C.defect(~rule, $S, $R, prev, _) == Some{why} : Maybe<&2, C.Why>}
 # arms leaf: %same_why(Nil{}, $W, path, why, h) : {C.defect(~rule, $S, $R, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
 # arms leaf: {==}
-# arms why: RTooBig=C.TooLarge{} SNat=C.NotNat{} SStr=C.NotString{} SList=C.NotList{} SField=C.NotObject{} SEnd=C.NotObject{} STrue=C.NotTrue{} SEnum=C.NotOneOf{} SVariant=C.NotObject{} SVEnd=C.NotObject{} STuple=C.NotList{} STEnd=C.NotList{} STagEnd=C.NotObject{} RMissing=C.Missing{} SVEnd.REnd=C.NoVariant{} SVEnd.RKey=C.NoVariant{} STuple.RNil=C.TooShort{} STEnd.RCons=C.TooLong{}
+# arms why: SBool=C.NotBool{} SNatIn=C.NotNat{} SStrLen=C.NotString{} RTooBig=C.TooLarge{} SNat=C.NotNat{} SStr=C.NotString{} SList=C.NotList{} SField=C.NotObject{} SEnd=C.NotObject{} STrue=C.NotTrue{} SEnum=C.NotOneOf{} SVariant=C.NotObject{} SVEnd=C.NotObject{} STuple=C.NotList{} STEnd=C.NotList{} STagEnd=C.NotObject{} RMissing=C.Missing{} SVEnd.REnd=C.NoVariant{} SVEnd.RKey=C.NoVariant{} STuple.RNil=C.TooShort{} STEnd.RCons=C.TooLong{}
 # arms accept: SNat.RNum SStr.RStr SOpt.RNull SList.RNil SEnd.REnd SEnd.RKey STEnd.RNil
 # arms accept leaf: Empty.absurd({C.defect(~rule, $S, $R, prev, path) == Some{why} : Maybe<&2, C.Why>}, none_some(C.Err{path, why}, h))
 def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, +h: {C.check(~rule, s, r, prev) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}) -> {C.defect(~rule, s, r, prev, path) == Some{why} : Maybe<&2, C.Why>}:
@@ -1158,6 +1276,48 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
       %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNat{}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNat{}, C.RKey{k, v, o}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
       {==}
+    case C.SNatIn{+lo, +hi} C.RNum{+n}:
+      acc_num_in(~rule, C.num_ok(lo, hi, n), lo, hi, n, prev, path, why, {==}, h)
+    case C.SNatIn{+lo, +hi} C.RBool{bb}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RBool{bb}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RBool{bb}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RNull{}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RNull{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RNull{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RStr{x}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RStr{x}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RStr{x}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RBad{}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RBad{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RBad{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RTooBig{}:
+      %same_path(Nil{}, C.TooLarge{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RTooBig{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.TooLarge{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RTooBig{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RMissing{}:
+      %same_path(Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RMissing{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RMissing{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RNil{}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RNil{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RNil{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RCons{hd, tl}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RCons{hd, tl}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RCons{hd, tl}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.REnd{}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.REnd{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.REnd{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SNatIn{+lo, +hi} C.RKey{k, v, o}:
+      %same_path(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotNat{}, path, why, h) : {C.defect(~rule, C.SNatIn{lo, hi}, C.RKey{k, v, o}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
     case C.SStr{} C.RNum{n}:
       %same_path(Nil{}, C.NotString{}, path, why, h) : {C.defect(~rule, C.SStr{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotString{}, path, why, h) : {C.defect(~rule, C.SStr{}, C.RNum{n}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
@@ -1200,6 +1360,8 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
       %same_path(Nil{}, C.NotString{}, path, why, h) : {C.defect(~rule, C.SStr{}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotString{}, path, why, h) : {C.defect(~rule, C.SStr{}, C.RKey{k, v, o}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
       {==}
+    case C.SStrLen{+lo, +hi, +s2} +x:
+      rule_acc_step(~rule, C.check(~rule, s2, x, prev), C.len_err(lo, hi, x), s2, x, prev, path, why, h, exact(~rule, s2, x, prev), p => w => hh => acc(~rule, s2, x, prev, p, w, hh), p => w => hh => rule_defect_refl(C.len_err(lo, hi, x), p, w, hh))
     case C.SOpt{+inner} C.RNum{n}:
       acc(~rule, inner, C.RNum{n}, None{}, path, why, h)
     case C.SOpt{+inner} C.RBool{bb}:
@@ -1393,6 +1555,48 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
       %same_path(C.AtKey{k} <> Nil{}, C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{}), path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RKey{j, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtKey{k} <> Nil{}, C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{}), path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RKey{j, v, o}, prev, C.AtKey{k} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
       %CMP.string_eq_refl(k) : {C.guard(_, Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})}) == Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RNum{n}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNum{n}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RBool{bb}:
+      Empty.absurd({C.defect(~rule, C.SBool{}, C.RBool{bb}, prev, path) == Some{why} : Maybe<&2, C.Why>}, none_some(C.Err{path, why}, h))
+    case C.SBool{} C.RNull{}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNull{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNull{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RStr{x}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RStr{x}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RStr{x}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RBad{}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RBad{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RBad{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RTooBig{}:
+      %same_path(Nil{}, C.TooLarge{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RTooBig{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.TooLarge{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RTooBig{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RMissing{}:
+      %same_path(Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RMissing{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RMissing{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RNil{}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNil{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNil{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RCons{hd, tl}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RCons{hd, tl}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RCons{hd, tl}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.REnd{}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.REnd{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.REnd{}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
+      {==}
+    case C.SBool{} C.RKey{k, v, o}:
+      %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+      %same_why(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RKey{k, v, o}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
       {==}
     case C.STrue{} C.RNum{n}:
       %same_path(Nil{}, C.NotTrue{}, path, why, h) : {C.defect(~rule, C.STrue{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
@@ -1665,7 +1869,12 @@ def too_large_go(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +prev: Ma
   match s:
     case C.SNat{}:
       {==}
+    case C.SNatIn{lo_, hi_}:
+      {==}
     case C.SStr{}:
+      {==}
+    case C.SStrLen{lo, hi, s2}:
+      %Equal.sym(Maybe<&2, C.Err>, C.check(~rule, s2, C.RTooBig{}, prev), Some{C.Err{Nil{}, C.TooLarge{}}}, too_large_go(~rule, s2, prev)) : {C.first(_, C.len_err(lo, hi, C.RTooBig{})) == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}
       {==}
     case C.SOpt{inner}:
       too_large_go(~rule, inner, None{})
@@ -1684,6 +1893,8 @@ def too_large_go(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +prev: Ma
     case C.STagged{k, n, cs, rest}:
       too_large_go(~rule, rest, None{})
     case C.STagEnd{key_}:
+      {==}
+    case C.SBool{}:
       {==}
     case C.STrue{}:
       {==}
@@ -1778,7 +1989,11 @@ def count_zero(s: C.Schema, +r: C.Raw) -> {Nat.is_eq(C.count_present(s, r), 0n) 
   match s:
     case C.SNat{}:
       {==}
+    case C.SNatIn{lo_, hi_}:
+      {==}
     case C.SStr{}:
+      {==}
+    case C.SStrLen{lo_, hi_, s_}:
       {==}
     case C.SOpt{inner_}:
       {==}
@@ -1795,6 +2010,8 @@ def count_zero(s: C.Schema, +r: C.Raw) -> {Nat.is_eq(C.count_present(s, r), 0n) 
     case C.STagged{key_, name_, s_, rest_}:
       {==}
     case C.STagEnd{key_}:
+      {==}
+    case C.SBool{}:
       {==}
     case C.STrue{}:
       {==}
@@ -1823,7 +2040,11 @@ def np_pc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +r: C.Raw, +cv: 
   match s:
     case C.SNat{}:
       {==}
+    case C.SNatIn{lo_, hi_}:
+      {==}
     case C.SStr{}:
+      {==}
+    case C.SStrLen{lo_, hi_, s_}:
       {==}
     case C.SOpt{inner_}:
       {==}
@@ -1840,6 +2061,8 @@ def np_pc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +r: C.Raw, +cv: 
     case C.STagged{key_, name_, s_, rest_}:
       {==}
     case C.STagEnd{key_}:
+      {==}
+    case C.SBool{}:
       {==}
     case C.STrue{}:
       {==}
@@ -1893,8 +2116,12 @@ def vm(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.i
   match s:
     case C.SNat{}:
       Empty.absurd({C.conforms(~rule, C.SNat{}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SNat{}, r), 1n), C.present_conform(~rule, C.SNat{}, r))) : Bool}, to_empty(hc))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SNatIn{lo_, hi_}, r), 1n), C.present_conform(~rule, C.SNatIn{lo_, hi_}, r))) : Bool}, to_empty(hc))
     case C.SStr{}:
       Empty.absurd({C.conforms(~rule, C.SStr{}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SStr{}, r), 1n), C.present_conform(~rule, C.SStr{}, r))) : Bool}, to_empty(hc))
+    case C.SStrLen{lo_, hi_, s_}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SStrLen{lo_, hi_, s_}, r), 1n), C.present_conform(~rule, C.SStrLen{lo_, hi_, s_}, r))) : Bool}, to_empty(hc))
     case C.SOpt{inner_}:
       Empty.absurd({C.conforms(~rule, C.SOpt{inner_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SOpt{inner_}, r), 1n), C.present_conform(~rule, C.SOpt{inner_}, r))) : Bool}, to_empty(hc))
     case C.SList{elem_}:
@@ -1911,6 +2138,8 @@ def vm(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.i
       Empty.absurd({C.conforms(~rule, C.STagged{key_, name_, s_, rest_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.STagged{key_, name_, s_, rest_}, r), 1n), C.present_conform(~rule, C.STagged{key_, name_, s_, rest_}, r))) : Bool}, to_empty(hc))
     case C.STagEnd{key_}:
       Empty.absurd({C.conforms(~rule, C.STagEnd{key_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.STagEnd{key_}, r), 1n), C.present_conform(~rule, C.STagEnd{key_}, r))) : Bool}, to_empty(hc))
+    case C.SBool{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SBool{}, r), 1n), C.present_conform(~rule, C.SBool{}, r))) : Bool}, to_empty(hc))
     case C.STrue{}:
       Empty.absurd({C.conforms(~rule, C.STrue{}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.STrue{}, r), 1n), C.present_conform(~rule, C.STrue{}, r))) : Bool}, to_empty(hc))
     case C.SEnum{names_}:
@@ -2040,8 +2269,14 @@ def not_missing(s: C.Schema, x: C.Meaning(s)) -> {False{} == C.is_missing(C.enc(
   match s x:
     case C.SNat{} n:
       {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SBool{} b:
+      {==}
     case C.SStr{} n:
       {==}
+    case C.SStrLen{lo_, hi_, s2} v:
+      not_missing(s2, v)
     case C.SOpt{i} None{}:
       {==}
     case C.SOpt{i} Some{v}:
@@ -2100,6 +2335,12 @@ def absent(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_v(n, s) == Tr
       absent(n, rest, b, and_r(Bool.not(String.eq(n, m)), C.fresh_v(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_v(n, rest)), hf)))
     case C.SVEnd{} e:
       Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SVEnd{}, e))) : Bool}, e)
+    case C.SBool{} v:
+      Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SBool{}, v))) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} v:
+      Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SNatIn{lo_, hi_}, v))) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2} v:
+      Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SStrLen{lo_, hi_, s2}, v))) : Bool}, to_empty(hf))
     case C.SNat{} v:
       Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SNat{}, v))) : Bool}, to_empty(hf))
     case C.SStr{} v:
@@ -2134,8 +2375,14 @@ def not_nullish(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.nullable(s) : B
   match s x:
     case C.SNat{} n:
       {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SBool{} b:
+      {==}
     case C.SStr{} n:
       {==}
+    case C.SStrLen{lo_, hi_, s2} v:
+      not_nullish(s2, v, hn)
     case C.SOpt{i} v:
       Empty.absurd({False{} == C.nullish(C.enc(C.SOpt{i}, v)) : Bool}, to_empty(hn))
     case C.SList{e} Nil{}:
@@ -2193,6 +2440,12 @@ def tag_other(+k: String, +n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fres
       tag_other(k, n, rest, b, and_r(Bool.not(String.eq(m, n)), C.fresh_t(k, n, rest), and_r(String.eq(k2, k), Bool.and(Bool.not(String.eq(m, n)), C.fresh_t(k, n, rest)), hf)))
     case C.STagEnd{k2} e:
       Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.STagEnd{k2}, e)) : Bool}, e)
+    case C.SBool{} x_:
+      Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.SBool{}, x_)) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} x_:
+      Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.SNatIn{lo_, hi_}, x_)) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2} x_:
+      Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.SStrLen{lo_, hi_, s2}, x_)) : Bool}, to_empty(hf))
     case C.SNat{} x_:
       Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.SNat{}, x_)) : Bool}, to_empty(hf))
     case C.SStr{} x_:
@@ -2233,6 +2486,12 @@ def skip_f(+n: String, s: C.Schema, +v: C.Raw, +o: C.Raw, +hf: {C.fresh_f(n, s) 
       {==}
     case C.SEnd{}:
       {==}
+    case C.SBool{}:
+      Empty.absurd({C.dec(C.SBool{}, o) == C.dec(C.SBool{}, C.RKey{n, v, o}) : Maybe<&2, Bool>}, to_empty(hf))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({C.dec(C.SNatIn{lo_, hi_}, o) == C.dec(C.SNatIn{lo_, hi_}, C.RKey{n, v, o}) : Maybe<&2, Nat>}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2}:
+      Empty.absurd({C.dec(C.SStrLen{lo_, hi_, s2}, o) == C.dec(C.SStrLen{lo_, hi_, s2}, C.RKey{n, v, o}) : Maybe<&2, C.Meaning(s2)>}, to_empty(hf))
     case C.SNat{}:
       Empty.absurd({C.dec(C.SNat{}, o) == C.dec(C.SNat{}, C.RKey{n, v, o}) : Maybe<&2, Nat>}, to_empty(hf))
     case C.SStr{}:
@@ -2266,6 +2525,10 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
   match s x:
     case C.SNat{} n:
       {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SBool{} b:
+      {==}
     case C.SStr{} n:
       {==}
     case C.SOpt{i} None{}:
@@ -2288,6 +2551,8 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
       {==}
     case C.SEnd{} Unit{}:
       {==}
+    case C.SStrLen{lo_, hi_, s2} v:
+      de(s2, v, hw)
     case C.SRule{s2, tag} v:
       de(s2, v, hw)
     case C.SStrict{+s2} v:
@@ -2423,6 +2688,28 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNat{}), C.dec(C.SNat{}, C.REnd{})) == True{} : Bool}, to_empty(hc))
     case C.SNat{} C.RKey{+k, +v, +o}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNat{}), C.dec(C.SNat{}, C.RKey{k, v, o})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RNum{+n}:
+      {==}
+    case C.SNatIn{+lo, +hi} C.RBool{+bb}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RBool{bb})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RNull{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RNull{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RStr{+x}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RStr{x})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RBad{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RBad{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RTooBig{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RTooBig{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RMissing{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RMissing{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RNil{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RNil{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RCons{+h, +t}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RCons{h, t})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.REnd{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.REnd{})) == True{} : Bool}, to_empty(hc))
+    case C.SNatIn{+lo, +hi} C.RKey{+k, +v, +o}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SNatIn{lo, hi}), C.dec(C.SNatIn{lo, hi}, C.RKey{k, v, o})) == True{} : Bool}, to_empty(hc))
     case C.SStr{} C.RNum{n}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SStr{}), C.dec(C.SStr{}, C.RNum{n})) == True{} : Bool}, to_empty(hc))
     case C.SStr{} C.RBool{+bb}:
@@ -2445,6 +2732,8 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SStr{}), C.dec(C.SStr{}, C.REnd{})) == True{} : Bool}, to_empty(hc))
     case C.SStr{} C.RKey{+k, +v, +o}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SStr{}), C.dec(C.SStr{}, C.RKey{k, v, o})) == True{} : Bool}, to_empty(hc))
+    case C.SStrLen{+lo, +hi, +s2} +x:
+      cd(~rule, s2, x, and_l(C.conforms(~rule, s2, x, None{}), C.len_ok(lo, hi, x), hc))
     case C.SOpt{+i} C.RNum{+n}:
       some_opt(C.Meaning(i), C.dec(i, C.RNum{n}), cd(~rule, i, C.RNum{n}, hc))
     case C.SOpt{+i} C.RBool{+bb}:
@@ -2561,6 +2850,28 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.STagEnd{key_}), C.dec(C.STagEnd{key_}, C.REnd{})) == True{} : Bool}, to_empty(hc))
     case C.STagEnd{key_} C.RKey{+k, +v, +o}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.STagEnd{key_}), C.dec(C.STagEnd{key_}, C.RKey{k, v, o})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RNum{n}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RNum{n})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RBool{bb}:
+      {==}
+    case C.SBool{} C.RNull{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RNull{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RStr{+x}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RStr{x})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RBad{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RBad{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RTooBig{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RTooBig{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RMissing{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RMissing{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RNil{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RNil{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RCons{+h, +t}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RCons{h, t})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.REnd{}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.REnd{})) == True{} : Bool}, to_empty(hc))
+    case C.SBool{} C.RKey{+k, +v, +o}:
+      Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SBool{}), C.dec(C.SBool{}, C.RKey{k, v, o})) == True{} : Bool}, to_empty(hc))
     case C.STrue{} C.RNum{n}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.STrue{}), C.dec(C.STrue{}, C.RNum{n})) == True{} : Bool}, to_empty(hc))
     case C.STrue{} C.RBool{bb}:
@@ -2703,6 +3014,12 @@ def Laws.checked_decodes(rule, s, r, hc):
 # enc writes an object for a record chain and for a variant chain.
 def obj_f(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_f(n, s) == True{} : Bool}) -> {C.is_object(C.enc(s, x)) == True{} : Bool}:
   match s x:
+    case C.SBool{} v:
+      Empty.absurd({C.is_object(C.enc(C.SBool{}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} v:
+      Empty.absurd({C.is_object(C.enc(C.SNatIn{lo_, hi_}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2} v:
+      Empty.absurd({C.is_object(C.enc(C.SStrLen{lo_, hi_, s2}, v)) == True{} : Bool}, to_empty(hf))
     case C.SNat{} v:
       Empty.absurd({C.is_object(C.enc(C.SNat{}, v)) == True{} : Bool}, to_empty(hf))
     case C.SStr{} v:
@@ -2738,6 +3055,12 @@ def obj_f(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_f(n, s) == Tru
 
 def obj_v(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_v(n, s) == True{} : Bool}) -> {C.is_object(C.enc(s, x)) == True{} : Bool}:
   match s x:
+    case C.SBool{} v:
+      Empty.absurd({C.is_object(C.enc(C.SBool{}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} v:
+      Empty.absurd({C.is_object(C.enc(C.SNatIn{lo_, hi_}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2} v:
+      Empty.absurd({C.is_object(C.enc(C.SStrLen{lo_, hi_, s2}, v)) == True{} : Bool}, to_empty(hf))
     case C.SNat{} v:
       Empty.absurd({C.is_object(C.enc(C.SNat{}, v)) == True{} : Bool}, to_empty(hf))
     case C.SStr{} v:
@@ -2780,6 +3103,12 @@ def np(+n: String, s: C.Schema, +v: C.Raw, +hf: {C.fresh_v(n, s) == True{} : Boo
       %not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_v(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_v(n, rest)), hf))) : {Bool.and(C.is_missing(C.pick_raw(_, v, C.lookup(m, C.REnd{}))), C.none_present(rest, C.RKey{n, v, C.REnd{}})) == True{} : Bool}
       np(n, rest, v, and_r(Bool.not(String.eq(n, m)), C.fresh_v(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_v(n, rest)), hf)))
     case C.SNat{}:
+      {==}
+    case C.SNatIn{lo_, hi_}:
+      {==}
+    case C.SBool{}:
+      {==}
+    case C.SStrLen{lo_, hi_, s2_}:
       {==}
     case C.SStr{}:
       {==}
@@ -2866,7 +3195,7 @@ def var_skip(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, +vs: C.Schema,
 # A record chain ignores a key it does not name.
 # arms: s o
 # arms leaf: Empty.absurd({C.conforms(~rule, $S, $R, None{}) == C.conforms(~rule, $S, C.RKey{n, v, $R}, None{}) : Bool}, to_empty($W))
-# arms why: RNum=ho RBool=ho RNull=ho RStr=ho RBad=ho RTooBig=ho RMissing=ho RNil=ho RCons=ho SNat=hf SStr=hf SOpt=hf SList=hf SRule=hf SStrict=hf STagged=hf STagEnd=hf STrue=hf SEnum=hf SVariant=hf SVEnd=hf STuple=hf STEnd=hf
+# arms why: RNum=ho RBool=ho RNull=ho RStr=ho RBad=ho RTooBig=ho RMissing=ho RNil=ho RCons=ho SNat=hf SStr=hf SOpt=hf SList=hf SRule=hf SStrict=hf SBool=hf SNatIn=hf SStrLen=hf STagged=hf STagEnd=hf STrue=hf SEnum=hf SVariant=hf SVEnd=hf STuple=hf STEnd=hf
 def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v: C.Raw, o: C.Raw, +hf: {C.fresh_f(n, s) == True{} : Bool}, +ho: {C.is_object(o) == True{} : Bool}) -> {C.conforms(~rule, s, o, None{}) == C.conforms(~rule, s, C.RKey{n, v, o}, None{}) : Bool}:
   match s o:
     case C.SNat{} C.RNum{n__}:
@@ -2891,6 +3220,28 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
       Empty.absurd({C.conforms(~rule, C.SNat{}, C.REnd{}, None{}) == C.conforms(~rule, C.SNat{}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
     case C.SNat{} C.RKey{+k, +w, +o2}:
       Empty.absurd({C.conforms(~rule, C.SNat{}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SNat{}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} C.RNum{n__}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RBool{b__}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RBool{b__}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RBool{b__}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RNull{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RNull{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RNull{}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RStr{s__}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RStr{s__}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RStr{s__}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RBad{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RBad{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RBad{}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RTooBig{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RTooBig{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RTooBig{}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RMissing{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RMissing{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RMissing{}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RNil{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RNil{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RNil{}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.RCons{head__, tail__}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RCons{head__, tail__}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RCons{head__, tail__}}, None{}) : Bool}, to_empty(ho))
+    case C.SNatIn{lo_, hi_} C.REnd{}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.REnd{}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} C.RKey{+k, +w, +o2}:
+      Empty.absurd({C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SNatIn{lo_, hi_}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
     case C.SStr{} C.RNum{n__}:
       Empty.absurd({C.conforms(~rule, C.SStr{}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SStr{}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
     case C.SStr{} C.RBool{b__}:
@@ -2913,6 +3264,28 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
       Empty.absurd({C.conforms(~rule, C.SStr{}, C.REnd{}, None{}) == C.conforms(~rule, C.SStr{}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
     case C.SStr{} C.RKey{+k, +w, +o2}:
       Empty.absurd({C.conforms(~rule, C.SStr{}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SStr{}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s_} C.RNum{n__}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RBool{b__}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RBool{b__}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RBool{b__}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RNull{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RNull{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RNull{}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RStr{s__}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RStr{s__}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RStr{s__}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RBad{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RBad{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RBad{}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RTooBig{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RTooBig{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RTooBig{}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RMissing{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RMissing{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RMissing{}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RNil{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RNil{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RNil{}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.RCons{head__, tail__}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RCons{head__, tail__}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RCons{head__, tail__}}, None{}) : Bool}, to_empty(ho))
+    case C.SStrLen{lo_, hi_, s_} C.REnd{}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.REnd{}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s_} C.RKey{+k, +w, +o2}:
+      Empty.absurd({C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SStrLen{lo_, hi_, s_}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
     case C.SOpt{inner_} C.RNum{n__}:
       Empty.absurd({C.conforms(~rule, C.SOpt{inner_}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SOpt{inner_}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
     case C.SOpt{inner_} C.RBool{b__}:
@@ -3093,6 +3466,28 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
       Empty.absurd({C.conforms(~rule, C.STagEnd{key_}, C.REnd{}, None{}) == C.conforms(~rule, C.STagEnd{key_}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
     case C.STagEnd{key_} C.RKey{+k, +w, +o2}:
       Empty.absurd({C.conforms(~rule, C.STagEnd{key_}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.STagEnd{key_}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
+    case C.SBool{} C.RNum{n__}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RBool{b__}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RBool{b__}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RBool{b__}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RNull{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RNull{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RNull{}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RStr{s__}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RStr{s__}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RStr{s__}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RBad{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RBad{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RBad{}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RTooBig{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RTooBig{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RTooBig{}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RMissing{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RMissing{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RMissing{}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RNil{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RNil{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RNil{}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.RCons{head__, tail__}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RCons{head__, tail__}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RCons{head__, tail__}}, None{}) : Bool}, to_empty(ho))
+    case C.SBool{} C.REnd{}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.REnd{}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
+    case C.SBool{} C.RKey{+k, +w, +o2}:
+      Empty.absurd({C.conforms(~rule, C.SBool{}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SBool{}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
     case C.STrue{} C.RNum{n__}:
       Empty.absurd({C.conforms(~rule, C.STrue{}, C.RNum{n__}, None{}) == C.conforms(~rule, C.STrue{}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
     case C.STrue{} C.RBool{b__}:
@@ -3273,6 +3668,12 @@ def keyed_enc(s: C.Schema, x: C.Meaning(s), +hk: {C.is_keyed(s) == True{} : Bool
       extra_mono(n, C.key_names(rest), C.enc(rest, b), keyed_enc(rest, b, hk))
     case C.SVEnd{} e:
       Empty.absurd({C.no_extra(C.key_names(C.SVEnd{}), C.enc(C.SVEnd{}, e)) == True{} : Bool}, e)
+    case C.SBool{} v:
+      Empty.absurd({C.no_extra(C.key_names(C.SBool{}), C.enc(C.SBool{}, v)) == True{} : Bool}, to_empty(hk))
+    case C.SNatIn{lo_, hi_} v:
+      Empty.absurd({C.no_extra(C.key_names(C.SNatIn{lo_, hi_}), C.enc(C.SNatIn{lo_, hi_}, v)) == True{} : Bool}, to_empty(hk))
+    case C.SStrLen{lo_, hi_, s2} v:
+      Empty.absurd({C.no_extra(C.key_names(C.SStrLen{lo_, hi_, s2}), C.enc(C.SStrLen{lo_, hi_, s2}, v)) == True{} : Bool}, to_empty(hk))
     case C.SNat{} v:
       Empty.absurd({C.no_extra(C.key_names(C.SNat{}), C.enc(C.SNat{}, v)) == True{} : Bool}, to_empty(hk))
     case C.SStr{} v:
@@ -3298,69 +3699,66 @@ def keyed_enc(s: C.Schema, x: C.Meaning(s), +hk: {C.is_keyed(s) == True{} : Bool
     case C.STEnd{} v:
       Empty.absurd({C.no_extra(C.key_names(C.STEnd{}), C.enc(C.STEnd{}, v)) == True{} : Bool}, to_empty(hk))
 
-def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.names_ok(s, x) == True{} : Bool}) -> {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}:
+def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.names_ok(s, x) == True{} : Bool}, +hb: {C.bounds_ok(s, x) == True{} : Bool}) -> {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}:
   match s x:
     case C.SNat{} n:
       {==}
+    case C.SNatIn{+lo, +hi} n:
+      hb
     case C.SStr{} n:
       {==}
+    case C.SStrLen{+lo, +hi, +s2} +v:
+      and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), C.len_ok(lo, hi, C.enc(s2, v)), ec(s2, v, hw, hn, and_l(C.bounds_ok(s2, v), C.len_ok(lo, hi, C.enc(s2, v)), hb)), and_r(C.bounds_ok(s2, v), C.len_ok(lo, hi, C.enc(s2, v)), hb))
     case C.SOpt{i} None{}:
       {==}
     case C.SOpt{+i} Some{+v}:
       %opt_conf(~C.no_rule, i, C.enc(i, v), not_nullish(i, v, not_true(C.nullable(i), and_l(Bool.not(C.nullable(i)), C.wf(i), hw)))) : {_ == True{} : Bool}
-      ec(i, v, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), hn)
+      ec(i, v, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), hn, hb)
     case C.SList{e} Nil{}:
       {==}
     case C.SList{+e} +h <> +t:
-      and_true2(C.conforms(~C.no_rule, e, C.enc(e, h), None{}), C.conforms(~C.no_rule, C.SList{e}, C.enc(C.SList{e}, t), None{}), ec(e, h, hw, and_l(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn)), ec(C.SList{e}, t, hw, and_r(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn)))
+      and_true2(C.conforms(~C.no_rule, e, C.enc(e, h), None{}), C.conforms(~C.no_rule, C.SList{e}, C.enc(C.SList{e}, t), None{}), ec(e, h, hw, and_l(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn), and_l(C.bounds_ok(e, h), C.bounds_ok(C.SList{e}, t), hb)), ec(C.SList{e}, t, hw, and_r(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn), and_r(C.bounds_ok(e, h), C.bounds_ok(C.SList{e}, t), hb)))
     case C.SField{+n, +fs, +rest} C.Both{+a, +b}:
       %lk_self(n, C.enc(fs, a), C.enc(rest, b)) : {Bool.and(C.conforms(~C.no_rule, fs, _, None{}), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(fs, a), C.enc(rest, b)}, None{})) == True{} : Bool}
       %skip_c(~C.no_rule, n, rest, C.enc(fs, a), C.enc(rest, b), and_l(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)), obj_f(n, rest, b, and_l(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)))) : {Bool.and(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), _) == True{} : Bool}
-      and_true2(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(fs, a, and_l(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw), and_l(C.names_ok(fs, a), C.names_ok(rest, b), hn)), ec(rest, b, and_r(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)), and_r(C.names_ok(fs, a), C.names_ok(rest, b), hn)))
+      and_true2(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(fs, a, and_l(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw), and_l(C.names_ok(fs, a), C.names_ok(rest, b), hn), and_l(C.bounds_ok(fs, a), C.bounds_ok(rest, b), hb)), ec(rest, b, and_r(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)), and_r(C.names_ok(fs, a), C.names_ok(rest, b), hn), and_r(C.bounds_ok(fs, a), C.bounds_ok(rest, b), hb)))
     case C.SEnd{} Unit{}:
       {==}
     case C.SRule{+s2, +tag} +v:
-      and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), Maybe.is_none(&2, C.Err, C.no_rule(tag, C.enc(s2, v))), ec(s2, v, hw, hn), {==})
+      and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), Maybe.is_none(&2, C.Err, C.no_rule(tag, C.enc(s2, v))), ec(s2, v, hw, hn, hb), {==})
     case C.SStrict{+s2} +v:
-      and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), C.no_extra(C.key_names(s2), C.enc(s2, v)), ec(s2, v, and_r(C.is_keyed(s2), C.wf(s2), hw), hn), keyed_enc(s2, v, and_l(C.is_keyed(s2), C.wf(s2), hw)))
+      and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), C.no_extra(C.key_names(s2), C.enc(s2, v)), ec(s2, v, and_r(C.is_keyed(s2), C.wf(s2), hw), hn, hb), keyed_enc(s2, v, and_l(C.is_keyed(s2), C.wf(s2), hw)))
     case C.STagged{+k, +n, +cs, +rest} Inl{+a}:
       %tag_self(k, n, C.enc(cs, a)) : {C.pick_bool(_, C.conforms(~C.no_rule, cs, C.drop_key(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), None{}), C.conforms(~C.no_rule, rest, C.RKey{k, C.RStr{n}, C.enc(cs, a)}, None{})) == True{} : Bool}
       %drop_self(k, C.RStr{n}, C.enc(cs, a)) : {C.conforms(~C.no_rule, cs, _, None{}) == True{} : Bool}
-      ec(cs, a, and_l(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), hw), hn)
+      ec(cs, a, and_l(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), hw), hn, hb)
     case C.STagged{+k, +n, +cs, +rest} Inr{+b}:
       %tag_other(k, n, rest, b, and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), hw))) : {C.pick_bool(_, C.conforms(~C.no_rule, cs, C.drop_key(k, C.enc(rest, b)), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{})) == True{} : Bool}
-      ec(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), hw)), hn)
+      ec(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), hw)), hn, hb)
     case C.STagEnd{k_} e:
       Empty.absurd({C.conforms(~C.no_rule, C.STagEnd{k_}, C.enc(C.STagEnd{k_}, e), None{}) == True{} : Bool}, e)
     case C.STrue{} Unit{}:
+      {==}
+    case C.SBool{} b:
       {==}
     case C.SEnum{names} v:
       hn
     case C.SVariant{+n, +vs, +rest} Inl{+a}:
       %lk_self(n, C.enc(vs, a), C.REnd{}) : {C.pick_bool(C.is_missing(_), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(vs, a), C.REnd{}}, None{}), Bool.and(C.conforms(~C.no_rule, vs, _, None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}))) == True{} : Bool}
       %not_missing(vs, a) : {C.pick_bool(_, C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(vs, a), C.REnd{}}, None{}), Bool.and(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}))) == True{} : Bool}
-      and_true2(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}), ec(vs, a, and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw), hn), np(n, rest, C.enc(vs, a), and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw))))
+      and_true2(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}), ec(vs, a, and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw), hn, hb), np(n, rest, C.enc(vs, a), and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw))))
     case C.SVariant{+n, +vs, +rest} Inr{+b}:
       %var_skip(~C.no_rule, n, vs, rest, C.enc(rest, b), obj_v(n, rest, b, and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw))), absent(n, rest, b, and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw)))) : {_ == True{} : Bool}
-      ec(rest, b, and_r(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw)), hn)
+      ec(rest, b, and_r(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), hw)), hn, hb)
     case C.SVEnd{} e:
       Empty.absurd({C.conforms(~C.no_rule, C.SVEnd{}, C.enc(C.SVEnd{}, e), None{}) == True{} : Bool}, e)
     case C.STuple{+ts, +rest} C.Both{+a, +b}:
-      and_true2(C.conforms(~C.no_rule, ts, C.enc(ts, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(ts, a, and_l(C.wf(ts), C.wf(rest), hw), and_l(C.names_ok(ts, a), C.names_ok(rest, b), hn)), ec(rest, b, and_r(C.wf(ts), C.wf(rest), hw), and_r(C.names_ok(ts, a), C.names_ok(rest, b), hn)))
+      and_true2(C.conforms(~C.no_rule, ts, C.enc(ts, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(ts, a, and_l(C.wf(ts), C.wf(rest), hw), and_l(C.names_ok(ts, a), C.names_ok(rest, b), hn), and_l(C.bounds_ok(ts, a), C.bounds_ok(rest, b), hb)), ec(rest, b, and_r(C.wf(ts), C.wf(rest), hw), and_r(C.names_ok(ts, a), C.names_ok(rest, b), hn), and_r(C.bounds_ok(ts, a), C.bounds_ok(rest, b), hb)))
     case C.STEnd{} Unit{}:
       {==}
 
-def Laws.encode_conforms(s, x, hw, hn):
-  ec(s, x, hw, hn)
-
-# ---- tools: a ready-made rule refuses exactly when its test fails ----
-
-def in_err_none(b: Bool, +w: C.Why) -> {Maybe.is_none(&2, C.Err, C.in_err(b, w)) == b : Bool}:
-  match b:
-    case True{}:
-      {==}
-    case False{}:
-      {==}
+def Laws.encode_conforms(s, x, hw, hn, hb):
+  ec(s, x, hw, hn, hb)
 
 # ---- a string's length is in its bounds ----
 
@@ -3371,6 +3769,58 @@ def Laws.str_len_in_meaning(lo, hi, x):
 
 def Laws.nat_in_meaning(lo, hi, n):
   in_err_none(Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)), C.NotIn{lo, hi})
+
+# ---- a boolean, and nothing else ----
+#
+# A second reading of SBool, by a walk of its own over the value: conforms
+# accepts exactly the booleans. A host that writes "a boolean" gets a check
+# that agrees with it for every value, not only for the ones it thought of.
+
+# arms: r
+# arms leaf: {==}
+def sbool_go(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, r: C.Raw) -> {C.conforms(~rule, C.SBool{}, r, None{}) == C.is_bool(r) : Bool}:
+  match r:
+    case C.RNum{n_}:
+      {==}
+    case C.RBool{b_}:
+      {==}
+    case C.RNull{}:
+      {==}
+    case C.RStr{s_}:
+      {==}
+    case C.RBad{}:
+      {==}
+    case C.RTooBig{}:
+      {==}
+    case C.RMissing{}:
+      {==}
+    case C.RNil{}:
+      {==}
+    case C.RCons{h_, t_}:
+      {==}
+    case C.REnd{}:
+      {==}
+    case C.RKey{k_, v_, o_}:
+      {==}
+
+def Laws.sbool_meaning(rule, r):
+  sbool_go(~rule, r)
+
+# ---- a string's length, as a constructor ----
+#
+# str_len_in_meaning, restated for SStrLen: what the rule tested, the
+# constructor means -- the same str_len_ok, and the shape s the value must also
+# satisfy. The rule read no other kind; here the other kinds are not in bounds.
+
+def Laws.sstr_len_meaning(rule, lo, hi, s, x):
+  {==}
+
+# ---- a number's bounds, as a constructor ----
+#
+# nat_in_meaning, restated for SNatIn: the same num_ok, both ends included.
+
+def Laws.snat_in_meaning(rule, lo, hi, n):
+  {==}
 
 # ---- a strict object has no other key ----
 
