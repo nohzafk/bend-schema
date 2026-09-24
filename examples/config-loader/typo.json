@@ -1,0 +1,8 @@
+{
+  "name": "assets-deploy",
+  "notify": null,
+  "targets": [
+    { "type": "s3", "bucket": "assets-eu", "region": "eu-west-1", "prefix": "v2/" },
+    { "type": "s3", "bucket": "assets-us", "region": "us-east-1", "prefix": null, "regoin": "us-east-1" }
+  ]
+}

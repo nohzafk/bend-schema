@@ -1,0 +1,9 @@
+{
+  "name": "assets-deploy",
+  "notify": "ops@example.com",
+  "targets": [
+    { "type": "s3", "bucket": "assets-eu", "region": "eu-west-1", "prefix": "v2/" },
+    { "type": "ssh", "host": "deploy.internal", "port": 22, "user": "deploy" },
+    { "type": "s3", "bucket": "assets-us", "region": "us-east-1", "prefix": null }
+  ]
+}

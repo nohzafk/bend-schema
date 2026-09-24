@@ -1,0 +1,6 @@
+{
+  "name": "assets-deploy",
+  "targets": [
+    { "type": "ssh", "host": "deploy.internal", "port": 2222, "user": "deploy" }
+  ]
+}
