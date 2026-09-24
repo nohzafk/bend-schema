@@ -8,6 +8,45 @@ the first thing wrong, with the path to it. Its laws hold for every schema,
 so a project that writes a schema gets them without a proof of its own. A
 project's own refinements are rules it passes in (`SRule`, below).
 
+## Use it from TypeScript
+
+No Bend needed: `dist-core/` is the compiled core, committed.
+
+```ts
+import { s, parse, check, encode, errText, type Infer } from "bend-schema";
+
+const Plan = s.strict(s.object({
+  name:  s.str().len(1, 64),
+  seats: s.nat().in(1, 500),
+  tier:  s.enum(["free", "pro"]),
+  email: s.str().refine((x) => x.includes("@"), "must be an email"),
+}));
+type Plan = Infer<typeof Plan>;
+
+const r = parse(Plan, JSON.parse(body));
+if (!r.ok) return errText(r.error, "plan");   // "plan.seats: must be from 1 to 500"
+```
+
+| builder | accepts | TS type |
+|---|---|---|
+| `s.nat()`, `.in(lo, hi)` | whole number 0..2^48-1, in `[lo, hi]` | `number` |
+| `s.str()`, `.len(lo, hi)` | string, length in `[lo, hi]` | `string` |
+| `s.bool()`, `s.true()` | boolean, `true` | `boolean`, `true` |
+| `s.nullable(x)` | `null` or x — the key must still be present | `T \| null` |
+| `s.list(x)`, `s.tuple(a, b)` | array | `T[]`, `[A, B]` |
+| `s.object({...})`, `s.strict(obj)` | object; strict refuses extra keys, non-strict drops them | `{...}` |
+| `s.enum([...])` | one of the strings | `"a" \| "b"` |
+| `s.oneKey({a: x, ...})` | an object with exactly one of the keys | `{a: X} \| ...` |
+| `s.tagged("type", {a: obj})` | discriminated union on `type` | `{type: "a"} & A \| ...` |
+
+Every error is `{path, message, proved}`. `proved: true` came from the core,
+whose laws hold for every schema: the first error in reading order, at its
+path. `proved: false` came from a `.refine()` predicate, which runs only after
+the proved check passes. What is NOT proved: the builder, the conversion
+between the core's values and plain JS, and refinements — `src/index.test.ts`
+round-trips every constructor. `encode` throws on a value outside a bound,
+since its TS type cannot rule that out (`encode_conforms` assumes `bounds_ok`).
+
 ## Layout
 
 ```
@@ -19,6 +58,7 @@ core/base-facts/  the base facts those proofs import
 core/falsify/     literal instances of the laws, for tools/falsify.ts
 core/check_mutants.ts  one false core per law; tools/bend_mutants.ts
 src/codec.ts      the universal codec (JS value to Raw), its budget, error text
+src/index.ts      the TS API: s, parse, check, encode, errText
 src/codec.test.ts the codec and the check at run time, and at scale
 src/measure_budget.ts the budget's measurement: the shapes, and their edges
 dist-core/        the compiled core (core.js, core.d.ts), committed: the
