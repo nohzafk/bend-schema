@@ -6,6 +6,8 @@
 #      committed in dist-core/
 #   3. the tests pass: the codec, and the check at run time
 #   4. the host typechecks
+#   5. the Base facts this core's proofs import are proved, and one of them is
+#      made false to show that check can fail
 #
 # Usage: sh test.sh
 #
@@ -65,5 +67,8 @@ tail -3 /tmp/bend-schema-tests.log
 
 echo "== 4. the types =="
 bunx tsc -p .
+
+echo "== 5. the facts this core rests on =="
+sh core/base-facts/test.sh
 
 echo "PASS: bend-schema's gate"
