@@ -54,7 +54,8 @@ echo "== 1b. the laws on concrete instances =="
 # tools/falsify.ts takes CORE=<path> as C to point it at a mutated copy of the
 # core, which is how that is shown.
 for L in exact accurate enum_accepts enum_admits variant strict tuple tagged \
-         too_large rules sbool_meaning snat_in_meaning sstr_len_meaning; do
+         too_large rules sbool_meaning snat_in_meaning sstr_len_meaning \
+         soptional_meaning slist_len_meaning; do
   if ! OUT=$(LAW=$L bun tools/falsify.ts core/falsify/spec.ts 2>&1); then
     echo "$OUT"
     echo "FAIL: $L does not hold on the instances it is checked over"

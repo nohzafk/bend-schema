@@ -15,8 +15,11 @@ import Base
 # A Schema says what a valid value is (`conforms`), and `check` finds the
 # first thing wrong, with the path to it: depth first, lists in element order,
 # objects in the schema's field order; an element of a bounded list is read
-# whole before its bound. Keys the schema does not name are ignored; a key it
-# names must be present (an optional value is written null).
+# whole before its bound, and an SListLen's element count is read before any
+# element. Keys the schema does not name are ignored; a key it names must be
+# present, and two constructors say what may be there instead: SOpt is a value
+# that may be null, SOptional a field that may be absent (the host writes no
+# key at all, so it is well-formed only as a field's own schema).
 #
 # Both walk the schema and the value together, in one self-recursive def: a
 # step into a field or an optional shrinks the schema, a step along a list
@@ -62,6 +65,8 @@ type Schema is Data:
   SVEnd{}
   STuple{s: Schema, rest: Schema}
   STEnd{}
+  SOptional{inner: Schema}
+  SListLen{lo: Nat, hi: Nat, s: Schema}
 
 # A step of a path. Positions count what was passed on the way, so that
 # following a path never compares two names: AtIndex{i} is element i of a
@@ -95,6 +100,7 @@ type Why is Data:
   NotIn{lo: Nat, hi: Nat}
   UnknownKey{}
   TooLarge{}
+  CountNotIn{lo: Nat, hi: Nat}
 
 type Err is Data:
   Err{path: List<&2, Step>, why: Why}
@@ -203,10 +209,11 @@ def is_tag(+k: String, +n: String, r: Raw) -> Bool:
 
 # ---- a bound, as a test and as a reason ----
 #
-# SStrLen{lo, hi, s} is a string in the bounds that also satisfies s, SNatIn is
-# a number in the bounds, and SBool is a boolean. The bound travels with the
-# schema instead of with a rule's tag, which is what lets a host build one (a
-# rule is chosen by a number, and a number carries no bounds).
+# SStrLen{lo, hi, s} is a string in the bounds that also satisfies s, SListLen
+# the same over a list's elements, SNatIn is a number in the bounds, and SBool
+# is a boolean. The bound travels with the schema instead of with a rule's tag,
+# which is what lets a host build one (a rule is chosen by a number, and a
+# number carries no bounds).
 #
 # A rule and a constructor state the same bounds, and these defs are where they
 # are written once: str_len_ok and num_ok are the tests, in_err is how a failing
@@ -262,6 +269,37 @@ def is_bool(r: Raw) -> Bool:
     case _:
       False{}
 
+# A list's element count, as a test. SListLen{lo, hi, s} is a list whose
+# element count is in the bounds that also satisfies s: the same shape an
+# SStrLen has, over elements instead of characters. raw_list is "r is a list at
+# all", raw_len counts a proper list's elements (0 for anything else, which is
+# why every use asks raw_list too), count_ok is the bound read as a Bool, and
+# list_len_ok is both together -- what conforms asks at an SListLen, and what
+# count_err refuses exactly when it fails. Both ends are included; lo > hi is
+# not an error but an empty range, in which no list is in bounds.
+
+def raw_list(r: Raw) -> Bool:
+  match r:
+    case RNil{}:
+      True{}
+    case RCons{h, t}:
+      raw_list(t)
+    case _:
+      False{}
+
+def raw_len(r: Raw) -> Nat:
+  match r:
+    case RCons{h, t}:
+      1n+raw_len(t)
+    case _:
+      0n
+
+def count_ok(+lo: Nat, +hi: Nat, +r: Raw) -> Bool:
+  Bool.and(Nat.is_le(lo, raw_len(r)), Nat.is_le(raw_len(r), hi))
+
+def list_len_ok(+lo: Nat, +hi: Nat, +r: Raw) -> Bool:
+  Bool.and(raw_list(r), count_ok(lo, hi, r))
+
 # ---- what a valid value is ----
 
 def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>) -> Bool:
@@ -274,10 +312,14 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
       True{}
     case SStrLen{+lo, +hi, +s2} +x:
       Bool.and(conforms(~rule, s2, x, prev), len_ok(lo, hi, x))
+    case SListLen{+lo, +hi, +s2} +r:
+      Bool.and(list_len_ok(lo, hi, r), conforms(~rule, s2, r, None{}))
     case SOpt{inner} RNull{}:
       True{}
     case SOpt{inner} x:
       conforms(~rule, inner, x, None{})
+    case SOptional{+inner} +x:
+      Bool.or(is_missing(x), conforms(~rule, inner, x, None{}))
     case SList{e} RNil{}:
       True{}
     case SList{+e} RCons{h, t}:
@@ -460,6 +502,20 @@ def tag_err(+k: String, r: Raw) -> Maybe<&2, Err>:
     case x:
       here(missing_or(x, NotObject{}))
 
+# The count, as an error: at an SListLen the count is read before any element,
+# so a list out of bounds is CountNotIn at the list's own path. A value that is
+# not a list has no count to object to, and is refused as a list schema refuses
+# it: NotList, or Missing/TooLarge for the two nodes that are never a shape
+# (the same reasons check's own arms give them).
+def count_err(+lo: Nat, +hi: Nat, r: Raw) -> Maybe<&2, Err>:
+  match r:
+    case RNil{}:
+      in_err(list_len_ok(lo, hi, r), CountNotIn{lo, hi})
+    case RCons{h, t}:
+      in_err(list_len_ok(lo, hi, r), CountNotIn{lo, hi})
+    case _:
+      here(missing_or(r, NotList{}))
+
 def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>) -> Maybe<&2, Err>:
   match s r:
     case SNat{} RNum{n}:
@@ -476,9 +532,15 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       here(missing_or(x, NotNat{}))
     case SStrLen{+lo, +hi, +s2} +x:
       first(check(~rule, s2, x, prev), len_err(lo, hi, x))
+    case SListLen{+lo, +hi, +s2} +r:
+      first(count_err(lo, hi, r), check(~rule, s2, r, None{}))
     case SOpt{inner} RNull{}:
       None{}
     case SOpt{inner} x:
+      check(~rule, inner, x, None{})
+    case SOptional{inner} RMissing{}:
+      None{}
+    case SOptional{inner} x:
       check(~rule, inner, x, None{})
     case SList{e} RNil{}:
       None{}
@@ -755,9 +817,19 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       nat_in_defect(lo, hi, x, q)
     case SStrLen{+lo, +hi, +s2} +x +q:
       pick_why(conforms(~rule, s2, x, prev), rule_defect(len_err(lo, hi, x), q), defect(~rule, s2, x, prev, q))
+    case SListLen{+lo, +hi, +s2} +r +q:
+      # The count came first in check, so the count's own error is the one
+      # reported here exactly when there was one to report -- for a list out of
+      # bounds and for a value that is not a list at all (list_len_ok is False
+      # for both, and count_err reported something for both).
+      pick_why(Bool.not(list_len_ok(lo, hi, r)), rule_defect(count_err(lo, hi, r), q), defect(~rule, s2, r, None{}, q))
     case SOpt{inner} RNull{} q:
       None{}
     case SOpt{inner} x q:
+      defect(~rule, inner, x, None{}, q)
+    case SOptional{inner} RMissing{} q:
+      None{}  # absent is not wrong, at this path or below it
+    case SOptional{inner} x q:
       defect(~rule, inner, x, None{}, q)
     case SList{e} RNil{} q:
       None{}
@@ -905,21 +977,8 @@ def tuple_of(ss: List<&2, Schema>) -> Schema:
     case h <> t:
       STuple{h, tuple_of(t)}
 
-def raw_list(r: Raw) -> Bool:
-  match r:
-    case RNil{}:
-      True{}
-    case RCons{h, t}:
-      raw_list(t)
-    case _:
-      False{}
-
-def raw_len(r: Raw) -> Nat:
-  match r:
-    case RCons{h, t}:
-      1n+raw_len(t)
-    case _:
-      0n
+# raw_list and raw_len (a list, and how many elements it has) sit with the
+# other bound helpers, above: an SListLen's test reads them.
 
 def at_raw(r: Raw, +i: Nat) -> Raw:
   match r i:
@@ -953,7 +1012,7 @@ def count_unknown(+ns: List<&2, String>, r: Raw) -> Nat:
 #
 # Meaning(s) is the Bend type a schema describes: a record is its fields,
 # nested pairs ending in Unit; a variant chain is nested Eithers ending in
-# Empty; an optional value is a Maybe (null and absent both read as None). A
+# Empty; a value that may be null (SOpt) or absent (SOptional) is a Maybe. A
 # rule refines a shape and does not change its meaning. `enc` writes a
 # meaning as the host's JSON would be; `dec` reads one back. Both are written
 # once, for every schema, and LAWS.bend proves the round trip once.
@@ -979,7 +1038,11 @@ def Meaning(s: Schema) -> Data:
       String
     case SStrLen{lo, hi, s2}:
       Meaning(s2)
+    case SListLen{lo, hi, s2}:
+      Meaning(s2)
     case SOpt{i}:
+      Maybe<&2, Meaning(i)>
+    case SOptional{i}:
       Maybe<&2, Meaning(i)>
     case SList{e}:
       List<&2, Meaning(e)>
@@ -1020,9 +1083,15 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
       RStr{x}
     case SStrLen{lo_, hi_, s2} v:
       enc(s2, v)
+    case SListLen{lo_, hi_, s2} v:
+      enc(s2, v)
     case SOpt{i} None{}:
       RNull{}
     case SOpt{i} Some{v}:
+      enc(i, v)
+    case SOptional{i} None{}:
+      RMissing{}  # absent: the host writes no key where this one lands
+    case SOptional{i} Some{v}:
       enc(i, v)
     case SList{e} Nil{}:
       RNil{}
@@ -1127,8 +1196,12 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       Some{x}
     case SStrLen{lo_, hi_, s2} x:
       dec(s2, x)
+    case SListLen{lo_, hi_, s2} x:
+      dec(s2, x)
     case SOpt{+i} +x:
       pick_m(Maybe<&2, Maybe<&2, Meaning(i)>>, nullish(x), Some{None{}}, opt_some(Meaning(i), dec(i, x)))
+    case SOptional{+i} +x:
+      pick_m(Maybe<&2, Maybe<&2, Meaning(i)>>, is_missing(x), Some{None{}}, opt_some(Meaning(i), dec(i, x)))
     case SList{e} RNil{}:
       Some{Nil{}}
     case SList{+e} RCons{h, t}:
@@ -1159,16 +1232,62 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       None{}
 
 # ---- a well-formed schema ----
+#
+# wf is what the round trip needs: a key named once in its object or chain
+# (lookup reads the first), and an optional value that is not itself nullable.
+# Two constructors ask more than their own shape:
+#
+#   SOptional is where a field may be absent, so it belongs immediately under
+#   a field and nowhere else: every other place a schema sits is guarded by
+#   opt_at, which asks whether an absent value can reach the top of what enc
+#   writes for it. That excludes an SOptional anywhere but a field's schema,
+#   and also a schema that would pass one straight through (SOpt{SOptional{i}}
+#   writes RMissing for Some{None}, where nothing can tell it from an absent
+#   key). An SOptional's own inner is guarded the same way: None and
+#   Some{None} would both be written as an absent key.
+#
+#   SOpt's inner may not be nullable at all (its own None and the inner's null
+#   would both be written null), and nullable asks an SOptional too.
+
+# An absent value reaches the top of what enc writes for s: s is an SOptional,
+# or it hands the value it was given straight to a schema that is (a rule, a
+# strict object, a bound, or the tail of a variant or tagged chain -- and an
+# SOpt, whose Some case passes the value through). Everything else wraps what
+# it writes in a constructor of its own, so an absent value cannot surface.
+def opt_at(s: Schema) -> Bool:
+  match s:
+    case SOptional{i}:
+      True{}
+    case SOpt{i}:
+      opt_at(i)
+    case SRule{s2, tag}:
+      opt_at(s2)
+    case SStrict{s2}:
+      opt_at(s2)
+    case SStrLen{lo, hi, s2}:
+      opt_at(s2)
+    case SListLen{lo, hi, s2}:
+      opt_at(s2)
+    case STagged{k, n, cs, rest}:
+      opt_at(rest)
+    case SVariant{n, vs, rest}:
+      opt_at(rest)
+    case _:
+      False{}
 
 def nullable(s: Schema) -> Bool:
   match s:
     case SOpt{i}:
       True{}
+    case SOptional{i}:
+      True{}  # absent and the inner's own null read as the same None
     case SRule{s2, tag}:
       nullable(s2)
     case SStrict{s2}:
       nullable(s2)
     case SStrLen{lo, hi, s2}:
+      nullable(s2)
+    case SListLen{lo, hi, s2}:
       nullable(s2)
     case STagged{k, n, cs, rest}:
       nullable(rest)
@@ -1231,22 +1350,26 @@ def wf(s: Schema) -> Bool:
   match s:
     case SOpt{+i}:
       Bool.and(Bool.not(nullable(i)), wf(i))
-    case SList{e}:
-      wf(e)
-    case SStrLen{lo_, hi_, s2}:
-      wf(s2)
+    case SOptional{+i}:
+      Bool.and(Bool.not(opt_at(i)), wf(i))
+    case SList{+e}:
+      Bool.and(Bool.not(opt_at(e)), wf(e))
+    case SListLen{lo_, hi_, +s2}:
+      Bool.and(Bool.not(opt_at(s2)), wf(s2))
+    case SStrLen{lo_, hi_, +s2}:
+      Bool.and(Bool.not(opt_at(s2)), wf(s2))
     case SField{+n, fs, +rest}:
       Bool.and(wf(fs), Bool.and(fresh_f(n, rest), wf(rest)))
-    case SRule{s2, tag}:
-      wf(s2)
+    case SRule{+s2, tag}:
+      Bool.and(Bool.not(opt_at(s2)), wf(s2))
     case SStrict{+s2}:
-      Bool.and(is_keyed(s2), wf(s2))
-    case STagged{+k, +n, cs, +rest}:
-      Bool.and(wf(cs), Bool.and(fresh_t(k, n, rest), wf(rest)))
-    case SVariant{+n, vs, +rest}:
-      Bool.and(wf(vs), Bool.and(fresh_v(n, rest), wf(rest)))
-    case STuple{ts, rest}:
-      Bool.and(wf(ts), wf(rest))
+      Bool.and(is_keyed(s2), Bool.and(Bool.not(opt_at(s2)), wf(s2)))
+    case STagged{+k, +n, +cs, +rest}:
+      Bool.and(Bool.not(opt_at(cs)), Bool.and(wf(cs), Bool.and(fresh_t(k, n, rest), wf(rest))))
+    case SVariant{+n, +vs, +rest}:
+      Bool.and(Bool.not(opt_at(vs)), Bool.and(wf(vs), Bool.and(fresh_v(n, rest), wf(rest))))
+    case STuple{+ts, +rest}:
+      Bool.and(Bool.not(opt_at(ts)), Bool.and(wf(ts), Bool.and(Bool.not(opt_at(rest)), wf(rest))))
     case _:
       True{}
 
@@ -1269,6 +1392,12 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
       names_ok(s2, v)
     case SStrLen{lo_, hi_, s2} v:
       names_ok(s2, v)
+    case SListLen{lo_, hi_, s2} v:
+      names_ok(s2, v)
+    case SOptional{i} None{}:
+      True{}
+    case SOptional{i} Some{v}:
+      names_ok(i, v)
     case STagged{k, n, cs, rest} Inl{a}:
       names_ok(cs, a)
     case STagged{k, n, cs, rest} Inr{b}:
@@ -1289,7 +1418,8 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
 # names_ok). The encoder writes the meaning unchanged, so a value outside a
 # bound is written out as it is and refused by check on the way back: the host
 # that built it is at fault, and this is where it says so. An SStrLen's bound
-# is read off the string its own schema writes, which is why enc appears here.
+# is read off the string its own schema writes, and an SListLen's count off the
+# list it writes, which is why enc appears here.
 def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
   match s x:
     case SOpt{i} None{}:
@@ -1314,6 +1444,12 @@ def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
       num_ok(lo, hi, n)
     case SStrLen{+lo, +hi, +s2} +v:
       Bool.and(bounds_ok(s2, v), len_ok(lo, hi, enc(s2, v)))
+    case SListLen{+lo, +hi, +s2} +v:
+      Bool.and(bounds_ok(s2, v), list_len_ok(lo, hi, enc(s2, v)))
+    case SOptional{i} None{}:
+      True{}
+    case SOptional{i} Some{v}:
+      bounds_ok(i, v)
     case SVariant{n, vs, rest} Inl{a}:
       bounds_ok(vs, a)
     case SVariant{n, vs, rest} Inr{b}:

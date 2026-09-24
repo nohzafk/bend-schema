@@ -34,6 +34,16 @@ import ./core.bend as C
 #                   nat_in_meaning, restated for the constructor.
 #                   A lo past hi is an empty range, not an error: nothing is in
 #                   bounds, and each of these laws holds for every lo and hi.
+#   slist_len_meaning
+#                   SListLen{lo, hi, s} accepts a list whose element count is
+#                   in the bounds and that also satisfies s -- str_len_in_meaning
+#                   over elements. A value that is not a list is not in bounds
+#                   here either (the count is a list's), and it is the inner
+#                   schema's to refuse, exactly as check reports it.
+#   soptional_meaning
+#                   SOptional{inner} accepts an absent value (RMissing), and
+#                   every other value exactly as the inner schema accepts it:
+#                   the constructor adds absence and nothing else.
 #
 # bounds_meaning died with SBounds: the bounded list is billing's rule now,
 # and its meaning is billing's law.
@@ -207,6 +217,31 @@ law snat_in_meaning:
   for +hi: Nat
   for +n: Nat
   {C.conforms(~rule, C.SNatIn{lo, hi}, C.RNum{n}, None{}) == Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi)) : Bool}
+
+# SListLen{lo, hi, s} accepts a list whose element count is in the bounds, and
+# that also satisfies s. The count is spelled out here rather than left to the
+# helper the core reads, so that a bound off by one is the law's business too:
+# a list of exactly lo or exactly hi elements is in, and one of any other count
+# is not, for every lo and hi (lo > hi accepts no list at all). A value that is
+# not a list is not in bounds, and the inner schema decides it.
+law slist_len_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +lo: Nat
+  for +hi: Nat
+  for +s: C.Schema
+  for +r: C.Raw
+  {C.conforms(~rule, C.SListLen{lo, hi, s}, r, None{}) == Bool.and(Bool.and(C.raw_list(r), Bool.and(Nat.is_le(lo, C.raw_len(r)), Nat.is_le(C.raw_len(r), hi))), C.conforms(~rule, s, r, None{})) : Bool}
+
+# SOptional{inner} accepts an absent value, and every other value exactly as
+# the inner schema accepts it: the constructor adds absence and nothing else.
+# enc writes None as RMissing (no key at all, in the host's JSON) and dec reads
+# RMissing back as None; null is not absent, so it is refused unless the inner
+# is nullable itself.
+law soptional_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +i: C.Schema
+  for +r: C.Raw
+  {C.conforms(~rule, C.SOptional{i}, r, None{}) == Bool.or(C.is_missing(r), C.conforms(~rule, i, r, None{})) : Bool}
 
 # ---- a value too big to walk ----
 

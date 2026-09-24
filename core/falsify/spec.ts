@@ -1,6 +1,7 @@
 // Literal instances of the laws, for tools/falsify.ts. One LAW value checks
 // one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|strict|tuple|
-// tagged|too_large|rules|sbool_meaning|snat_in_meaning|sstr_len_meaning.
+// tagged|too_large|rules|sbool_meaning|snat_in_meaning|sstr_len_meaning|
+// soptional_meaning|slist_len_meaning.
 //   bun ../../tools/falsify.ts spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -167,4 +168,83 @@ notStrs.forEach((r, i) => meaningInner.forEach((s, si) => instances.push(...(!la
   name: `sstr_len_meaning_other_${i}_${si}`,
   claim: `{C.conforms(~H.no_rule, C.SStrLen{0n, 3n, ${s}}, ${r}, None{}) == False{} : Bool}`,
 }] : []))));
+// ---- SListLen: a list whose element count is in the bounds ----
+//
+// slist_len_meaning: SListLen{lo, hi, s} accepts a list whose element count is
+// in the bounds and that s also accepts. The count is computed here, not by
+// Bend, so a bound off by one is this file's business too. Edge cases first:
+// the empty list, a count of exactly lo, exactly hi, and lo > hi.
+const lenBounds = [[0, 0], [1, 3], [2, 2], [3, 1], [0, 2], [2, 4]];
+// elems: the list's elements, or null when the raw is not a proper list at all
+const lenVals: { r: R; elems: R[] | null }[] = [
+  { r: list([]), elems: [] },
+  { r: list([N(1)]), elems: [N(1)] },
+  { r: list([N(1), N(2)]), elems: [N(1), N(2)] },
+  { r: list([N(1), N(2), N(3)]), elems: [N(1), N(2), N(3)] },
+  { r: list([N(1), N(2), N(3), N(4)]), elems: [N(1), N(2), N(3), N(4)] },
+  { r: list([N(1), STR]), elems: [N(1), STR] },
+  { r: `C.RCons{${N(1)}, ${NUL}}`, elems: null },
+  { r: N(1), elems: null },
+  { r: STR, elems: null },
+  { r: NUL, elems: null },
+  { r: BAD, elems: null },
+  { r: BIG, elems: null },
+  { r: "C.RMissing{}", elems: null },
+  { r: obj([]), elems: null },
+];
+const numRaw = (r: R) => r.startsWith("C.RNum{");
+const lenInner = S.lnat; // a list of numbers, so an element decides the other half
+lenBounds.forEach(([lo, hi], bi) => lenVals.forEach(({ r, elems }, vi) => {
+  const expected = elems !== null && elems.every(numRaw) && lo <= elems.length && elems.length <= hi;
+  instances.push(...(!law || law === "slist_len_meaning" ? [{
+    name: `slist_len_meaning_${bi}_${vi}`,
+    claim: `{C.conforms(~H.no_rule, C.SListLen{${lo}n, ${hi}n, ${lenInner}}, ${r}, None{}) == ${expected ? "True{}" : "False{}"} : Bool}`,
+  }] : []));
+}));
+// the law's own statement at literals, with the count read in Bend: a second
+// reading of the same values, against the raw_len the core walks.
+const lenLawBounds = [[0, 0], [1, 3], [3, 1], [0, 2]];
+lenLawBounds.forEach(([lo, hi], bi) => lenVals.forEach(({ r }, vi) => instances.push(...(!law || law === "slist_len_meaning" ? [{
+  name: `slist_len_law_${bi}_${vi}`,
+  claim: `{C.conforms(~H.no_rule, C.SListLen{${lo}n, ${hi}n, ${lenInner}}, ${r}, None{}) == Bool.and(Bool.and(C.raw_list(${r}), Bool.and(Nat.is_le(${lo}n, C.raw_len(${r})), Nat.is_le(C.raw_len(${r}), ${hi}n))), C.conforms(~H.no_rule, ${lenInner}, ${r}, None{})) : Bool}`,
+}] : []))));
+// ---- SOptional: a field that may be absent ----
+//
+// soptional_meaning: an absent value is accepted, and every other value is the
+// inner schema's to decide. The law's own statement at literals, edge cases
+// first: the absent value itself, the two nodes the codec refused to build,
+// then null (refused unless the inner is an SOpt) and a wrong kind.
+const soptInners: [string, string][] = [
+  ["nat", S.nat], ["str", S.str], ["bool", "C.SBool{}"], ["opt", "C.SOpt{C.SNat{}}"], ["lnat", S.lnat], ["rec", S.rec],
+];
+const soptRaws: R[] = ["C.RMissing{}", BIG, BAD, NUL, N(0), STR, TRUE, FALSE, list([]), obj([]), "C.REnd{}"];
+soptInners.forEach(([nm, i], si) => soptRaws.forEach((r, ri) => instances.push(...(!law || law === "soptional_meaning" ? [{
+  name: `soptional_meaning_${nm}_${ri}`,
+  claim: `{C.conforms(~H.no_rule, C.SOptional{${i}}, ${r}, None{}) == Bool.or(C.is_missing(${r}), C.conforms(~H.no_rule, ${i}, ${r}, None{})) : Bool}`,
+}] : []))));
+// the same edges with the answer written here rather than read off the inner:
+// absent is accepted whatever the inner is; null only where the inner is an
+// SOpt; a node the codec refused to build is refused here too.
+const soptEdges: [string, R, boolean][] = [
+  ["C.SOptional{C.SNat{}}", "C.RMissing{}", true],
+  ["C.SOptional{C.SNat{}}", NUL, false],
+  ["C.SOptional{C.SNat{}}", BIG, false],
+  ["C.SOptional{C.SNat{}}", BAD, false],
+  ["C.SOptional{C.SNat{}}", N(0), true],
+  ["C.SOptional{C.SNat{}}", STR, false],
+  ["C.SOptional{C.SOpt{C.SNat{}}}", "C.RMissing{}", true],
+  ["C.SOptional{C.SOpt{C.SNat{}}}", NUL, true],
+  ["C.SOptional{C.SOpt{C.SNat{}}}", N(1), true],
+  ["C.SOptional{C.SBool{}}", TRUE, true],
+  ["C.SOptional{C.SBool{}}", FALSE, true],
+  ["C.SOptional{C.SBool{}}", N(1), false],
+  ["C.SOptional{C.SList{C.SNat{}}}", list([]), true],
+  ["C.SOptional{C.SList{C.SNat{}}}", list([N(1)]), true],
+  ["C.SOptional{C.SList{C.SNat{}}}", list([STR]), false],
+  ["C.SOptional{C.SList{C.SNat{}}}", BIG, false],
+];
+soptEdges.forEach(([s, r, ok], i) => instances.push(...(!law || law === "soptional_meaning" ? [{
+  name: `soptional_edge_${i}`,
+  claim: `{C.conforms(~H.no_rule, ${s}, ${r}, None{}) == ${ok ? "True{}" : "False{}"} : Bool}`,
+}] : [])));
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };
