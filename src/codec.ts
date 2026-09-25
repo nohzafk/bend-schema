@@ -135,6 +135,8 @@ export function whyText(w: Why): string {
       return "has too many elements";
     case "LengthNotIn":
       return `must be ${w.lo} to ${w.hi} characters long`;
+    case "CountNotIn":
+      return `must have ${w.lo} to ${w.hi} elements`;
     case "UnknownKey":
       return "is not a key this object allows";
     case "NotIn":
