@@ -6,11 +6,18 @@
     "typescript": "^7.0.2"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./gen": "./src/gen.ts"
+  },
+  "bin": {
+    "bend-schema": "./src/gen-cli.ts"
   },
   "files": [
     "src/index.ts",
     "src/codec.ts",
+    "src/gen.ts",
+    "src/gen-cli.ts",
+    "core/core.bend",
     "dist-core/",
     "LICENSE",
     "README.md"

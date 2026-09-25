@@ -3,3 +3,4 @@ node_modules/
 # dist-core/ is committed on purpose (D8): the core is compiled by bend, which
 # a user of the package never installs. test.sh rebuilds it into a temp
 # directory outside the tree and diffs, so no generated file lands here.
+tmp.gen.*

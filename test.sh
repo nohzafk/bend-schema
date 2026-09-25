@@ -104,6 +104,19 @@ bunx tsc -p .
 # the tools' fixture host, against the module those fixtures just built
 bunx tsc -p tools/test
 
+echo "== 4b. the printer =="
+# Every constructor the builder has, printed by the real command and then
+# compiled by bend. A constructor with no case throws; one printed wrongly is a
+# Bend error. Neither can be a silent difference, which is the point: the core's
+# constructors and this printer must agree on every one of them.
+# Inside the package: the import the command writes is a path relative to the
+# output file, so a file outside the tree has to climb out of it -- and /var is
+# a symlink on macOS, so the climb lands where nothing exists.
+GEN=$(mktemp -d "$PWD/tmp.gen.XXXXXX")
+trap 'rm -rf "$TMP" "$GEN"' EXIT
+bun src/gen-cli.ts src/gen.schemas.ts "$GEN/schemas.bend"
+tools/bend-check "$GEN/schemas.bend"
+
 echo "== 5. the facts this core rests on =="
 sh core/base-facts/test.sh
 
