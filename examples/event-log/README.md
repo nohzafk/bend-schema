@@ -27,7 +27,7 @@ bunx tsc -p examples/event-log     # the types
 ## What this bought over a hand-written zod schema
 
 Here the format's reader and writer are the same value. `Event` is written
-once: `encode(Event, e)` produces the line and `parse(Event, line)` reads it,
+once: `Event.encode(e)` produces the line and `Event.parse(line)` reads it,
 so the two cannot drift apart about a field name, a nullable key or a case —
 a hand-written zod pair would be two declarations kept in step by hand, and
 the drift shows up as a line that can be written but not read. And the

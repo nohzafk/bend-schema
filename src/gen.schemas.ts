@@ -15,8 +15,7 @@
 
 import { s } from "./index.ts";
 
-export const Every = s.strict(
-  s.object({
+export const Every = s.object({
     plain: s.str(),
     named: s.str().len(1, 32),
     seats: s.nat(),
@@ -24,12 +23,13 @@ export const Every = s.strict(
     active: s.bool(),
     always: s.true(),
     tier: s.enum(["free", "pro"]),
-    note: s.nullable(s.str()),
+    note: s.str().nullable(),
     tags: s.list(s.str().len(1, 8)),
+    few: s.list(s.nat()).len(1, 4),
+    nick: s.str().optional(),
     pair: s.tuple(s.nat(), s.str()),
     pay: s.oneKey({ card: s.object({ last4: s.str() }), invoice: s.object({ days: s.nat() }) }),
     event: s.tagged("type", { open: s.object({ at: s.nat() }), close: s.object({ why: s.str() }) }),
-  }),
-);
+  }).strict();
 
 export const schemas = { every: Every, workers: s.nat().in(1, 64) };

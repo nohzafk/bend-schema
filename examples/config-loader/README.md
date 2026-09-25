@@ -18,7 +18,7 @@ reported `missing`).
 
 What this buys over a hand-written zod schema is one thing: **a key the schema
 does not name is an error, at its path, and that is proved for every schema,
-not for this one.** `s.strict` is the core's `SStrict`, whose law
+not for this one.** `.strict()` is the core's `SStrict`, whose law
 `strict_meaning` states `conforms(~rule, SStrict{s}, r) ==
 conforms(~rule, s, r) and count_unknown(key_names(s), r) == 0` — "it conforms
 to s, and it has no key s does not name" — and the core reports the first such

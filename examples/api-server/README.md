@@ -14,7 +14,7 @@ bun test examples/api-server
 bunx tsc --noEmit -p examples/api-server    # the root tsconfig's include stops at src/ and tools/
 ```
 
-The schema is one `s.strict(s.object({...}))`: a bounded `id`, an `enum`
+The schema is one `s.object({...}).strict()`: a bounded `id`, an `enum`
 currency, a `nullable` note (present as `null` — absent is an error), a bounded
 `totalQty`, and a `list` of strict line items. One `.refine()` sits on top of it,
 cross-field: `totalQty` must equal the sum of the item quantities.

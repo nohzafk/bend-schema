@@ -18,54 +18,63 @@ Requires Node.js 22.18 or later. You do not need Bend installed.
 ## Quick start
 
 ```ts
-import { s, parse, errText, type Infer } from "bend-schema";
+import { s, type Infer } from "bend-schema";
 
-const Plan = s.strict(s.object({
+const Plan = s.object({
   name:  s.str().len(1, 64),
   seats: s.nat().in(1, 500),
   tier:  s.enum(["free", "pro"]),
   email: s.str().refine((x) => x.includes("@"), "must be an email"),
-}));
+  note:  s.str().optional(),
+}).strict();
 type Plan = Infer<typeof Plan>;
 
-const r = parse(Plan, JSON.parse(body));
+const r = Plan.parse(JSON.parse(body));
 if (!r.ok) {
-  console.error(errText(r.error, "plan"));  // "plan.seats: must be from 1 to 500"
+  console.error(r.error.text("plan"));  // "plan.seats: must be from 1 to 500"
 }
 ```
 
-- `check(schema, value)` returns the first error, if any.
-- `parse(schema, value)` checks, then returns the value as plain JS.
-- `encode(schema, value)` writes a value back to JSON. It throws if a number
-  is outside its bounds, because the TS type cannot express that.
+Every schema has three methods:
 
-Each error is `{ path, message, proved }`. `proved: true` means the error came
-from the verified core. `proved: false` means it came from a `.refine()`
-predicate. Refinements run only after the proved check passes.
+- `parse(value)` checks the value, then returns it typed.
+- `check(value)` returns the first error, or `null`.
+- `encode(value)` turns a typed value back into JSON-ready data.
 
-## Schema builders
+An error has a `path`, a `message`, and `proved`. `proved: true` means the
+error came from the verified core. `proved: false` means it came from your
+own `.refine()` function, which runs only after the proved check passes.
 
-| Builder | Accepts | TS type |
-|---|---|---|
-| `s.nat()`, `.in(lo, hi)` | integer 0 to 2^48-1, optionally in `[lo, hi]` | `number` |
-| `s.str()`, `.len(lo, hi)` | string, optionally with length in `[lo, hi]` | `string` |
-| `s.bool()` | boolean | `boolean` |
-| `s.true()` | `true` only | `true` |
-| `s.nullable(x)` | `null` or `x` (the key must be present) | `T \| null` |
-| `s.list(x)` | array of `x` | `T[]` |
-| `s.tuple(a, b, ...)` | fixed-length array | `[A, B, ...]` |
-| `s.object({...})` | object; unknown keys are dropped | `{...}` |
-| `s.strict(obj)` | object; unknown keys are an error | `{...}` |
-| `s.enum([...])` | one of the given strings | `"a" \| "b"` |
-| `s.oneKey({a: x, ...})` | object with exactly one of the keys | `{a: X} \| ...` |
-| `s.tagged("type", {...})` | discriminated union on a tag key | `{type: "a"} & A \| ...` |
-| `.refine(fn, message)` | any builder, plus a custom predicate (not proved) | unchanged |
+## Schemas
 
-Semantics:
+| Builder | Accepts |
+|---|---|
+| `s.nat()`, `.in(lo, hi)` | integer 0 to 2^48-1 |
+| `s.str()`, `.len(lo, hi)` | string |
+| `s.bool()`, `s.true()` | boolean, or only `true` |
+| `s.enum([...])` | one of the given strings |
+| `s.list(x)`, `.len(lo, hi)` | array of `x` |
+| `s.tuple(a, b, ...)` | fixed-length array |
+| `s.object({...})`, `.strict()` | object; `.strict()` refuses unknown keys |
+| `s.tagged(key, {...})` | union chosen by a tag key |
+| `s.oneKey({...})` | object with exactly one of the keys |
+| `.optional()` | the object key may be absent |
+| `.nullable()` | the value may be `null` |
+| `.refine(fn, message)` | a custom check (not proved) |
 
-- Every key an object schema names must be present.
-- The first error is found depth-first, in document order.
-- `s.oneKey` rejects an object with none of its keys or with more than one.
+See **[docs/schemas.md](docs/schemas.md)** for how to write schemas:
+objects, unions, custom rules, error messages and encoding.
+
+## Examples
+
+Each example is a small runnable project with tests:
+
+- [`examples/api-server`](examples/api-server): an HTTP endpoint that
+  validates the request body and returns the error path in a 400.
+- [`examples/config-loader`](examples/config-loader): reads a JSON config
+  file and reports the first mistake in one line.
+- [`examples/event-log`](examples/event-log): an append-only JSON-lines log
+  that writes and reads with the same schema.
 
 ## Use from Bend
 

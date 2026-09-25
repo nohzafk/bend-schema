@@ -5,7 +5,7 @@
 // and reports the first bad one, with its line number.
 
 import { appendFileSync, readFileSync } from "node:fs";
-import { encode, errText, parse, s, type Infer } from "../../src/index.ts";
+import { s, type Infer } from "../../src/index.ts";
 
 const User = s.str().len(1, 32);
 
@@ -19,7 +19,7 @@ export const Event = s.tagged("kind", {
     user: User,
     sku: s.str(),
     qty: s.nat().in(1, 99),
-    coupon: s.nullable(s.str()),
+    coupon: s.str().nullable(),
   }),
   note: s.object({
     text: s.str(),
@@ -33,7 +33,7 @@ export type Event = Infer<typeof Event>;
 /** Append one event as a JSON line. `encode` refuses a value outside a bound,
  * so a bad event never reaches the file. */
 export function append(path: string, event: Event): void {
-  appendFileSync(path, JSON.stringify(encode(Event, event)) + "\n");
+  appendFileSync(path, JSON.stringify(Event.encode(event)) + "\n");
 }
 
 /** Every event in the file, in order. Throws on the first line that is not a
@@ -51,8 +51,8 @@ export function readAll(path: string): Event[] {
     } catch {
       throw new Error(`line ${n}: not JSON`);
     }
-    const r = parse(Event, v);
-    if (!r.ok) throw new Error(errText(r.error, `line ${n}`));
+    const r = Event.parse(v);
+    if (!r.ok) throw new Error(r.error.text(`line ${n}`));
     events.push(r.value);
   }
   return events;

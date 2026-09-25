@@ -1,7 +1,7 @@
-// bend-schema's TypeScript face: build a schema with `s`, then check, parse
-// and encode values against it. What is proved is the core's (core/LAWS.bend):
-// which values a schema accepts, the first error and its path, and that dec
-// reads what enc writes. What is NOT proved lives here and is small: the
+// bend-schema's TypeScript face: build a schema with `s`, then call
+// `.parse`, `.check` or `.encode` on it. What is proved is the core's
+// (core/LAWS.bend): which values a schema accepts, the first error and its
+// path, and that dec reads what enc writes. What is NOT proved lives here: the
 // builder (a mirror of the core's Schema constructors), the conversion between
 // the core's Meaning values and plain JS, and `.refine()` predicates, whose
 // errors say `proved: false`.
@@ -16,6 +16,33 @@ const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw
 
 export { BUDGET, KEYS_MAX } from "./codec.ts";
 
+// ------------------------------------------------------------------ issues
+
+export type PathPart = string | number;
+
+/** The first error: where it is, and why. `proved: true` came from the core;
+ * `proved: false` from a `.refine()` predicate. */
+export class Issue {
+  constructor(
+    readonly path: PathPart[],
+    readonly message: string,
+    readonly proved: boolean,
+  ) {}
+
+  /** "plan.tiers[3].up: must be ..." -- `where` names the value. */
+  text(where = ""): string {
+    const p = this.path.map((x) => (typeof x === "number" ? `[${x}]` : `.${x}`)).join("");
+    const at = (where + p).replace(/^\./, "") || "the value";
+    return `${at}: ${this.message}`;
+  }
+
+  toString(): string {
+    return this.text();
+  }
+}
+
+export type Result<T> = { ok: true; value: T } | { ok: false; error: Issue };
+
 // ---------------------------------------------------------------- the builder
 
 type Kind =
@@ -26,7 +53,9 @@ type Kind =
   | { k: "bool" }
   | { k: "true" }
   | { k: "nullable"; inner: Schema<any> }
+  | { k: "optional"; inner: Schema<any> }
   | { k: "list"; elem: Schema<any> }
+  | { k: "listLen"; lo: number; hi: number; inner: Schema<any[]> }
   | { k: "tuple"; items: Schema<any>[] }
   | { k: "object"; fields: [string, Schema<any>][] }
   | { k: "strict"; obj: Schema<any> }
@@ -40,7 +69,7 @@ export class Schema<T> {
   declare readonly _T: T;
   /** @internal */ readonly kind: Kind;
   /** @internal */ readonly refines: Refinement[];
-  #node?: Node;
+  private cached?: Node;
 
   /** @internal */ constructor(kind: Kind, refines: Refinement[] = []) {
     this.kind = kind;
@@ -48,38 +77,98 @@ export class Schema<T> {
   }
 
   /** A host-side predicate, run after the proved check passes. Not proved:
-   * its error carries `proved: false`. */
-  refine(fn: (x: T) => boolean, why: string): Schema<T> {
-    return new Schema<T>(this.kind, [...this.refines, { fn, why }]);
+   * its error carries `proved: false`. Keeps the schema's own methods. */
+  refine(fn: (x: T) => boolean, why: string): this {
+    const Ctor = this.constructor as new (k: Kind, r: Refinement[]) => this;
+    return new Ctor(this.kind, [...this.refines, { fn, why }]);
   }
 
-  /** The core's Schema value. Throws if the core finds it ill-formed
-   * (`wf`: a duplicate field name, a nullable inside a nullable, ...). */
+  /** null or this. The key must still be present. */
+  nullable(): Schema<T | null> {
+    return new Schema<T | null>({ k: "nullable", inner: this });
+  }
+
+  /** The key may be absent. Only valid as an object field. */
+  optional(): Optional<T> {
+    return new Optional<T>({ k: "optional", inner: this });
+  }
+
+  /** Check v, then read it as T. */
+  parse(v: unknown): Result<T> {
+    const node = this.node;
+    const raw = toRaw(v);
+    const e = core.check0(node, raw);
+    if (e.$ === "Some") return { ok: false, error: new Issue(pathOf(e.value.path), whyText(e.value.why), true) };
+    const m = dec(node, raw);
+    if (m.$ !== "Some") throw new Error("bend-schema: dec refused a value check0 accepted (a bug in the core)");
+    const value = toJs(this, m.value) as T;
+    const r = refineAt(this, value, []);
+    return r ? { ok: false, error: r } : { ok: true, value };
+  }
+
+  /** The first error, or null. */
+  check(v: unknown): Issue | null {
+    const r = this.parse(v);
+    return r.ok ? null : r.error;
+  }
+
+  /** Write x as plain JSON-ready JS; parse reads it back. Throws when x breaks
+   * a bound or a refinement, which its type cannot rule out. */
+  encode(x: T): unknown {
+    const out = rawToJs(enc(this.node, toMeaning(this, x)));
+    const e = this.check(out);
+    if (e) throw new Error(`bend-schema: encode: ${e.text()}`);
+    return out;
+  }
+
+  /** The core's Schema value. Throws if the core finds it ill-formed. */
   get node(): Node {
-    if (!this.#node) {
+    if (!this.cached) {
       const n = toNode(this);
-      if (!core.wf(n)) throw new Error("bend-schema: ill-formed schema (duplicate name, nested nullable, or strict on a non-object)");
-      this.#node = n;
+      if (!core.wf(n)) {
+        throw new Error(
+          "bend-schema: ill-formed schema (a duplicate key, a nullable inside a nullable, " +
+            ".optional() outside an object field, or .strict() on a non-object)",
+        );
+      }
+      this.cached = n;
     }
-    return this.#node;
+    return this.cached;
   }
 }
 
+/** A field that may be absent. */
+export class Optional<T> extends Schema<T | undefined> {
+  declare readonly _optional: true;
+}
+
 export class NatSchema extends Schema<number> {
-  /** lo <= n <= hi, both ends included. lo > hi accepts nothing. Proved: snat_in_meaning. */
-  in(lo: number, hi: number): Schema<number> {
-    return new Schema<number>({ k: "natIn", lo: whole(lo), hi: whole(hi) }, this.refines);
+  /** lo <= n <= hi, both ends included. */
+  in(lo: number, hi: number): NatSchema {
+    return new NatSchema({ k: "natIn", lo: whole(lo), hi: whole(hi) }, this.refines);
   }
 }
 
 export class StrSchema extends Schema<string> {
-  /** lo <= length <= hi, both ends included. Proved: sstr_len_meaning. */
-  len(lo: number, hi: number): Schema<string> {
-    return new Schema<string>({ k: "strLen", lo: whole(lo), hi: whole(hi), inner: this });
+  /** lo <= length <= hi, both ends included. */
+  len(lo: number, hi: number): StrSchema {
+    return new StrSchema({ k: "strLen", lo: whole(lo), hi: whole(hi), inner: this });
   }
 }
 
-export class ObjectSchema<T> extends Schema<T> {}
+export class ListSchema<T> extends Schema<T[]> {
+  /** lo <= element count <= hi, both ends included. */
+  len(lo: number, hi: number): ListSchema<T> {
+    return new ListSchema<T>({ k: "listLen", lo: whole(lo), hi: whole(hi), inner: this });
+  }
+}
+
+export class ObjectSchema<T> extends Schema<T> {
+  /** Refuse keys this object does not name (by default they are dropped). */
+  strict(): ObjectSchema<T> {
+    return new ObjectSchema<T>({ k: "strict", obj: this });
+  }
+}
 
 function whole(n: number): number {
   if (!Number.isSafeInteger(n) || n < 0) throw new Error(`bend-schema: a bound must be a whole number >= 0, got ${n}`);
@@ -88,7 +177,10 @@ function whole(n: number): number {
 
 type Shape = Record<string, Schema<any>>;
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-type ObjOf<S extends Shape> = Simplify<{ [K in keyof S]: Infer<S[K]> }>;
+type OptKeys<S extends Shape> = { [K in keyof S]: S[K] extends Optional<any> ? K : never }[keyof S];
+type ObjOf<S extends Shape> = Simplify<
+  { [K in Exclude<keyof S, OptKeys<S>>]: Infer<S[K]> } & { [K in OptKeys<S>]?: Exclude<Infer<S[K]>, undefined> }
+>;
 type Union<S extends Shape> = { [K in keyof S]: { [P in K]: Infer<S[K]> } }[keyof S];
 type TaggedUnion<K extends string, S extends Record<string, ObjectSchema<any>>> = {
   [N in keyof S]: Simplify<{ [P in K]: N } & Infer<S[N]>>;
@@ -101,19 +193,17 @@ export const s = {
   str: () => new StrSchema({ k: "str" }),
   bool: () => new Schema<boolean>({ k: "bool" }),
   true: () => new Schema<true>({ k: "true" }),
-  nullable: <T>(inner: Schema<T>) => new Schema<T | null>({ k: "nullable", inner }),
-  list: <T>(elem: Schema<T>) => new Schema<T[]>({ k: "list", elem }),
+  list: <T>(elem: Schema<T>) => new ListSchema<T>({ k: "list", elem }),
   tuple: <A extends Schema<any>[]>(...items: A) =>
     new Schema<{ [I in keyof A]: Infer<A[I]> }>({ k: "tuple", items }),
   object: <S extends Shape>(shape: S) => new ObjectSchema<ObjOf<S>>({ k: "object", fields: Object.entries(shape) }),
-  strict: <T>(obj: ObjectSchema<T>) => new ObjectSchema<T>({ k: "strict", obj }),
   enum: <const N extends readonly [string, ...string[]]>(names: N) => new Schema<N[number]>({ k: "enum", names: [...names] }),
   oneKey: <S extends Shape>(cases: S) => new Schema<Union<S>>({ k: "oneKey", cases: Object.entries(cases) }),
   tagged: <K extends string, S extends Record<string, ObjectSchema<any>>>(key: K, cases: S) =>
     new Schema<TaggedUnion<K, S>>({ k: "tagged", key, cases: Object.entries(cases) }),
 };
 
-// Namespaced alias, zod-style: `s.Infer<typeof x>` reads as `Infer<typeof x>`.
+// `s.Infer<typeof x>` reads as `Infer<typeof x>`.
 export declare namespace s {
   type Infer<X> = X extends Schema<infer T> ? T : never;
 }
@@ -128,6 +218,8 @@ function toNode(x: Schema<any>): Node {
     case "bool": return { $: "SBool" };
     case "true": return { $: "STrue" };
     case "nullable": return { $: "SOpt", inner: toNode(k.inner) };
+    case "optional": return { $: "SOptional", inner: toNode(k.inner) };
+    case "listLen": return { $: "SListLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
     case "list": return { $: "SList", elem: toNode(k.elem) };
     case "tuple": return k.items.reduceRight<Node>((rest, it) => ({ $: "STuple", s: toNode(it), rest }), { $: "STEnd" });
     case "object": return k.fields.reduceRight<Node>((rest, [name, f]) => ({ $: "SField", name, s: toNode(f), rest }), { $: "SEnd" });
@@ -153,9 +245,11 @@ function toJs(x: Schema<any>, m: M): unknown {
     case "strLen": return toJs(k.inner, m);
     case "true": return true;
     case "nullable": return m.$ === "None" ? null : toJs(k.inner, m.value);
+    case "optional": return m.$ === "None" ? undefined : toJs(k.inner, m.value);
+    case "listLen": return toJs(k.inner, m);
     case "list": { const out = []; for (let l = m; l.$ === "Con"; l = l.tail) out.push(toJs(k.elem, l.head)); return out; }
     case "tuple": { const out = []; let b = m; for (const it of k.items) { out.push(toJs(it, b.a)); b = b.b; } return out; }
-    case "object": { const out: Record<string, unknown> = {}; let b = m; for (const [n, f] of k.fields) { out[n] = toJs(f, b.a); b = b.b; } return out; }
+    case "object": { const out: Record<string, unknown> = {}; let b = m; for (const [n, f] of k.fields) { const x = toJs(f, b.a); if (x !== undefined) out[n] = x; b = b.b; } return out; }
     case "strict": return toJs(k.obj, m);
     case "oneKey": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [n]: toJs(c, e.value) }; e = e.value; } throw new Error("unreachable: Empty"); }
     case "tagged": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [k.key]: n, ...(toJs(c, e.value) as object) }; e = e.value; } throw new Error("unreachable: Empty"); }
@@ -169,7 +263,9 @@ function toMeaning(x: Schema<any>, v: any): M {
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v);
     case "true": return unit;
-    case "nullable": return v === null || v === undefined ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v) };
+    case "nullable": return v === null ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v) };
+    case "optional": return v === undefined ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v) };
+    case "listLen": return toMeaning(k.inner, v);
     case "list": return (v as any[]).reduceRight((tail, h) => ({ $: "Con", head: toMeaning(k.elem, h), tail }), { $: "Nil" });
     case "tuple": return k.items.reduceRight((rest: M, it, i) => both(toMeaning(it, v[i]), rest), unit);
     case "object": return k.fields.reduceRight((rest: M, [n, f]) => both(toMeaning(f, v[n]), rest), unit);
@@ -197,23 +293,12 @@ function rawToJs(r: core.Raw): unknown {
     case "RNull": return null;
     case "RStr": return r.s;
     case "RNil": case "RCons": { const out = []; for (let l: core.Raw = r; l.$ === "RCons"; l = l.tail) out.push(rawToJs(l.head)); return out; }
-    case "REnd": case "RKey": { const out: Record<string, unknown> = {}; for (let l: core.Raw = r; l.$ === "RKey"; l = l.rest) out[l.key] = rawToJs(l.val); return out; }
+    case "REnd": case "RKey": { const out: Record<string, unknown> = {}; for (let l: core.Raw = r; l.$ === "RKey"; l = l.rest) if (l.val.$ !== "RMissing") out[l.key] = rawToJs(l.val); return out; }
     default: throw new Error(`bend-schema: encode produced ${r.$}`);
   }
 }
 
-// --------------------------------------------------------------- entry points
-
-export type PathPart = string | number;
-
-export type Issue = {
-  path: PathPart[];
-  message: string;
-  /** true: reported by the proved core. false: a `.refine()` predicate failed. */
-  proved: boolean;
-};
-
-export type Result<T> = { ok: true; value: T } | { ok: false; error: Issue };
+// --------------------------------------------------------------- issues' paths
 
 function pathOf(p: BendList<Step>): PathPart[] {
   const out: PathPart[] = [];
@@ -235,52 +320,16 @@ function refineAt(x: Schema<any>, v: any, path: PathPart[]): Issue | null {
   switch (k.k) {
     case "strLen": e = refineAt(k.inner, v, path); break;
     case "nullable": if (v !== null) e = refineAt(k.inner, v, path); break;
+    case "optional": if (v !== undefined) e = refineAt(k.inner, v, path); break;
+    case "listLen": e = refineAt(k.inner, v, path); break;
     case "list": for (let i = 0; i < v.length && !e; i++) e = sub(k.elem, v[i], i); break;
     case "tuple": for (let i = 0; i < k.items.length && !e; i++) e = sub(k.items[i]!, v[i], i); break;
-    case "object": for (const [n, f] of k.fields) if (!e) e = sub(f, v[n], n); break;
+    case "object": for (const [n, f] of k.fields) if (!e && !(f.kind.k === "optional" && v[n] === undefined)) e = sub(f, v[n], n); break;
     case "strict": e = refineAt(k.obj, v, path); break;
     case "oneKey": for (const [n, c] of k.cases) if (!e && n in v) e = sub(c, v[n], n); break;
     case "tagged": for (const [n, c] of k.cases) if (!e && v[k.key] === n) e = refineAt(c, v, path); break;
   }
   if (e) return e;
-  for (const r of x.refines) if (!r.fn(v)) return { path, message: r.why, proved: false };
+  for (const r of x.refines) if (!r.fn(v)) return new Issue(path, r.why, false);
   return null;
-}
-
-/** Check v, then read it as T. Extra keys of a non-strict object are dropped.
- * A nullable field must still be present (as null): absent is `missing`. */
-export function parse<T>(schema: Schema<T>, v: unknown): Result<T> {
-  const node = schema.node;
-  const raw = toRaw(v);
-  const e = core.check0(node, raw);
-  if (e.$ === "Some") return { ok: false, error: { path: pathOf(e.value.path), message: whyText(e.value.why), proved: true } };
-  const m = dec(node, raw);
-  if (m.$ !== "Some") throw new Error("bend-schema: dec refused a value check0 accepted (a bug in the core)");
-  const value = toJs(schema, m.value) as T;
-  const r = refineAt(schema, value, []);
-  return r ? { ok: false, error: r } : { ok: true, value };
-}
-
-/** The first error, or null. */
-export function check(schema: Schema<any>, v: unknown): Issue | null {
-  const r = parse(schema, v);
-  return r.ok ? null : r.error;
-}
-
-/** Write x as plain JSON-ready JS; parse reads it back. Throws when x breaks a
- * bound (`.in`, `.len`), which its type cannot rule out (encode_conforms
- * assumes bounds_ok), or a refinement. */
-export function encode<T>(schema: Schema<T>, x: T): unknown {
-  const node = schema.node;
-  const out = rawToJs(enc(node, toMeaning(schema, x)));
-  const e = check(schema, out);
-  if (e) throw new Error(`bend-schema: encode: ${errText(e)}`);
-  return out;
-}
-
-/** "tiers[3].up: must be a whole number ..." — `where` names the value. */
-export function errText(e: Issue, where = ""): string {
-  const p = e.path.map((x) => (typeof x === "number" ? `[${x}]` : `.${x}`)).join("");
-  const at = (where + p).replace(/^\./, "") || "the value";
-  return `${at}: ${e.message}`;
 }
