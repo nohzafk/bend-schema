@@ -1,6 +1,7 @@
 {
   "name": "bend-schema",
   "type": "module",
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "typescript": "^7.0.2"
