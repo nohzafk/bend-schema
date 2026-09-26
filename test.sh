@@ -1,7 +1,7 @@
 #!/bin/sh
 # bend-schema's gate. Each step checks one claim, and each can fail:
 #
-#   1. the laws are proved, with no unsafe code
+#   1. the laws are proved, with no unsafe code, and each fails when made false
 #   1b. and each law holds on the concrete instances of it that
 #      core/falsify/spec.ts generates, edge cases first
 #   2. the core builds into a typed module, and what it builds is what is
@@ -38,6 +38,17 @@ if echo "$OUT" | grep -q "rely on unsafe\|relies on unsafe"; then
   echo "FAIL: a proof relies on unsafe code, which proves anything"
   exit 1
 fi
+# A law's proof has to depend on the code: core/check_mutants.ts changes one
+# line of core.bend for each law, and requires the proof to fail in the def it
+# names -- and, first, that the law really is false there, by a counterexample
+# at literals that holds on the core and fails on the mutant. bend-falsify's
+# runMutants is the harness.
+if ! bun core/check_mutants.ts > /tmp/bend-schema-mutants.log 2>&1; then
+  cat /tmp/bend-schema-mutants.log
+  echo "FAIL: a mutant check failed"
+  exit 1
+fi
+cat /tmp/bend-schema-mutants.log
 
 echo "== 1b. the laws on concrete instances =="
 # Before a proof is written, a law is falsified on literal instances of it
@@ -45,12 +56,12 @@ echo "== 1b. the laws on concrete instances =="
 # that holds is one the law really covers. Each law is checked alone, because
 # the checker stops at the first failing instance and the one that fails names
 # the law it belongs to. A falsifier that has never failed proves nothing:
-# tools/falsify.ts takes CORE=<path> as C to point it at a mutated copy of the
-# core, which is how that is shown.
+# core/falsify/spec.ts takes CORE=<path> as C to point it at a mutated copy of
+# the core, which is how that is shown.
 for L in exact accurate enum_accepts enum_admits variant strict tuple tagged \
          too_large rules sbool_meaning snat_in_meaning sstr_len_meaning \
          soptional_meaning slist_len_meaning; do
-  if ! OUT=$(LAW=$L bun tools/falsify.ts core/falsify/spec.ts 2>&1); then
+  if ! OUT=$(LAW=$L bunx bend-falsify core/falsify/spec.ts 2>&1); then
     echo "$OUT"
     echo "FAIL: $L does not hold on the instances it is checked over"
     exit 1

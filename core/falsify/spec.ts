@@ -1,8 +1,8 @@
-// Literal instances of the laws, for tools/falsify.ts. One LAW value checks
-// one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|strict|tuple|
-// tagged|too_large|rules|sbool_meaning|snat_in_meaning|sstr_len_meaning|
-// soptional_meaning|slist_len_meaning.
-//   bun ../../tools/falsify.ts spec.ts
+// Literal instances of the laws, for the falsifier (bend-falsify). One LAW
+// value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
+// strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
+// sstr_len_meaning|soptional_meaning|slist_len_meaning.
+//   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
 // no rules and with a rule that dispatches on the tag.
