@@ -1,41 +1,80 @@
-# config-loader — a deploy config, with one proved check
+# config-loader — read a config file, report the first mistake
 
-`load.ts` builds the schema for a small deploy config and reads a file into it.
-`bun load.ts <file.json>` prints the parsed config, or one line saying what is
-wrong, and exits 1.
+`load.ts` reads a JSON deploy config and checks it against a schema.
+
+- Valid file → prints the parsed config, exit code 0.
+- Invalid file → prints **one line** saying where and what is wrong, exit code 1.
+
+## Try it
+
+Run these from this directory (`examples/config-loader`):
 
 ```sh
-bun load.ts good.json          # the config, as JSON; exit 0
+bun load.ts good.json          # prints the config; exit 0
 bun load.ts typo.json          # config.targets[1].regoin: is not a key this object allows; exit 1
 bun test .                     # 8 tests: the schema, the fixtures, the CLI
 ```
 
-Fixtures: `good.json` (a valid file, both target kinds), `typo.json` (an s3
-target that also carries the misspelled `regoin`), `wrong-tag.json`
-(`"type": "ftp"`, which no case claims), `missing.json` (no `notify`, which is
-`nullable` — a key the schema names must be present, as `null`; absent is
-reported `missing`).
+## Files
 
-What this buys over a hand-written zod schema is one thing: **a key the schema
-does not name is an error, at its path, and that is proved for every schema,
-not for this one.** `.strict()` is the core's `SStrict`, whose law
-`strict_meaning` states `conforms(~rule, SStrict{s}, r) ==
-conforms(~rule, s, r) and count_unknown(key_names(s), r) == 0` — "it conforms
-to s, and it has no key s does not name" — and the core reports the first such
-key at `AtKey{key}`, which is where `config.targets[1].regoin` comes from. The
-tag is the core's `STagged` too: `tagged_meaning` says a case conforms by the
-object **without** its tag when the tag is the case's name, else by the rest,
-and `tag_end_refuses` says the end of the chain accepts nothing — so
-`"type": "ftp"` is `config.targets[1].type: is not one of the allowed names`
-rather than a parsed value with no target, and an s3 case need not name `type`.
-Both laws sit under `check_exact` (check finds nothing exactly when the value
-conforms) and `check_accurate` (following the reported path, everything passed
-on the way conforms, and the value at the end is wrong in the reported way), so
-the error's path is not a convention here, it is the claim. zod's default
-`z.object` does the opposite: it strips unknown keys silently, so `regoin`
-disappears and the config looks fine. Two honest edges: the laws pin the core's
-`check`/`conforms`, not this file's builder or the JS conversion (that is what
-`src/index.test.ts` round-trips), and a field is checked before unknown keys are
-counted, so if `regoin` is written *instead of* `region`, the first error is the
-absent one — `config.targets[0].region: missing` — and `regoin` is not named
-until `region` is back (both are errors; that one just comes first).
+| File | What it is |
+|---|---|
+| `load.ts` | the `Config` schema, `loadConfig(text)`, and the CLI |
+| `load.test.ts` | the tests |
+| `good.json` | a valid config, with both target kinds |
+| `typo.json` | an s3 target with a misspelled extra key, `regoin` |
+| `wrong-tag.json` | a target with `"type": "ftp"`, which is not a known kind |
+| `missing.json` | no `notify` key (see "nullable" below) |
+
+## The schema
+
+A config is a strict object (unknown keys are errors):
+
+| Field | Rule |
+|---|---|
+| `name` | string, 1–64 characters |
+| `notify` | string or `null`. The key must be present; write `null`, not nothing. |
+| `targets` | list of targets. `"type"` picks the kind: |
+| — `"type": "s3"` | `bucket` (1–63 chars), `region` (`eu-west-1`, `us-east-1`, `us-west-2`), `prefix` (string or `null`) |
+| — `"type": "ssh"` | `host`, `port` (1–65535), `user` |
+
+## Why this is better than a default zod schema
+
+**Typos are caught, not ignored.** zod's default `z.object` silently drops keys it
+does not know. So a misspelled `regoin` just disappears and the config looks fine.
+Here, `.strict()` makes an unknown key an error, reported at its exact path:
+
+```
+config.targets[1].regoin: is not a key this object allows
+```
+
+**Unknown kinds are caught.** `"type": "ftp"` matches no case, so it is an error:
+
+```
+config.targets[1].type: is not one of the allowed names
+```
+
+— not a parsed value with no target.
+
+**This behaviour is proved, not just tested.** It holds for every schema, not only
+this one. The laws are in `core/LAWS.bend`:
+
+- `strict_meaning` — a strict object is valid only if the inner object is valid
+  *and* it has no key the schema does not name.
+- `tagged_meaning` / `tag_end_refuses` — a tagged value is checked against the case
+  its tag names; a tag that names no case is refused.
+- `check_exact` — the checker finds no error exactly when the value is valid.
+- `check_accurate` — when the checker reports an error at a path, the value at that
+  path really is wrong in that way.
+
+So the path in the error message is not a best guess; it is part of what is proved.
+
+## Two things to know
+
+1. **Order of errors.** Missing fields are checked before unknown keys. If you write
+   `regoin` *instead of* `region`, the first error is
+   `config.targets[0].region: missing`. `regoin` is only reported once `region` is
+   back. Both are errors; one just comes first.
+2. **What is not proved.** The laws cover the core checker. They do not cover the
+   TypeScript builder in `load.ts` or the conversion between JS values and the
+   core's values. That conversion is tested in `src/index.test.ts`.

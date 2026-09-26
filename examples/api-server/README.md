@@ -1,62 +1,103 @@
-# examples/api-server — an orders API
+# api-server — validate an HTTP request body
 
-One file, no dependencies. `POST /orders` takes an order with line items and
-answers `201` with the parsed order, or `400` with the first defect. `handle(req)`
-is the whole API, so the test drives it with a `Request` — no port, no server.
+A small orders API in one file, with no dependencies.
+
+- `POST /orders` with a valid order → `201` and the parsed order.
+- `POST /orders` with a bad order → `400` and the **first** thing that is wrong, with its path.
+
+## Try it
+
+Run these from the package root:
 
 ```sh
-bun run examples/api-server/server.ts               # PORT=3000
+bun run examples/api-server/server.ts        # listens on PORT, default 3000
+
 curl -s localhost:3000/orders -H 'content-type: application/json' -d '{
   "id": "o-1", "currency": "usd", "note": null, "totalQty": 3,
   "items": [{"sku": "sku-1", "qty": 3, "price": 250}]}'
 
-bun test examples/api-server
-bunx tsc --noEmit -p examples/api-server    # the root tsconfig's include stops at src/ and tools/
+bun test examples/api-server                 # the tests
+bunx tsc --noEmit -p examples/api-server     # type check (the root tsconfig does not include examples/)
 ```
 
-The schema is one `s.object({...}).strict()`: a bounded `id`, an `enum`
-currency, a `nullable` note (present as `null` — absent is an error), a bounded
-`totalQty`, and a `list` of strict line items. One `.refine()` sits on top of it,
-cross-field: `totalQty` must equal the sum of the item quantities.
+The tests do not open a port. The whole API is the function `handle(req)`, so
+the tests call it with a `Request` directly.
 
-Every `400` has the same shape — the core's issue, plus its wording:
+## Files
+
+| File | What it is |
+|---|---|
+| `server.ts` | the `Order` schema, `handle(req)`, and the server |
+| `server.test.ts` | the tests |
+| `tsconfig.json` | extends the package's, for `tsc` |
+
+## The schema
+
+`Order` is one strict object (unknown keys are errors):
+
+| Field | Rule |
+|---|---|
+| `id` | string, 1–40 characters |
+| `currency` | `"usd"` or `"eur"` |
+| `note` | string up to 200 characters, or `null`. The key must be present; send `null`, not nothing. |
+| `totalQty` | whole number, 1–10000 |
+| `items` | list of line items: `sku` (1–32 chars), `qty` (1–999), `price` (0–1000000, in whole cents — the schema has no floats) |
+
+One extra rule sits on top, written with `.refine()`: `totalQty` must equal the
+sum of the item quantities.
+
+## What a 400 looks like
+
+Every 400 has the same shape:
 
 ```json
-{"path":["items",2,"qty"],"message":"must be a whole number from 0 to 281474976710655",
- "proved":true,"text":"order.items[2].qty: must be a whole number from 0 to 281474976710655"}
+{"path": ["items", 2, "qty"],
+ "message": "must be a whole number from 0 to 281474976710655",
+ "proved": true,
+ "text": "order.items[2].qty: must be a whole number from 0 to 281474976710655"}
 ```
 
-## What the proved core bought
+- `path` — where the problem is (here: the third line item's `qty`).
+- `message` — what is wrong there.
+- `proved` — `true` if the error came from the verified core, `false` if it came from your `.refine()` rule.
+- `text` — `path` and `message` as one readable line.
 
-A hand-written zod schema can send a body of the same shape; the difference is
-what a reader may assume about its `path` and `message`. That error is not
-pointed at the third line item by the code that found it — it is the answer of
-`check` in the compiled core, whose `check_accurate` law holds for **every**
-schema, every rule and every value, and says:
+## Why "proved" matters
 
-> what check reports is there: following its path, every value passed on the way
-> conforms, and at the end the value is wrong in the way it says.
+With a hand-written zod schema you can send the same JSON. The difference is how
+much you can trust it.
 
-Its statement is `{C.check(~rule, s, r, prev) == Some{C.Err{path, why}}}` ⟹
-`{C.defect(~rule, s, r, prev, path) == Some{why}}`: whenever `check` reports an
-error at `path` with reason `why`, `defect` — the predicate that walks that same
-path and says what is actually wrong — returns that same `why`. So a `proved:
-true` 400 cannot name a field that is fine, or a reason that does not hold;
-that is why this server sends the path and the reason to the client as they
-come. A hand-written schema's path is whatever its author wired up, and nothing
-checks it. (Which error comes first is a separate decision, not this law's:
-LAWS.bend fixes the first error depth first, by position.)
+**1. The path and message are always correct.** A `proved: true` error comes
+from the core checker, which has a machine-checked law (`check_accurate` in
+`core/LAWS.bend`) for every schema and every value:
 
-The oversized body is the second thing. `BUDGET` = 3072 (counted as list
-elements plus object keys, summed over every level; `bun src/measure_budget.ts`
-re-measures it) is a host decision, not a theorem — but what happens past it is
-again the core's: `toRaw` puts one `RTooBig` where the array that ran past would
-have been, and `too_large_reported` says `check` reports exactly that node with
-`TooLarge`. So 5000 line items is `400 {"path":["items"],"message":"too large"}`
-rather than `RangeError: Maximum call stack size exceeded`.
+> If `check` says "at this path, the value is wrong for this reason", then
+> following that path really does reach a value that is wrong for exactly that reason.
 
-Not proved, here as everywhere: the builder, the codec's conversion between the
-core's values and plain JS, and the `.refine()` predicate — it is an ordinary TS
-function, it runs only after the proved check passes, and its 400 says `proved:
-false`. The `totalQty` rule above is exactly that: a real check of a real
-cross-field property, with no proof behind it.
+So a proved 400 never points at a field that is fine, and never gives a reason
+that is false. That is why the server sends the error to the client as it is.
+With hand-written validation, the path is whatever the author wired up, and
+nothing checks it.
+
+(Which error is reported *first* is a separate rule: depth first, in order. See
+`core/LAWS.bend`.)
+
+**2. A huge body gets a clean error, not a crash.** The server sets a size limit,
+`BUDGET = 3072`, counted as list elements plus object keys at every level
+(re-measure it with `bun src/measure_budget.ts`). The limit itself is a choice
+made in this file, not a theorem. But what happens past it is proved: the
+oversized list is replaced by one "too large" marker, and the law
+`too_large_reported` says `check` reports exactly that spot. So an order with
+5000 line items gets:
+
+```json
+400 {"path": ["items"], "message": "too large"}
+```
+
+instead of `RangeError: Maximum call stack size exceeded`.
+
+## What is *not* proved
+
+- The TypeScript builder (`s.object(...)` etc.).
+- The conversion between plain JS values and the core's values (tested in `src/index.test.ts`, not proved).
+- Your `.refine()` rules. They are ordinary TS functions, run only after the proved check passes, and their errors say `proved: false`. The `totalQty` rule is one of these.

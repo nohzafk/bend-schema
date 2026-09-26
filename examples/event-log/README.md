@@ -1,8 +1,11 @@
-# examples/event-log — one JSON line per event, one schema for both directions
+# event-log — write and read a JSON-lines log with one schema
 
-An append-only log of three kinds of event. `append` encodes an event and
-writes a line; `readAll` parses every line back and throws on the first bad
-one, naming the line and the field inside it (`line 3.qty: must be from 1 to 99`).
+An append-only log file. Each line is one JSON event. One schema, `Event`, is used
+both to write lines and to read them back.
+
+- `append(path, event)` — checks and encodes the event, then adds one line.
+- `readAll(path)` — parses every line. On the first bad line it throws, naming the
+  line and the field: `line 3.qty: must be from 1 to 99`.
 
 ```ts
 import { append, readAll } from "./log.ts";
@@ -11,28 +14,44 @@ append("events.jsonl", { kind: "purchase", user: "bob", sku: "SKU-9", qty: 2, co
 readAll("events.jsonl"); // [{ kind: "purchase", user: "bob", sku: "SKU-9", qty: 2, coupon: null }]
 ```
 
-| file | what it is |
-|---|---|
-| `log.ts` | the `Event` schema, `append`, `readAll` |
-| `log.test.ts` | every case, a generated 200-event batch, a refused value, a corrupted line |
-| `tsconfig.json` | extends the package's, for `tsc` |
+## Try it
 
-From the package root:
+Run these from the package root:
 
 ```sh
 bun test examples/event-log        # the tests
-bunx tsc -p examples/event-log     # the types
+bunx tsc -p examples/event-log     # type check
 ```
 
-## What this bought over a hand-written zod schema
+## Files
 
-Here the format's reader and writer are the same value. `Event` is written
-once: `Event.encode(e)` produces the line and `Event.parse(line)` reads it,
-so the two cannot drift apart about a field name, a nullable key or a case —
-a hand-written zod pair would be two declarations kept in step by hand, and
-the drift shows up as a line that can be written but not read. And the
-agreement is not merely tested. It is proved, for every schema, in
-`core/LAWS.bend`:
+| File | What it is |
+|---|---|
+| `log.ts` | the `Event` schema, `append`, `readAll` |
+| `log.test.ts` | every event kind, a generated batch of 200 events, a refused value, a corrupted line |
+| `tsconfig.json` | extends the package's, for `tsc` |
+
+## The schema
+
+`"kind"` picks one of three event types:
+
+| `kind` | Fields |
+|---|---|
+| `signup` | `user` (1–32 chars), `plan` (`"free"` or `"pro"`) |
+| `purchase` | `user`, `sku`, `qty` (1–99), `coupon` (string or `null`) |
+| `note` | `text`, `tags` (list of strings), `at` (pair of whole numbers) |
+
+## Why one schema for both directions
+
+With hand-written zod you usually have a writer and a reader, kept in step by hand.
+When they drift — a renamed field, a nullable key, a new case — you get lines that
+can be written but not read back.
+
+Here there is one value: `Event.encode(e)` writes the line and `Event.parse(line)`
+reads it. They cannot disagree about a field name, a nullable key, or a case.
+
+**And the round trip is proved, not just tested.** `core/LAWS.bend` has this law,
+for every schema:
 
 ```
 law decode_encode:
@@ -42,19 +61,18 @@ law decode_encode:
   {C.dec(s, C.enc(s, x)) == Some{x} : Maybe<&2, C.Meaning(s)>}
 ```
 
-"What was written reads back as itself": on a well-formed schema (`wf`), the
-decoder returns the meaning the encoder was given. So for this log, every
-event — every `user` string up to 32 characters, every `qty` from 1 to 99,
-every list of tags, every null coupon — is written to be read back, and no
-test had to say so. `log.test.ts` round-trips a few hundred events through
-files; the law counts none.
+In plain words: for any well-formed schema `s` and any valid value `x`, decoding
+the encoding of `x` gives back `x`. For this log that means every possible event —
+every `user` up to 32 characters, every `qty` from 1 to 99, every tag list, every
+null coupon — reads back as exactly what was written. The tests round-trip a few
+hundred events; the law covers all of them.
 
-Be exact about what that covers. The conversion around the core is **not**
-proved: `toJs`/`toMeaning` in `src/index.ts` move this host's plain JS values
-into the core's `Meaning(s)` and back, and `src/index.test.ts` round-trips
-every constructor rather than proving anything. The proved claim is that the
-core never disagrees with itself; that these JS values sit in the core's
-shape is tested, not proved. `encode` also has a premise the core states
-(`encode_conforms` assumes each value is inside the bounds its constructors
-state), which is why `append` throws on a `qty` of 100 — the TS type cannot
-rule it out, so the value is refused before it reaches the file.
+## What is *not* proved
+
+- **The JS conversion.** `toJs` / `toMeaning` in `src/index.ts` convert between plain
+  JS values and the core's values. `src/index.test.ts` tests every case, but this
+  part is not proved. The proof says the core agrees with itself; that your JS
+  values map correctly into the core is tested.
+- **Values out of range.** The law assumes the value is valid (for example,
+  `qty` within 1–99). The TypeScript type cannot express that, so `append` checks
+  first and throws on `qty: 100` before anything reaches the file.

@@ -9,11 +9,15 @@ for every schema and every value.
 
 ## Install
 
+bend-schema is not on npm. Install it from GitHub:
+
 ```sh
-npm install bend-schema
+bun add github:nohzafk/bend-schema
 ```
 
-Requires Node.js 22.18 or later. You do not need Bend installed.
+Use it with [Bun](https://bun.sh). The package ships TypeScript source, and
+Node.js refuses to run TypeScript from `node_modules`. You do not need Bend
+installed.
 
 ## Quick start
 
@@ -75,6 +79,27 @@ Each example is a small runnable project with tests:
   file and reports the first mistake in one line.
 - [`examples/event-log`](examples/event-log): an append-only JSON-lines log
   that writes and reads with the same schema.
+
+## Ask an AI agent to write a schema
+
+New to bend-schema? Paste this prompt into your coding agent, then describe
+your data:
+
+```text
+I want to validate JSON in my TypeScript project with bend-schema, a
+schema library like zod whose checker is proved correct.
+Repo: https://github.com/nohzafk/bend-schema
+
+The complete guide to writing schemas is docs/schemas.md:
+https://raw.githubusercontent.com/nohzafk/bend-schema/main/docs/schemas.md
+Read it first, and follow it. Install as the repo README says.
+
+Write a schema for the data I describe below, export its type with
+Infer<typeof ...>, and add tests: a valid value parses, and each invalid
+value fails at the path you expect.
+
+My data:
+```
 
 ## Use from Bend
 
