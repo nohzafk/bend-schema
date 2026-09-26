@@ -11,10 +11,11 @@ import type { BendList, Schema as Node, Step } from "../dist-core/core.js";
 import { toRaw, whyText } from "./codec.ts";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
-// bend_lib cannot write as a TS signature; they are untyped here.
+// bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, KEYS_MAX } from "./codec.ts";
+export { BUDGET, KEYS_MAX, toRaw } from "./codec.ts";
+export type { Raw } from "../dist-core/core.js";
 
 // ------------------------------------------------------------------ issues
 

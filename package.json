@@ -1,9 +1,11 @@
 {
   "name": "bend-schema",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "bend-emit": "github:nohzafk/bend-emit",
     "typescript": "^7.0.2"
   },
   "exports": {

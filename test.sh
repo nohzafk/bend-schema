@@ -69,7 +69,7 @@ echo "== 2. the module =="
 # compiler bump that changes the module is a visible change, not a surprise.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-bun tools/bend_lib.ts core/core.bend "$TMP" > /dev/null
+bunx bend-emit core/core.bend "$TMP" > /dev/null
 if ! cmp -s dist-core/core.js "$TMP/core.js" || ! cmp -s dist-core/core.d.ts "$TMP/core.d.ts"; then
   echo "FAIL: dist-core/ is not what $(cat dist-core/BEND-VERSION) builds here"
   diff -u dist-core/core.js "$TMP/core.js" | head -40
@@ -80,18 +80,10 @@ fi
 echo "dist-core/ is what $(cat dist-core/BEND-VERSION) builds"
 
 echo "== 3. the tests =="
-# tools/test/ is bend2-play's tools/test/: this repository's tools/ is that
-# one, so the tools are tested the same way here (bend_lib.ts on Base's
-# generic types, case_arms.ts on a fixture's case table). Each test file
-# imports the module tools/bend_lib.ts builds from its fixture, so build them
-# beside the tests first -- gitignored, as there: dist-core/ is what the
-# package ships, and none of this is published.
-for f in generics uses templated dependent dependent_user; do
-  tools/bend-check "tools/test/$f.bend"
-  bun tools/bend_lib.ts "tools/test/$f.bend" tools/test/dist > /dev/null
-done
-# `bun test` discovers every *.test.ts below the root, tools/test/ included,
-# so the fixtures' tests run here and are not run a second time.
+# The module builder is the bend-emit dev dependency; its repository holds
+# the five fixture cores it is tested on, and its test.sh gates the builder.
+# What is left under tools/test/ is case_arms.ts's test, whose core is
+# written in the test file itself -- nothing to build first.
 if ! bun test > /tmp/bend-schema-tests.log 2>&1; then
   tail -20 /tmp/bend-schema-tests.log
   echo "FAIL: a test failed"
@@ -101,8 +93,6 @@ tail -3 /tmp/bend-schema-tests.log
 
 echo "== 4. the types =="
 bunx tsc -p .
-# the tools' fixture host, against the module those fixtures just built
-bunx tsc -p tools/test
 
 echo "== 4b. the printer =="
 # Every constructor the builder has, printed by the real command and then

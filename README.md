@@ -78,29 +78,74 @@ Each example is a small runnable project with tests:
 
 ## Use from Bend
 
-Export your schemas from a TypeScript module:
+Write a schema once in TypeScript, use it in a Bend function whose laws you
+prove, and call that function from TypeScript again. The loop is:
+
+```
+schema.ts ──gen──▶ schema.bend ──import──▶ core.bend ──bend-emit──▶ dist/core.js ──import──▶ app.ts
+```
+
+**1. Export your schemas** from a TypeScript module:
 
 ```ts
 // schema.ts
-export const schemas = { config: Config, workers: Workers };
+import { s } from "bend-schema";
+
+export const Config = s.object({
+  name:  s.str().len(1, 64),
+  seats: s.nat().in(1, 500),
+}).strict();
+
+export const schemas = { config: Config };
 ```
 
-Generate Bend source:
+**2. Generate Bend source.** The command executes `schema.ts`, so that file
+should contain only schemas.
 
 ```sh
 npx bend-schema gen schema.ts schema.bend
 ```
 
-Then use it in a Bend program:
+`schema.bend` defines `config_schema()` and imports the proved checker from
+this package's `core/core.bend`.
+
+**3. Use the schema in your own Bend core.** Import the checker with the same
+path that `schema.bend` uses on its second line:
 
 ```bend
+# core.bend
+import Base
+import ./node_modules/bend-schema/core/core.bend as S
 import ./schema.bend as Sch
 
-def check_config(r: S.Raw) -> Maybe<&2, S.Err>:
-  S.check0(Sch.config_schema(), r)
+def config_ok(r: S.Raw) -> Bool:
+  S.conforms0(Sch.config_schema(), r)
 ```
 
-The command executes `schema.ts`, so that file should contain only schemas.
+Here you can state and prove laws about your own functions, and build on the
+laws in `core/LAWS.bend`.
+
+**4. Turn the core into a typed ES module** with
+[bend-emit](https://github.com/nohzafk/bend-emit):
+
+```sh
+bun add -d github:nohzafk/bend-emit
+bunx bend-emit core.bend dist       # writes dist/core.js and dist/core.d.ts
+```
+
+**5. Call it from TypeScript.** `toRaw` converts a JSON value into the
+core's `Raw` input:
+
+```ts
+// app.ts
+import { toRaw } from "bend-schema";
+import { config_ok } from "./dist/core.js";
+
+config_ok(toRaw({ name: "a", seats: 3 }));    // true
+config_ok(toRaw({ name: "a", seats: 999 }));  // false
+```
+
+Commit `dist/`: at run time your package needs neither Bend nor bend-emit.
 
 Bend code can also plug in its own rules through a template parameter. The
 laws hold for every rule, so you only need to prove what your rule means. See
@@ -130,11 +175,14 @@ core, and `.refine()` predicates. These are covered by tests.
 
 ## Development
 
-Development uses [Bun](https://bun.sh) and Bend.
+Development uses [Bun](https://bun.sh), Bend, and
+[bend-emit](https://github.com/nohzafk/bend-emit) (a dev dependency), which
+builds `dist-core/`.
 
 ```sh
 sh test.sh                                        # full gate: proofs, tests, types
-bun tools/bend_lib.ts core/core.bend dist-core    # rebuild the compiled core
+# rebuild the compiled core
+bunx bend-emit core/core.bend dist-core
 ```
 
 | Path | Contents |

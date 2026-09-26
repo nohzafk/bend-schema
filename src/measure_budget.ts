@@ -37,7 +37,7 @@ import * as kernel from "../dist-core/core.js";
 import { check0, conforms0, type BendMaybe, type Raw, type Schema } from "../dist-core/core.js";
 import { BUDGET } from "./codec";
 
-// enc and dec compute a type from a value (Meaning(s)), so tools/bend_lib.ts
+// enc and dec compute a type from a value (Meaning(s)), so bend-emit
 // leaves them undeclared in dist-core/core.d.ts: these are their run-time types.
 const { enc, dec } = kernel as unknown as {
   enc: (s: Schema, x: unknown) => unknown;
