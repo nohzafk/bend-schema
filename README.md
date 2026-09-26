@@ -82,23 +82,16 @@ Each example is a small runnable project with tests:
 
 ## Ask an AI agent to write a schema
 
-New to bend-schema? Paste this prompt into your coding agent, then describe
-your data:
+New to bend-schema? Paste this into your coding agent to introduce it, then
+work with the agent as usual:
 
 ```text
-I want to validate JSON in my TypeScript project with bend-schema, a
-schema library like zod whose checker is proved correct.
-Repo: https://github.com/nohzafk/bend-schema
+bend-schema is a TypeScript schema library like zod, whose checker is
+written in Bend and proved correct. Read its README to learn what it is
+and how to install it: https://github.com/nohzafk/bend-schema
 
-The complete guide to writing schemas is docs/schemas.md:
-https://raw.githubusercontent.com/nohzafk/bend-schema/main/docs/schemas.md
-Read it first, and follow it. Install as the repo README says.
-
-Write a schema for the data I describe below, export its type with
-Infer<typeof ...>, and add tests: a valid value parses, and each invalid
-value fails at the path you expect.
-
-My data:
+If we decide to use it, docs/schemas.md in that repo explains how to
+write schemas.
 ```
 
 ## Use from Bend
