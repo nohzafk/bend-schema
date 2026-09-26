@@ -6,6 +6,7 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "bend-emit": "github:nohzafk/bend-emit",
+    "bend-falsify": "file:../bend-falsify",
     "typescript": "^7.0.2"
   },
   "exports": {
