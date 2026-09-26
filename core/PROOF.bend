@@ -1,9 +1,8 @@
 import Base
 import ./LAWS.bend as Laws
 import ./core.bend as C
-import ./base-facts/comparison.bend as CMP
-import ./base-facts/nat_le.bend as LE
-import ./base-facts/string_eq.bend as SE
+import ../vendor/bendlib/packages/bend-mathlib/string.bend as MS
+import ../vendor/bendlib/packages/bend-mathlib/nat.bend as MN
 
 # The proofs of bend-schema's laws. The gate is `bend core/PROOF.bend` (through
 # tools/bend-check). Each law's proof sits under its own
@@ -682,10 +681,10 @@ def Laws.check_exact(rule, s, r, prev):
 # verdict, whose path is this path).
 
 def nat_eq_refl_r(a: Nat) -> {Nat.is_eq(a, a) == True{} : Bool}:
-  Equal.sym(Bool, True{}, Nat.is_eq(a, a), LE.is_eq_refl(a))
+  Equal.sym(Bool, True{}, Nat.is_eq(a, a), MN.is_eq_refl_sym(a))
 
 def string_eq_refl_r(s: String) -> {String.eq(s, s) == True{} : Bool}:
-  Equal.sym(Bool, True{}, String.eq(s, s), CMP.string_eq_refl(s))
+  Equal.sym(Bool, True{}, String.eq(s, s), MS.eq_refl_sym(s))
 
 def and_true2(x: Bool, +y: Bool, hx: {x == True{} : Bool}, hy: {y == True{} : Bool}) -> {Bool.and(x, y) == True{} : Bool}:
   match x:
@@ -801,7 +800,7 @@ def extra_acc_step(b: Bool, +ns: List<&2, String>, +k: String, +v: C.Raw, +o: C.
     case False{}:
       %same_path(C.AtKey{k} <> Nil{}, C.UnknownKey{}, p, w, h) : {C.extra_defect(ns, C.RKey{k, v, o}, _) == Some{w} : Maybe<&2, C.Why>}
       %same_why(C.AtKey{k} <> Nil{}, C.UnknownKey{}, p, w, h) : {C.extra_defect(ns, C.RKey{k, v, o}, C.AtKey{k} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(k) : {C.guard(Bool.and(Bool.or(_, C.has_key(k, o)), Bool.not(C.in_names(k, ns))), Some{C.UnknownKey{}}) == Some{C.UnknownKey{}} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(k) : {C.guard(Bool.and(Bool.or(_, C.has_key(k, o)), Bool.not(C.in_names(k, ns))), Some{C.UnknownKey{}}) == Some{C.UnknownKey{}} : Maybe<&2, C.Why>}
       %eb : {C.guard(Bool.not(_), Some{C.UnknownKey{}}) == Some{C.UnknownKey{}} : Maybe<&2, C.Why>}
       {==}
 
@@ -970,7 +969,7 @@ def field_step_end(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>
     case Some{C.Err{+p1, +w1}}:
       %same_path(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.REnd{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.REnd{}, prev, C.AtField{0n, name} <> p1) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(name) : {C.guard(_, C.defect(~rule, fs, C.RMissing{}, None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(name) : {C.guard(_, C.defect(~rule, fs, C.RMissing{}, None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
       ih1(p1, w1, {==})
     case None{}:
       field_tail_end(~rule, m2, name, fs, rest, prev, path, why, h, ex1, ih2)
@@ -1007,7 +1006,7 @@ def field_step_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>
     case Some{C.Err{+p1, +w1}}:
       %same_path(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.AtField{0n, name} <> p1) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(name) : {C.guard(_, C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(name) : {C.guard(_, C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
       ih1(p1, w1, {==})
     case None{}:
       field_tail_key(~rule, m2, name, fs, rest, k, v, o, prev, path, why, h, ex1, ih2)
@@ -1197,7 +1196,7 @@ def dup_step(b: Bool, +n: String, +vs: C.Schema, +rr: C.Schema, +r: C.Raw, eb: {
     case False{}:
       %same_path(C.AtField{0n, n} <> Nil{}, C.TwoVariants{}, p, w, h) : {C.dup_defect(C.SVariant{n, vs, rr}, r, _) == Some{w} : Maybe<&2, C.Why>}
       %same_why(C.AtField{0n, n} <> Nil{}, C.TwoVariants{}, p, w, h) : {C.dup_defect(C.SVariant{n, vs, rr}, r, C.AtField{0n, n} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(n) : {C.guard(Bool.and(_, Bool.not(C.is_missing(C.lookup(n, r)))), Some{C.TwoVariants{}}) == Some{C.TwoVariants{}} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(n) : {C.guard(Bool.and(_, Bool.not(C.is_missing(C.lookup(n, r)))), Some{C.TwoVariants{}}) == Some{C.TwoVariants{}} : Maybe<&2, C.Why>}
       %eb : {C.guard(Bool.and(True{}, Bool.not(_)), Some{C.TwoVariants{}}) == Some{C.TwoVariants{}} : Maybe<&2, C.Why>}
       {==}
 
@@ -1280,7 +1279,7 @@ def var_present(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>, +
       %same_path(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, C.AtField{0n, vn} <> p1) == Some{_} : Maybe<&2, C.Why>}
       %eb : {C.pick_why(_, C.defect(~rule, vr, C.RKey{k, v, o}, None{}, C.AtField{0n, vn} <> p1), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1))) == Some{w1} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(vn) : {C.guard(_, C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(vn) : {C.guard(_, C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
       ih2(p1, w1, {==})
     case None{}:
       var_dup(~rule, m3, vn, vv, vr, k, v, o, prev, path, why, eb, h, ex1, hd, hs)
@@ -1636,12 +1635,12 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
     case C.STagEnd{+k} C.REnd{}:
       %same_path(C.AtKey{k} <> Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.REnd{}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtKey{k} <> Nil{}, C.Missing{}, path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.REnd{}, prev, C.AtKey{k} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(k) : {C.guard(_, Some{C.Missing{}}) == Some{C.Missing{}} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(k) : {C.guard(_, Some{C.Missing{}}) == Some{C.Missing{}} : Maybe<&2, C.Why>}
       {==}
     case C.STagEnd{+k} C.RKey{+j, +v, +o}:
       %same_path(C.AtKey{k} <> Nil{}, C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{}), path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RKey{j, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(C.AtKey{k} <> Nil{}, C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{}), path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RKey{j, v, o}, prev, C.AtKey{k} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
-      %CMP.string_eq_refl(k) : {C.guard(_, Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})}) == Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(k) : {C.guard(_, Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})}) == Some{C.missing_or(C.lookup(k, C.RKey{j, v, o}), C.NotOneOf{})} : Maybe<&2, C.Why>}
       {==}
     case C.SBool{} C.RNum{n}:
       %same_path(Nil{}, C.NotBool{}, path, why, h) : {C.defect(~rule, C.SBool{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
@@ -2030,7 +2029,7 @@ def Laws.too_large_reported(rule, s, prev):
 # ---- every listed name is accepted ----
 #
 # in_names looks for n through pre, then finds it: String.eq(n, n) is True
-# (CMP.string_eq_refl), and an or with True is True whatever came first.
+# (MS.eq_refl_sym), and an or with True is True whatever came first.
 
 def or_true_r(x: Bool) -> {True{} == Bool.or(x, True{}) : Bool}:
   match x:
@@ -2042,7 +2041,7 @@ def or_true_r(x: Bool) -> {True{} == Bool.or(x, True{}) : Bool}:
 def names_has(pre: List<&2, String>, +n: String, +post: List<&2, String>) -> {C.in_names(n, List.append(&2, String, pre, n <> post)) == True{} : Bool}:
   match pre:
     case Nil{}:
-      %CMP.string_eq_refl(n) : {Bool.or(_, C.in_names(n, post)) == True{} : Bool}
+      %MS.eq_refl_sym(n) : {Bool.or(_, C.in_names(n, post)) == True{} : Bool}
       {==}
     case +m <> +t:
       %Equal.sym(Bool, C.in_names(n, List.append(&2, String, t, n <> post)), True{}, names_has(t, n, post)) : {Bool.or(String.eq(n, m), _) == True{} : Bool}
@@ -2451,7 +2450,7 @@ def not_missing(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.opt_at(s) : Boo
 
 # Reading a key from the object that starts with it.
 def lk_self(+n: String, +v: C.Raw, +o: C.Raw) -> {v == C.lookup(n, C.RKey{n, v, o}) : C.Raw}:
-  %CMP.string_eq_refl(n) : {v == C.pick_raw(_, v, C.lookup(n, o)) : C.Raw}
+  %MS.eq_refl_sym(n) : {v == C.pick_raw(_, v, C.lookup(n, o)) : C.Raw}
   {==}
 
 # Reading past a key of another name.
@@ -2565,12 +2564,12 @@ def not_nullish(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.nullable(s) : B
 # takes it out again, and no later case of a well-formed chain claims it.
 
 def tag_self(+k: String, +n: String, e: C.Raw) -> {True{} == C.is_tag(k, n, C.RKey{k, C.RStr{n}, e}) : Bool}:
-  %CMP.string_eq_refl(k) : {True{} == C.is_str(n, C.pick_raw(_, C.RStr{n}, C.lookup(k, e))) : Bool}
-  %CMP.string_eq_refl(n) : {True{} == _ : Bool}
+  %MS.eq_refl_sym(k) : {True{} == C.is_str(n, C.pick_raw(_, C.RStr{n}, C.lookup(k, e))) : Bool}
+  %MS.eq_refl_sym(n) : {True{} == _ : Bool}
   {==}
 
 def drop_self(+k: String, +v: C.Raw, +e: C.Raw) -> {e == C.drop_key(k, C.RKey{k, v, e}) : C.Raw}:
-  %CMP.string_eq_refl(k) : {e == C.pick_raw(_, e, C.RKey{k, v, C.drop_key(k, e)}) : C.Raw}
+  %MS.eq_refl_sym(k) : {e == C.pick_raw(_, e, C.RKey{k, v, C.drop_key(k, e)}) : C.Raw}
   {==}
 
 def tag_other(+k: String, +n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_t(k, n, s) == True{} : Bool}) -> {False{} == C.is_tag(k, n, C.enc(s, x)) : Bool}:
@@ -4152,7 +4151,7 @@ def Laws.drop_first(k, v, o):
 def drop_step(b: Bool, +i: String, +k: String, +j: String, +v: C.Raw, +o: C.Raw, eb: {b == String.eq(i, k) : Bool}, +h: {False{} == String.eq(k, j) : Bool}, ih: {C.lookup(j, C.drop_key(k, o)) == C.lookup(j, o) : C.Raw}) -> {C.lookup(j, C.pick_raw(b, o, C.RKey{i, v, C.drop_key(k, o)})) == C.lookup(j, C.RKey{i, v, o}) : C.Raw}:
   match b:
     case True{}:
-      %Equal.sym(String, i, k, SE.string_eq_sound(i, k, Equal.sym(Bool, True{}, String.eq(i, k), eb))) : {C.lookup(j, o) == C.pick_raw(String.eq(_, j), v, C.lookup(j, o)) : C.Raw}
+      %Equal.sym(String, i, k, MS.eq_of_eq_true(i, k, Equal.sym(Bool, True{}, String.eq(i, k), eb))) : {C.lookup(j, o) == C.pick_raw(String.eq(_, j), v, C.lookup(j, o)) : C.Raw}
       %h : {C.lookup(j, o) == C.pick_raw(_, v, C.lookup(j, o)) : C.Raw}
       {==}
     case False{}:

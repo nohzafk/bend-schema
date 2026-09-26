@@ -7,7 +7,7 @@
       "devDependencies": {
         "@types/bun": "^1.2.0",
         "bend-emit": "github:nohzafk/bend-emit",
-        "bend-falsify": "github:nohzafk/bend-falsify#e60b8dd",
+        "bend-falsify": "github:nohzafk/bend-falsify#fa5e717",
         "typescript": "^7.0.2",
       },
     },
@@ -59,7 +59,7 @@
 
     "bend-emit": ["bend-emit@github:nohzafk/bend-emit#87629a1", { "bin": { "bend-emit": "./src/emit.ts" } }, "nohzafk-bend-emit-87629a1", "sha512-gDjErWiLFzCOZ4RmLT6xInLu4IwA3nxJUvgzbhSZ8geWaidZApLsyyWfqS3vkGT05UsrqFHd9gJBCi+WVjGRQg=="],
 
-    "bend-falsify": ["bend-falsify@github:nohzafk/bend-falsify#e60b8dd", { "bin": { "bend-falsify": "./src/falsify.ts" } }, "nohzafk-bend-falsify-e60b8dd", "sha512-VLhOtheGAccB1/cAXkQ2GqMIB7n87vWm7DEPNiD+ywO54Hj9s9q+orni65eSnzJwdkzbmIkwwoP5X/4RMrtXfg=="],
+    "bend-falsify": ["bend-falsify@github:nohzafk/bend-falsify#fa5e717", { "bin": { "bend-falsify": "./src/falsify.ts" } }, "nohzafk-bend-falsify-fa5e717", "sha512-muKg0IwaUTGaTb6Cc937ifFu9qM/sVBtZUBirFfrkpMzZngAUvdvJiyQVl3vEe91foqMC2Oh7cEjc0EDG2ZT4w=="],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 

@@ -89,7 +89,7 @@ echo "== 3. the tests =="
 # the five fixture cores it is tested on, and its test.sh gates the builder.
 # What is left under tools/test/ is case_arms.ts's test, whose core is
 # written in the test file itself -- nothing to build first.
-if ! bun test > /tmp/bend-schema-tests.log 2>&1; then
+if ! bun test src > /tmp/bend-schema-tests.log 2>&1; then
   tail -20 /tmp/bend-schema-tests.log
   echo "FAIL: a test failed"
   exit 1
@@ -113,6 +113,10 @@ bun src/gen-cli.ts src/gen.schemas.ts "$GEN/schemas.bend"
 tools/bend-check "$GEN/schemas.bend"
 
 echo "== 5. the facts this core rests on =="
-sh core/base-facts/test.sh
+# They are bend-mathlib's, from the vendor/bendlib submodule (nohzafk/bendlib,
+# branch ours); PROOF.bend checking in step 1 checks the imported lemmas too.
+# bendlib's own gate holds their negative controls.
+test -f vendor/bendlib/packages/bend-mathlib/nat.bend || { echo "FAIL: run git submodule update --init"; exit 1; }
+echo "  vendor/bendlib at $(git -C vendor/bendlib rev-parse --short HEAD)"
 
 echo "PASS: bend-schema's gate"
