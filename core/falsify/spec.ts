@@ -34,6 +34,20 @@ const choiceVals: R[] = [TRUE, FALSE, 'C.RStr{"allow"}', 'C.RStr{"deny"}', 'C.RS
   obj([["only", N(3)], ["any", TRUE]]), obj([["x", N(1)]]), obj([["x", N(1)], ["only", N(2)]]), obj([["any", NUL]])];
 for (const r of choiceVals) for (const s of ["C.STrue{}", enumS, target, "C.SVEnd{}", 'C.SVariant{"any", C.STrue{}, C.SVEnd{}}']) pairs.push([s, r]);
 for (const role of choiceVals.slice(8)) for (const eff of ['C.RStr{"allow"}', 'C.RStr{"nope"}', TRUE]) pairs.push([rule, obj([["role", role], ["effect", eff]])]);
+// A key the schema reads, taken twice. A second field key or a second variant
+// key is refused (RepeatedKey at that key's own name, with no step after it),
+// and check and conforms must still agree on it. The tag key of a tagged case
+// is the one exception, so a schema that names its own tag key is not here.
+// Both rules read the same pairs, so these run under exact and accurate.
+const twice: [string, R][] = [
+  ['C.SField{"a", C.SNat{}, C.SEnd{}}', obj([["a", N(1)], ["a", N(2)]])],
+  [S.rec, obj([["a", N(1)], ["a", N(2)], ["b", NUL]])],
+  [S.rec, obj([["a", N(1)], ["b", NUL], ["b", NUL]])],
+  [target, obj([["any", TRUE], ["any", FALSE]])],
+  [target, obj([["only", N(3)], ["only", N(4)]])],
+  [target, obj([["any", TRUE], ["only", N(3)], ["any", FALSE]])],
+];
+for (const [s, r] of twice) { pairs.push([s, r]); pairs.push([`C.SList{${s}}`, list([r])]); }
 pairs.push([`C.SList{${rule}}`, list([obj([["role", obj([["any", TRUE]])], ["effect", 'C.RStr{"deny"}']]), obj([["role", obj([["any", TRUE], ["only", N(1)]])], ["effect", 'C.RStr{"deny"}']])])]);
 // SRule: the value must conform to the rule's schema, then the rule decides.
 // r_any: tag 0 wants positive numbers, tag 1 wants the value to be the tag.
