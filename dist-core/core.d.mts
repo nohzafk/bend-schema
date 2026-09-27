@@ -77,6 +77,7 @@ export declare function dup_defect(s: Schema, r: Raw, p: BendList<Step>): BendMa
 export declare function at_end(w: Why, p: BendList<Step>): BendMaybe<Why>;
 export declare function extra_defect(ns: BendList<string>, r: Raw, p: BendList<Step>): BendMaybe<Why>;
 export declare function tag_defect(k: string, r: Raw, p: BendList<Step>): BendMaybe<Why>;
+export declare function tag_key_defect(b: boolean, k: string, p: BendList<Step>): BendMaybe<Why>;
 export declare function check0(s: Schema, r: Raw): BendMaybe<Err>;
 export declare function conforms0(s: Schema, r: Raw): boolean;
 export declare function is_chain(s: Schema): boolean;
@@ -90,6 +91,7 @@ export declare function true_unit(b: boolean): BendMaybe<BendUnit>;
 export declare function nullish(r: Raw): boolean;
 export declare function opt_at(s: Schema): boolean;
 export declare function nullable(s: Schema): boolean;
+export declare function no_key(k: string, s: Schema): boolean;
 export declare function fresh_f(n: string, s: Schema): boolean;
 export declare function fresh_v(n: string, s: Schema): boolean;
 export declare function is_keyed(s: Schema): boolean;
@@ -162,6 +164,7 @@ declare const core: {
   "at_end"(w: Why, p: BendList<Step>): BendMaybe<Why>;
   "extra_defect"(ns: BendList<string>, r: Raw, p: BendList<Step>): BendMaybe<Why>;
   "tag_defect"(k: string, r: Raw, p: BendList<Step>): BendMaybe<Why>;
+  "tag_key_defect"(b: boolean, k: string, p: BendList<Step>): BendMaybe<Why>;
   "check0"(s: Schema, r: Raw): BendMaybe<Err>;
   "conforms0"(s: Schema, r: Raw): boolean;
   "is_chain"(s: Schema): boolean;
@@ -175,6 +178,7 @@ declare const core: {
   "nullish"(r: Raw): boolean;
   "opt_at"(s: Schema): boolean;
   "nullable"(s: Schema): boolean;
+  "no_key"(k: string, s: Schema): boolean;
   "fresh_f"(n: string, s: Schema): boolean;
   "fresh_v"(n: string, s: Schema): boolean;
   "is_keyed"(s: Schema): boolean;

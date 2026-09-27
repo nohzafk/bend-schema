@@ -215,6 +215,22 @@ def tag_exact(b: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +c1: Bool, 
     case False{}:
       e2
 
+# The tag key's own repeated test stands in front of the case's check, exactly
+# as a field key's does in front of a field's: the key's error first, then the
+# case. So where the tag is the case's name the pick's answer is the key's test
+# conjoined to the case's, and the pick's two answers are tag_exact's. kc is
+# whether the tag key is read once, ek that test as a report -- what check asks
+# key_err for.
+def tag_exact_k(kc: Bool, b: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +c1: Bool, +c2: Bool, +name: String, ek: {kc == Maybe.is_none(&2, C.Err, C.key_err(kc, name)) : Bool}, et: {Maybe.is_none(&2, C.Err, C.pick_err(b, m1, m2)) == C.pick_bool(b, c1, c2) : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(b, C.first(C.key_err(kc, name), m1), m2)) == C.pick_bool(b, Bool.and(kc, c1), c2) : Bool}:
+  match b:
+    case True{}:
+      %none_first(C.key_err(kc, name), m1) : {_ == Bool.and(kc, c1) : Bool}
+      %ek : {Bool.and(_, Bool.not(Maybe.is_some(&2, C.Err, m1))) == Bool.and(kc, c1) : Bool}
+      %et : {Bool.and(kc, Bool.not(Maybe.is_some(&2, C.Err, m1))) == Bool.and(kc, _) : Bool}
+      {==}
+    case False{}:
+      et
+
 def tag_acc(b: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +d1: Maybe<&2, C.Why>, +d2: Maybe<&2, C.Why>, +path: List<&2, C.Step>, +why: C.Why, h: {C.pick_err(b, m1, m2) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, i1: {m1 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d1 == Some{why} : Maybe<&2, C.Why>}, i2: {m2 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d2 == Some{why} : Maybe<&2, C.Why>}) -> {C.pick_why(b, d1, d2) == Some{why} : Maybe<&2, C.Why>}:
   match b:
     case True{}:
@@ -472,7 +488,7 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
       %extra_exact(C.key_names(s2), x) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, s2, x, prev)), Maybe.is_none(&2, C.Err, C.extra_err(C.key_names(s2), x))) == Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, s2, x, prev)), _) : Bool}
       {==}
     case C.STagged{+k, +n, +cs, +rest} +x:
-      tag_exact(C.is_tag(k, n, x), C.check(~rule, cs, C.drop_key(k, x), None{}), C.check(~rule, rest, x, None{}), C.conforms(~rule, cs, C.drop_key(k, x), None{}), C.conforms(~rule, rest, x, None{}), exact(~rule, cs, C.drop_key(k, x), None{}), exact(~rule, rest, x, None{}))
+      tag_exact_k(C.key_once(k, x), C.is_tag(k, n, x), C.check(~rule, cs, C.drop_key(k, x), None{}), C.check(~rule, rest, x, None{}), C.conforms(~rule, cs, C.drop_key(k, x), None{}), C.conforms(~rule, rest, x, None{}), k, none_key_err(C.key_once(k, x), k), tag_exact(C.is_tag(k, n, x), C.check(~rule, cs, C.drop_key(k, x), None{}), C.check(~rule, rest, x, None{}), C.conforms(~rule, cs, C.drop_key(k, x), None{}), C.conforms(~rule, rest, x, None{}), exact(~rule, cs, C.drop_key(k, x), None{}), exact(~rule, rest, x, None{})))
     case C.STagEnd{key_} C.RNum{n}:
       {==}
     case C.STagEnd{key_} C.RBool{bb}:
@@ -745,6 +761,43 @@ def same_path(-p1: List<&2, C.Step>, -w1: C.Why, -p2: List<&2, C.Step>, -w2: C.W
 def same_why(-p1: List<&2, C.Step>, -w1: C.Why, -p2: List<&2, C.Step>, -w2: C.Why, h: {Some{C.Err{p1, w1}} == Some{C.Err{p2, w2}} : Maybe<&2, C.Err>}) -> {w1 == w2 : C.Why}:
   Equal.cong(Maybe<&2, C.Err>, C.Why, m => why_or(m), Some{C.Err{p1, w1}}, Some{C.Err{p2, w2}}, h)
 
+
+# The reason of an error, kept inside its Maybe: same_why's fact lifted to the
+# report a defect is written as, where what is compared is Some{why} and not
+# why. A rewrite at a Some's inside is not one the checker makes, so this one
+# is a term to hand to the goal rather than a rewrite.
+def maybe_why(m: Maybe<&2, C.Err>) -> Maybe<&2, C.Why>:
+  match m:
+    case None{}:
+      None{}
+    case Some{C.Err{p, w}}:
+      Some{w}
+
+def same_why_m(-p1: List<&2, C.Step>, -w1: C.Why, -p2: List<&2, C.Step>, -w2: C.Why, h: {Some{C.Err{p1, w1}} == Some{C.Err{p2, w2}} : Maybe<&2, C.Err>}) -> {Some{w1} == Some{w2} : Maybe<&2, C.Why>}:
+  Equal.cong(Maybe<&2, C.Err>, Maybe<&2, C.Why>, m => maybe_why(m), Some{C.Err{p1, w1}}, Some{C.Err{p2, w2}}, h)
+
+# The repeated tag key, in front of the case's own check: the key's error is
+# the report whenever the key is not read once, and otherwise the case's own
+# walk answers it. kc is whether the key is read once, so the key's report is
+# there exactly when it is not.
+def tag_acc_in(kc: Bool, +m1: Maybe<&2, C.Err>, +d1: Maybe<&2, C.Why>, +k: String, +path: List<&2, C.Step>, +why: C.Why, +h: {C.first(C.key_err(kc, k), m1) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, i1: {m1 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d1 == Some{why} : Maybe<&2, C.Why>}) -> {C.first_why(C.tag_key_defect(Bool.not(kc), k, path), d1) == Some{why} : Maybe<&2, C.Why>}:
+  match kc:
+    case True{}:
+      i1(h)
+    case False{}:
+      %same_path(C.AtField{0n, k} <> Nil{}, C.RepeatedKey{k}, path, why, h) : {C.first_why(C.tag_key_defect(True{}, k, _), d1) == Some{why} : Maybe<&2, C.Why>}
+      %MS.eq_refl_sym(k) : {C.first_why(C.pick_why(_, Some{C.RepeatedKey{k}}, None{}), d1) == Some{why} : Maybe<&2, C.Why>}
+      same_why_m(C.AtField{0n, k} <> Nil{}, C.RepeatedKey{k}, path, why, h)
+
+# The pick behind check's tag key test, as defect replays it: with the key read
+# once the pick is tag_acc's, and with it read twice defect answers the key's
+# own report before it looks at the case.
+def tag_acc_k(kc: Bool, b: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +d1: Maybe<&2, C.Why>, +d2: Maybe<&2, C.Why>, +k: String, +path: List<&2, C.Step>, +why: C.Why, +h: {C.pick_err(b, C.first(C.key_err(kc, k), m1), m2) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, i1: {m1 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d1 == Some{why} : Maybe<&2, C.Why>}, i2: {m2 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d2 == Some{why} : Maybe<&2, C.Why>}) -> {C.pick_why(b, C.first_why(C.tag_key_defect(Bool.not(kc), k, path), d1), d2) == Some{why} : Maybe<&2, C.Why>}:
+  match b:
+    case True{}:
+      tag_acc_in(kc, m1, d1, k, path, why, h, i1)
+    case False{}:
+      i2(h)
 def guard_true(b: Bool, m: Maybe<&2, C.Why>, hb: {b == True{} : Bool}) -> {C.guard(b, m) == m : Maybe<&2, C.Why>}:
   match b:
     case True{}:
@@ -863,6 +916,19 @@ def strict_acc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err
 # point of stating it at literals.
 def Laws.repeated_key_refused():
   (({==}, {==}), ({==}, {==}))
+
+# ---- repeated_tag_refused ----
+#
+# The same reading one constructor along: the tag names the case (the first
+# "t" holds the case's name), the key is there twice (the second "t" is read
+# with the flag the first one set, so key_once is False), conforms is False
+# there, and check reports the key at its own name before it looks at the
+# case's schema. The case's own schema is SEnd{}, which reads no key and
+# accepts any object, so what is decided here is the tag key's own test and
+# nothing else -- the same reading as repeated_key_refused, one constructor
+# along.
+def Laws.repeated_tag_refused():
+  ({==}, {==})
 
 # ---- unnamed_key_ignored ----
 #
@@ -1665,7 +1731,7 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
     case C.SStrict{+s2} +x:
       strict_acc_step(~rule, C.check(~rule, s2, x, prev), C.key_names(s2), s2, x, prev, path, why, h, exact(~rule, s2, x, prev), p => w => hh => acc(~rule, s2, x, prev, p, w, hh))
     case C.STagged{+k, +n, +cs, +rest} +x:
-      tag_acc(C.is_tag(k, n, x), C.check(~rule, cs, C.drop_key(k, x), None{}), C.check(~rule, rest, x, None{}), C.defect(~rule, cs, C.drop_key(k, x), None{}, path), C.defect(~rule, rest, x, None{}, path), path, why, h, hh => acc(~rule, cs, C.drop_key(k, x), None{}, path, why, hh), hh => acc(~rule, rest, x, None{}, path, why, hh))
+      tag_acc_k(C.key_once(k, x), C.is_tag(k, n, x), C.check(~rule, cs, C.drop_key(k, x), None{}), C.check(~rule, rest, x, None{}), C.defect(~rule, cs, C.drop_key(k, x), None{}, path), C.defect(~rule, rest, x, None{}, path), k, path, why, h, hh => acc(~rule, cs, C.drop_key(k, x), None{}, path, why, hh), hh => acc(~rule, rest, x, None{}, path, why, hh))
     case C.STagEnd{+k} C.RNum{n}:
       %same_path(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.STagEnd{k}, C.RNum{n}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
@@ -2531,7 +2597,7 @@ def not_missing(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.opt_at(s) : Boo
       {==}
     case C.SEnum{names} v:
       {==}
-    case C.SVariant{n, vs, rest} Inl{a}:
+    case C.SVariant{+n, vs, +rest} Inl{a}:
       {==}
     case C.SVariant{n, vs, rest} Inr{b}:
       not_missing(rest, b, hn)
@@ -2823,11 +2889,11 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
     case C.STagged{+k, +n, +cs, +rest} Inl{+a}:
       %tag_self(k, n, C.enc(cs, a)) : {Some{Inl{a}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, _, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, C.drop_key(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}))), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, C.RKey{k, C.RStr{n}, C.enc(cs, a)}))) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
       %drop_self(k, C.RStr{n}, C.enc(cs, a)) : {Some{Inl{a}} == C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, _)) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
-      %de(cs, a, and_l(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw))) : {Some{Inl{a}} == C.map_inl(C.Meaning(cs), C.Meaning(rest), _) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
+      %de(cs, a, and_l(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))) : {Some{Inl{a}} == C.map_inl(C.Meaning(cs), C.Meaning(rest), _) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
       {==}
     case C.STagged{+k, +n, +cs, +rest} Inr{+b}:
-      %tag_other(k, n, rest, b, and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw)))) : {Some{Inr{b}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, _, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, C.drop_key(k, C.enc(rest, b)))), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, C.enc(rest, b)))) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
-      %de(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw)))) : {Some{Inr{b}} == C.map_inr(C.Meaning(cs), C.Meaning(rest), _) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
+      %tag_other(k, n, rest, b, and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))) : {Some{Inr{b}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, _, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, C.drop_key(k, C.enc(rest, b)))), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, C.enc(rest, b)))) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
+      %de(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))) : {Some{Inr{b}} == C.map_inr(C.Meaning(cs), C.Meaning(rest), _) : Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>}
       {==}
     case C.STagEnd{k_} e:
       Empty.absurd({Some{e} == C.dec(C.STagEnd{k_}, C.enc(C.STagEnd{k_}, e)) : Maybe<&2, Empty>}, e)
@@ -2911,10 +2977,10 @@ def cd_var(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vs: C.Schema, +res
     case False{}:
       some_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.lookup(n, x)), ihv(and_key_l(C.key_once(n, x), C.conforms(~rule, vs, C.lookup(n, x), None{}), C.none_present(rest, x), hc)))
 
-def cd_tag(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +cs: C.Schema, +rest: C.Schema, +xd: C.Raw, +x: C.Raw, ihc: {C.conforms(~rule, cs, xd, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(cs), C.dec(cs, xd)) == True{} : Bool}, ihr: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(rest), C.dec(rest, x)) == True{} : Bool}, hc: {C.pick_bool(b, C.conforms(~rule, cs, xd, None{}), C.conforms(~rule, rest, x, None{})) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>, C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, b, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, xd)), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, x)))) == True{} : Bool}:
+def cd_tag(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, kc: Bool, b: Bool, +cs: C.Schema, +rest: C.Schema, +xd: C.Raw, +x: C.Raw, ihc: {C.conforms(~rule, cs, xd, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(cs), C.dec(cs, xd)) == True{} : Bool}, ihr: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(rest), C.dec(rest, x)) == True{} : Bool}, hc: {C.pick_bool(b, Bool.and(kc, C.conforms(~rule, cs, xd, None{})), C.conforms(~rule, rest, x, None{})) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>, C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, b, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, xd)), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, x)))) == True{} : Bool}:
   match b:
     case True{}:
-      some_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, xd), ihc(hc))
+      some_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, xd), ihc(and_r(kc, C.conforms(~rule, cs, xd, None{}), hc)))
     case False{}:
       some_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, x), ihr(hc))
 
@@ -3090,7 +3156,7 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
     case C.SStrict{+s2} +x:
       cd(~rule, s2, x, and_l(C.conforms(~rule, s2, x, None{}), C.no_extra(C.key_names(s2), x), hc))
     case C.STagged{+k, +n, +cs, +rest} +x:
-      cd_tag(~rule, C.is_tag(k, n, x), cs, rest, C.drop_key(k, x), x, hh => cd(~rule, cs, C.drop_key(k, x), hh), hh => cd(~rule, rest, x, hh), hc)
+      cd_tag(~rule, C.key_once(k, x), C.is_tag(k, n, x), cs, rest, C.drop_key(k, x), x, hh => cd(~rule, cs, C.drop_key(k, x), hh), hh => cd(~rule, rest, x, hh), hc)
     case C.STagEnd{key_} C.RNum{n}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.STagEnd{key_}), C.dec(C.STagEnd{key_}, C.RNum{n})) == True{} : Bool}, to_empty(hc))
     case C.STagEnd{key_} C.RBool{+bb}:
@@ -3295,6 +3361,80 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
 def Laws.checked_decodes(rule, s, r, hc):
   cd(~rule, s, r, hc)
 
+
+# ---- tools: what wf's tag rule buys, the key is nowhere in what enc wrote ----
+#
+# no_key(k, s) says the object enc builds for s holds no key k. That is what
+# key_once_at needs of the value a tag key was already written into: the walk
+# reads every key of the object, so a key that is not there is never the
+# second one -- whatever flag the walk arrived with. The flag is a parameter
+# because the walk's own step at a key j turns it into Bool.or(b, eq(j, k)),
+# and with eq(j, k) false (which is what no_key's own arms say of j) that is
+# the flag it already had.
+
+def key_step(b: Bool, +j: String, +k: String, +s2: C.Schema, x2: C.Meaning(s2), +hf: {False{} == String.eq(j, k) : Bool}, ih1: {C.key_once_at(C.enc(s2, x2), True{}, k) == True{} : Bool}, ih0: {C.key_once_at(C.enc(s2, x2), False{}, k) == True{} : Bool}) -> {Bool.and(Bool.not(Bool.and(b, String.eq(j, k))), C.key_once_at(C.enc(s2, x2), Bool.or(b, String.eq(j, k)), k)) == True{} : Bool}:
+  match b:
+    case True{}:
+      %hf : {Bool.and(Bool.not(_), C.key_once_at(C.enc(s2, x2), True{}, k)) == True{} : Bool}
+      ih1
+    case False{}:
+      %hf : {C.key_once_at(C.enc(s2, x2), _, k) == True{} : Bool}
+      ih0
+
+def no_key_once(+k: String, s: C.Schema, x: C.Meaning(s), b: Bool, +h: {C.no_key(k, s) == True{} : Bool}) -> {C.key_once_at(C.enc(s, x), b, k) == True{} : Bool}:
+  match s x:
+    case C.SNat{} n:
+      {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SStr{} n:
+      {==}
+    case C.SBool{} bb:
+      {==}
+    case C.STrue{} Unit{}:
+      {==}
+    case C.SEnum{ns} e:
+      {==}
+    case C.SEnd{} Unit{}:
+      {==}
+    case C.STEnd{} Unit{}:
+      {==}
+    case C.SVEnd{} e:
+      Empty.absurd({C.key_once_at(C.enc(C.SVEnd{}, e), b, k) == True{} : Bool}, e)
+    case C.STagEnd{k2} e:
+      Empty.absurd({C.key_once_at(C.enc(C.STagEnd{k2}, e), b, k) == True{} : Bool}, e)
+    case C.SList{e} Nil{}:
+      {==}
+    case C.SList{e} +hh <> +tt:
+      {==}
+    case C.STuple{ts, rs} C.Both{aa, bb}:
+      {==}
+    case C.SStrLen{lo_, hi_, s2} v:
+      no_key_once(k, s2, v, b, h)
+    case C.SListLen{lo_, hi_, s2} v:
+      no_key_once(k, s2, v, b, h)
+    case C.SRule{s2, tag} v:
+      no_key_once(k, s2, v, b, h)
+    case C.SStrict{s2} v:
+      no_key_once(k, s2, v, b, h)
+    case C.SOpt{i} None{}:
+      {==}
+    case C.SOpt{i} Some{v}:
+      no_key_once(k, i, v, b, h)
+    case C.SOptional{i} None{}:
+      {==}
+    case C.SOptional{i} Some{v}:
+      no_key_once(k, i, v, b, h)
+    case C.SField{+n, fs, +rest} C.Both{a, +b2}:
+      key_step(b, n, k, rest, b2, not_true(String.eq(n, k), and_l(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), C.no_key(k, rest)), h)), no_key_once(k, rest, b2, True{}, and_r(Bool.not(String.eq(k, n)), C.no_key(k, rest), and_r(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), C.no_key(k, rest)), h))), no_key_once(k, rest, b2, False{}, and_r(Bool.not(String.eq(k, n)), C.no_key(k, rest), and_r(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), C.no_key(k, rest)), h))))
+    case C.SVariant{n, vs, rest} Inl{a}:
+      key_step(b, n, k, C.SEnd{}, Unit{}, not_true(String.eq(n, k), and_l(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), C.no_key(k, rest)), h)), {==}, {==})
+    case C.SVariant{+n, vs, +rest} Inr{b2}:
+      no_key_once(k, rest, b2, b, and_r(Bool.not(String.eq(k, n)), C.no_key(k, rest), and_r(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), C.no_key(k, rest)), h)))
+    case C.STagged{+k2, n2, +cs2, +rest2} Inl{+a}:
+      key_step(b, k2, k, cs2, a, not_true(String.eq(k2, k), and_l(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)), no_key_once(k, cs2, a, True{}, and_l(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)))), no_key_once(k, cs2, a, False{}, and_l(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)))))
+    case C.STagged{+k2, n2, +cs2, +rest2} Inr{b2}:
+      no_key_once(k, rest2, b2, b, and_r(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h))))
 
 # ---- what is written is accepted ----
 
@@ -4136,12 +4276,12 @@ def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.na
     case C.SStrict{+s2} +v:
       and_true2(C.conforms(~C.no_rule, s2, C.enc(s2, v), None{}), C.no_extra(C.key_names(s2), C.enc(s2, v)), ec(s2, v, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), and_r(C.is_keyed(s2), Bool.and(Bool.not(C.opt_at(s2)), C.wf(s2)), hw)), hn, hb), keyed_enc(s2, v, and_l(C.is_keyed(s2), Bool.and(Bool.not(C.opt_at(s2)), C.wf(s2)), hw)))
     case C.STagged{+k, +n, +cs, +rest} Inl{+a}:
-      %tag_self(k, n, C.enc(cs, a)) : {C.pick_bool(_, C.conforms(~C.no_rule, cs, C.drop_key(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), None{}), C.conforms(~C.no_rule, rest, C.RKey{k, C.RStr{n}, C.enc(cs, a)}, None{})) == True{} : Bool}
-      %drop_self(k, C.RStr{n}, C.enc(cs, a)) : {C.conforms(~C.no_rule, cs, _, None{}) == True{} : Bool}
-      ec(cs, a, and_l(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw)), hn, hb)
+      %tag_self(k, n, C.enc(cs, a)) : {C.pick_bool(_, Bool.and(C.key_once(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), C.conforms(~C.no_rule, cs, C.drop_key(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), None{})), C.conforms(~C.no_rule, rest, C.RKey{k, C.RStr{n}, C.enc(cs, a)}, None{})) == True{} : Bool}
+      %drop_self(k, C.RStr{n}, C.enc(cs, a)) : {Bool.and(C.key_once(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), C.conforms(~C.no_rule, cs, _, None{})) == True{} : Bool}
+      and_true2(C.key_once(k, C.RKey{k, C.RStr{n}, C.enc(cs, a)}), C.conforms(~C.no_rule, cs, C.enc(cs, a), None{}), no_key_once(k, cs, a, String.eq(k, k), and_l(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw)))), ec(cs, a, and_l(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw)), hn, hb))
     case C.STagged{+k, +n, +cs, +rest} Inr{+b}:
-      %tag_other(k, n, rest, b, and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw)))) : {C.pick_bool(_, C.conforms(~C.no_rule, cs, C.drop_key(k, C.enc(rest, b)), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{})) == True{} : Bool}
-      ec(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), hw))), hn, hb)
+      %tag_other(k, n, rest, b, and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))) : {C.pick_bool(_, Bool.and(C.key_once(k, C.enc(rest, b)), C.conforms(~C.no_rule, cs, C.drop_key(k, C.enc(rest, b)), None{})), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{})) == True{} : Bool}
+      ec(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw)))), hn, hb)
     case C.STagEnd{k_} e:
       Empty.absurd({C.conforms(~C.no_rule, C.STagEnd{k_}, C.enc(C.STagEnd{k_}, e), None{}) == True{} : Bool}, e)
     case C.STrue{} Unit{}:

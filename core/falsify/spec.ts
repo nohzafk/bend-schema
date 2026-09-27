@@ -34,10 +34,12 @@ const choiceVals: R[] = [TRUE, FALSE, 'C.RStr{"allow"}', 'C.RStr{"deny"}', 'C.RS
   obj([["only", N(3)], ["any", TRUE]]), obj([["x", N(1)]]), obj([["x", N(1)], ["only", N(2)]]), obj([["any", NUL]])];
 for (const r of choiceVals) for (const s of ["C.STrue{}", enumS, target, "C.SVEnd{}", 'C.SVariant{"any", C.STrue{}, C.SVEnd{}}']) pairs.push([s, r]);
 for (const role of choiceVals.slice(8)) for (const eff of ['C.RStr{"allow"}', 'C.RStr{"nope"}', TRUE]) pairs.push([rule, obj([["role", role], ["effect", eff]])]);
-// A key the schema reads, taken twice. A second field key or a second variant
-// key is refused (RepeatedKey at that key's own name, with no step after it),
-// and check and conforms must still agree on it. The tag key of a tagged case
-// is the one exception, so a schema that names its own tag key is not here.
+// A key the schema reads, taken twice. A second field key, a second variant
+// key and a second tag key are each refused (RepeatedKey at that key's own
+// name, with no step after it), and check and conforms must still agree on it.
+// The tag key's test sits at the case the tag names, so the case here is one
+// whose own schema does not read the key: an SField ignores it, and the object
+// the case is checked against has the first one taken out.
 // Both rules read the same pairs, so these run under exact and accurate.
 const twice: [string, R][] = [
   ['C.SField{"a", C.SNat{}, C.SEnd{}}', obj([["a", N(1)], ["a", N(2)]])],
@@ -46,6 +48,7 @@ const twice: [string, R][] = [
   [target, obj([["any", TRUE], ["any", FALSE]])],
   [target, obj([["only", N(3)], ["only", N(4)]])],
   [target, obj([["any", TRUE], ["only", N(3)], ["any", FALSE]])],
+  ['C.STagged{"type", "b", C.SField{"y", C.SStr{}, C.SEnd{}}, C.STagEnd{"type"}}', obj([["type", 'C.RStr{"b"}'], ["type", 'C.RStr{"b"}'], ["y", 'C.RStr{"s"}']])],
 ];
 for (const [s, r] of twice) { pairs.push([s, r]); pairs.push([`C.SList{${s}}`, list([r])]); }
 pairs.push([`C.SList{${rule}}`, list([obj([["role", obj([["any", TRUE]])], ["effect", 'C.RStr{"deny"}']]), obj([["role", obj([["any", TRUE], ["only", N(1)]])], ["effect", 'C.RStr{"deny"}']])])]);
@@ -111,7 +114,8 @@ const tagged = 'C.STagged{"type", "a", C.SStrict{C.SField{"x", C.SNat{}, C.SEnd{
 const T = (t: string) => `C.RStr{"${t}"}`;
 const tagVals: R[] = [obj([["type", T("a")], ["x", N(1)]]), obj([["x", N(1)], ["type", T("a")]]), obj([["type", T("a")], ["x", N(1)], ["z", N(0)]]),
   obj([["type", T("a")]]), obj([["type", T("b")], ["y", T("s")]]), obj([["type", T("b")], ["y", N(1)]]), obj([["type", T("c")]]), obj([["type", N(1)]]),
-  obj([["x", N(1)]]), obj([]), N(1), NUL, obj([["type", T("a")], ["type", T("b")], ["x", N(1)]])];
+  obj([["x", N(1)]]), obj([]), N(1), NUL, obj([["type", T("a")], ["type", T("b")], ["x", N(1)]]),
+  obj([["type", T("b")], ["type", T("b")], ["y", T("s")]])];
 tagVals.forEach((r, i) => {
   pairs.push([tagged, r]);
   pairs.push([`C.SList{${tagged}}`, list([r, r])]);

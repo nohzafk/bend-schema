@@ -935,6 +935,34 @@ function $tag_defect$(_k_0, _r_0, _p_0) {
   }
 }
 
+function $tag_key_defect$(_b_0, _k_0, _p_0) {
+  if (!_b_0) {
+    return {$: "None"};
+  } else {
+    if (_p_0.$ === "Con") {
+      const _t_0 = _p_0["head"];
+      if (_t_0.$ === "AtField") {
+        const _t_1 = _t_0["skip"];
+        if (_t_1 === 0) {
+          const _j_0 = _t_0["name"];
+          const _t_2 = _p_0["tail"];
+          if (_t_2.$ === "Nil") {
+            return $pick_why$(($String$eq$(_j_0, _k_0)), {$: "Some", "value": {$: "RepeatedKey", "key": _k_0}}, {$: "None"});
+          } else {
+            return {$: "None"};
+          }
+        } else {
+          return {$: "None"};
+        }
+      } else {
+        return {$: "None"};
+      }
+    } else {
+      return {$: "None"};
+    }
+  }
+}
+
 function $check0$(_s_0, _r_0) {
   return $check$1260$(_s_0, _r_0, {$: "None"});
 }
@@ -1499,6 +1527,61 @@ function $nullable$($0) {
   }
 }
 
+function $no_key$($0, $1) {
+  for (;;) {
+    {
+      const _k_0 = $0;
+      const _s_0 = $1;
+      if (_s_0.$ === "SField") {
+        const _n_0 = _s_0["name"];
+        const _rest_0 = _s_0["rest"];
+        return $Bool$and$(($Bool$not$(($String$eq$(_n_0, _k_0)))), ($Bool$and$(($Bool$not$(($String$eq$(_k_0, _n_0)))), ($no_key$(_k_0, _rest_0)))));
+      } else if (_s_0.$ === "SVariant") {
+        const _n_1 = _s_0["name"];
+        const _rest_1 = _s_0["rest"];
+        return $Bool$and$(($Bool$not$(($String$eq$(_n_1, _k_0)))), ($Bool$and$(($Bool$not$(($String$eq$(_k_0, _n_1)))), ($no_key$(_k_0, _rest_1)))));
+      } else if (_s_0.$ === "SStrict") {
+        const _s2_0 = _s_0["s"];
+        $0 = _k_0;
+        $1 = _s2_0;
+        continue;
+      } else if (_s_0.$ === "SRule") {
+        const _s2_1 = _s_0["s"];
+        $0 = _k_0;
+        $1 = _s2_1;
+        continue;
+      } else if (_s_0.$ === "SStrLen") {
+        const _s2_2 = _s_0["s"];
+        $0 = _k_0;
+        $1 = _s2_2;
+        continue;
+      } else if (_s_0.$ === "SListLen") {
+        const _s2_3 = _s_0["s"];
+        $0 = _k_0;
+        $1 = _s2_3;
+        continue;
+      } else if (_s_0.$ === "SOpt") {
+        const _i_0 = _s_0["inner"];
+        $0 = _k_0;
+        $1 = _i_0;
+        continue;
+      } else if (_s_0.$ === "SOptional") {
+        const _i_1 = _s_0["inner"];
+        $0 = _k_0;
+        $1 = _i_1;
+        continue;
+      } else if (_s_0.$ === "STagged") {
+        const _k2_0 = _s_0["key"];
+        const _cs2_0 = _s_0["s"];
+        const _rest2_0 = _s_0["rest"];
+        return $Bool$and$(($Bool$not$(($String$eq$(_k2_0, _k_0)))), ($Bool$and$(($Bool$not$(($String$eq$(_k_0, _k2_0)))), ($Bool$and$(($no_key$(_k_0, _cs2_0)), ($no_key$(_k_0, _rest2_0)))))));
+      } else {
+        return true;
+      }
+    }
+  }
+}
+
 function $fresh_f$(_n_0, _s_0) {
   if (_s_0.$ === "SField") {
     const _m_0 = _s_0["name"];
@@ -1592,7 +1675,7 @@ function $wf$(_s_0) {
     const _n_1 = _s_0["name"];
     const _cs_0 = _s_0["s"];
     const _rest_1 = _s_0["rest"];
-    return $Bool$and$(($Bool$not$(($opt_at$(_cs_0)))), ($Bool$and$(($wf$(_cs_0)), ($Bool$and$(($fresh_t$(_k_0, _n_1, _rest_1)), ($wf$(_rest_1)))))));
+    return $Bool$and$(($Bool$not$(($opt_at$(_cs_0)))), ($Bool$and$(($wf$(_cs_0)), ($Bool$and$(($no_key$(_k_0, _cs_0)), ($Bool$and$(($fresh_t$(_k_0, _n_1, _rest_1)), ($wf$(_rest_1)))))))));
   } else if (_s_0.$ === "SVariant") {
     const _n_2 = _s_0["name"];
     const _vs_0 = _s_0["s"];
@@ -1946,7 +2029,7 @@ function $check$1260$($0, $1, $2) {
         const _n_2 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        return $pick_err$(($is_tag$(_k_2, _n_2, _r_0)), ($check$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), {$: "None"})), ($check$1260$(_rest_1, _r_0, {$: "None"})));
+        return $pick_err$(($is_tag$(_k_2, _n_2, _r_0)), ($first$(($key_err$(($key_once$(_k_2, _r_0)), _k_2)), ($check$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), {$: "None"})))), ($check$1260$(_rest_1, _r_0, {$: "None"})));
       } else if (_s_0.$ === "STagEnd") {
         const _k_3 = _s_0["key"];
         return $tag_err$(_k_3, _r_0);
@@ -2115,7 +2198,7 @@ function $conforms$1260$($0, $1, $2) {
         const _n_2 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        return $pick_bool$(($is_tag$(_k_2, _n_2, _r_0)), ($conforms$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), {$: "None"})), ($conforms$1260$(_rest_1, _r_0, {$: "None"})));
+        return $pick_bool$(($is_tag$(_k_2, _n_2, _r_0)), ($Bool$and$(($key_once$(_k_2, _r_0)), ($conforms$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), {$: "None"})))), ($conforms$1260$(_rest_1, _r_0, {$: "None"})));
       } else if (_s_0.$ === "STagEnd") {
         return false;
       } else if (_s_0.$ === "SBool") {
@@ -2668,6 +2751,7 @@ const $bend_emit = {
   "at_end": run_lib((a0, a1) => { const r = $0m15(run_loop($at_end$($0m4(a0), $0m13(a1)))); $0m5(a0); $0m8(a1); return r; }, 2),
   "extra_defect": run_lib((a0, a1, a2) => { const r = $0m15(run_loop($extra_defect$((a0), $0m0(a1), $0m13(a2)))); (a0); $0m1(a1); $0m8(a2); return r; }, 3),
   "tag_defect": run_lib((a0, a1, a2) => { const r = $0m15(run_loop($tag_defect$((a0), $0m0(a1), $0m13(a2)))); (a0); $0m1(a1); $0m8(a2); return r; }, 3),
+  "tag_key_defect": run_lib((a0, a1, a2) => { const r = $0m15(run_loop($tag_key_defect$((a0), (a1), $0m13(a2)))); (a0); (a1); $0m8(a2); return r; }, 3),
   "check0": run_lib((a0, a1) => { const r = $0m6(run_loop($check0$($0m2(a0), $0m0(a1)))); $0m3(a0); $0m1(a1); return r; }, 2),
   "conforms0": run_lib((a0, a1) => { const r = (run_loop($conforms0$($0m2(a0), $0m0(a1)))); $0m3(a0); $0m1(a1); return r; }, 2),
   "is_chain": run_lib((a0) => { const r = (run_loop($is_chain$($0m2(a0)))); $0m3(a0); return r; }, 1),
@@ -2690,6 +2774,7 @@ const $bend_emit = {
   "dec": run_lib((a0, a1) => { const r = (run_loop($dec$($0m2(a0), $0m0(a1)))); $0m3(a0); $0m1(a1); return r; }, 2),
   "opt_at": run_lib((a0) => { const r = (run_loop($opt_at$($0m2(a0)))); $0m3(a0); return r; }, 1),
   "nullable": run_lib((a0) => { const r = (run_loop($nullable$($0m2(a0)))); $0m3(a0); return r; }, 1),
+  "no_key": run_lib((a0, a1) => { const r = (run_loop($no_key$((a0), $0m2(a1)))); (a0); $0m3(a1); return r; }, 2),
   "fresh_f": run_lib((a0, a1) => { const r = (run_loop($fresh_f$((a0), $0m2(a1)))); (a0); $0m3(a1); return r; }, 2),
   "fresh_v": run_lib((a0, a1) => { const r = (run_loop($fresh_v$((a0), $0m2(a1)))); (a0); $0m3(a1); return r; }, 2),
   "is_keyed": run_lib((a0) => { const r = (run_loop($is_keyed$($0m2(a0)))); $0m3(a0); return r; }, 1),
@@ -2764,6 +2849,7 @@ export const dup_defect = $bend_emit["dup_defect"];
 export const at_end = $bend_emit["at_end"];
 export const extra_defect = $bend_emit["extra_defect"];
 export const tag_defect = $bend_emit["tag_defect"];
+export const tag_key_defect = $bend_emit["tag_key_defect"];
 export const check0 = $bend_emit["check0"];
 export const conforms0 = $bend_emit["conforms0"];
 export const is_chain = $bend_emit["is_chain"];
@@ -2786,6 +2872,7 @@ export const nullish = $bend_emit["nullish"];
 export const dec = $bend_emit["dec"];
 export const opt_at = $bend_emit["opt_at"];
 export const nullable = $bend_emit["nullable"];
+export const no_key = $bend_emit["no_key"];
 export const fresh_f = $bend_emit["fresh_f"];
 export const fresh_v = $bend_emit["fresh_v"];
 export const is_keyed = $bend_emit["is_keyed"];

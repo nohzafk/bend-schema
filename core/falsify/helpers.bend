@@ -175,7 +175,29 @@ def pick_b(b: Bool, +yes: Bool, +no: Bool) -> Bool:
     case False{}:
       no
 
+# How many times "type" is a key of the object, counted here rather than read
+# off the core's own walk: the tag key is read once, so one that stands twice
+# says something the schema cannot mean.
+def plus_one(b: Bool, n: Nat) -> Nat:
+  match b:
+    case True{}:
+      (1n + n : Nat)
+    case False{}:
+      n
+
+def type_count(r: C.Raw) -> Nat:
+  match r:
+    case C.RKey{j, v, o}:
+      plus_one(String.eq(j, "type"), type_count(o))
+    case x:
+      0n
+
+def once_type(r: C.Raw) -> Bool:
+  Nat.is_le(type_count(r), 1n)
+
 # An object whose tag is not a string (or absent) is refused, like one whose
-# tag names no case; the string "" names no case here either.
+# tag names no case; the string "" names no case here either. At the case the
+# tag names, the tag key must also be there once: it is the key the case was
+# chosen by, and a second one is unreachable.
 def tagged_spec(+r: C.Raw) -> Bool:
-  pick_b(String.eq(str_or_empty(C.lookup("type", r)), "a"), case_a(r), pick_b(String.eq(str_or_empty(C.lookup("type", r)), "b"), case_b(r), False{}))
+  pick_b(String.eq(str_or_empty(C.lookup("type", r)), "a"), Bool.and(once_type(r), case_a(r)), pick_b(String.eq(str_or_empty(C.lookup("type", r)), "b"), Bool.and(once_type(r), case_b(r)), False{}))

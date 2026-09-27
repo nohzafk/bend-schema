@@ -104,28 +104,44 @@ law variant_meaning:
 
 # ---- a key the schema reads, taken twice ----
 #
-# A key the schema READS as a field key (SField) or as a variant key
-# (SVariant) must appear at most once in the value: with the key repeated,
-# lookup reads the first one and the second is unreachable, so the value says
-# something the schema cannot mean, and it is refused. Both halves of that are
-# stated, and stated at explicit constructors and nothing else: the value does
-# not conform, and check reports RepeatedKey at that key's own name with no
-# step after it. Nothing else in the gate can catch a key_once that is wrong:
-# check_exact is a consistency law, which a key_once wrong in the same
+# A key the schema READS must appear at most once in the value: with the key
+# repeated, lookup reads the first one and the second is unreachable, so the
+# value says something the schema cannot mean, and it is refused. Three keys
+# are read that way -- a field key (SField), a variant key (SVariant), and the
+# tag key of a tagged chain (STagged, which is how the chain picks its case).
+# All three are stated, at explicit constructors and nothing else: the value
+# does not conform, and check reports RepeatedKey at that key's own name with
+# no step after it. Nothing else in the gate can catch a key_once that is
+# wrong: check_exact is a consistency law, which a key_once wrong in the same
 # direction on both sides satisfies, and the mutant has key_err stop
 # reporting, which leaves key_once itself untested.
 #
-# Known hole, deliberately left. The TAG key of a tagged case is not checked,
-# here or in conforms, check or defect. A case that names its own tag key
-# encodes to a document holding that key twice -- enc writes the tag, and the
-# case's own field writes it again -- so requiring a tag key to appear once
-# would make encode_conforms false for a schema wf accepts. A tag key
-# repeated in the value is therefore still accepted.
+# The tag key's test sits at the case the tag names, not at the chain, and the
+# two halves of that are the same two as the other keys'. A value whose tag
+# names no case is refused at the chain's end whatever its keys are, so there
+# the key's own test would decide nothing; and a case is the only place it can
+# sit, because the case is checked against the object with the tag key taken
+# out (drop_key), which is the object a case's own schema is about.
+#
+# The other half of the same rule is wf's: a case's own schema may not read
+# the tag key at all (core.bend, no_key). If it did, enc would write that key
+# twice -- the tag, and then the case's own field -- and the host builds the
+# object as a JS object, where the second write overwrites the first, so the
+# value written could not be read back. wf refusing the schema is what keeps
+# encode_conforms true.
 def Refused(s: C.Schema, r: C.Raw, +p: List<&2, C.Step>, +w: C.Why) -> Type:
   {C.conforms(~C.no_rule, s, r, None{}) == False{} : Bool} & {C.check(~C.no_rule, s, r, None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>}
 
 law repeated_key_refused:
   Refused(C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"}) & Refused(C.SVariant{"a", C.SNat{}, C.SVEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"})
+
+# The tag key of a tagged chain, taken twice: the value's tag names the case,
+# and the key it was read from is there twice, so the value is refused at that
+# key's own name. The case's schema is SEnd{}, which reads no key and accepts
+# any object, so what is decided here is the tag key's own test and nothing
+# else -- the same test the two keys above are refused by.
+law repeated_tag_refused:
+  Refused(C.STagged{"t", "a", C.SEnd{}, C.STagEnd{"t"}}, C.RKey{"t", C.RStr{"a"}, C.RKey{"t", C.RStr{"a"}, C.REnd{}}}, C.AtField{0n, "t"} <> Nil{}, C.RepeatedKey{"t"})
 
 # ---- a key the schema does not name ----
 #
@@ -185,8 +201,10 @@ law strict_meaning:
 # ---- a tagged union ----
 #
 # tagged_meaning: at a case, a value whose tag is the case's name conforms
-# exactly when the object without the tag conforms to the case; any other
-# value is the rest's to decide. At the chain's end nothing conforms.
+# exactly when the tag key is read once AND the object without the tag
+# conforms to the case; any other value is the rest's to decide -- and there
+# the value goes to the rest whatever its keys, so a repeated tag key is the
+# case's business and not the chain's. At the chain's end nothing conforms.
 # drop_meaning pins drop_key, which conforms, check and dec share: what it
 # leaves under k is what was under k after the first one (so a single tag
 # key is gone), and every other key reads as before.
@@ -198,7 +216,7 @@ law tagged_meaning:
   for +cs: C.Schema
   for +rest: C.Schema
   for +r: C.Raw
-  {C.conforms(~rule, C.STagged{k, n, cs, rest}, r, None{}) == C.pick_bool(C.is_tag(k, n, r), C.conforms(~rule, cs, C.drop_key(k, r), None{}), C.conforms(~rule, rest, r, None{})) : Bool}
+  {C.conforms(~rule, C.STagged{k, n, cs, rest}, r, None{}) == C.pick_bool(C.is_tag(k, n, r), Bool.and(C.key_once(k, r), C.conforms(~rule, cs, C.drop_key(k, r), None{})), C.conforms(~rule, rest, r, None{})) : Bool}
 
 law tag_end_refuses:
   for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>

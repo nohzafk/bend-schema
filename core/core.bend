@@ -309,13 +309,22 @@ def list_len_ok(+lo: Nat, +hi: Nat, +r: Raw) -> Bool:
 # schema cannot mean. A key the schema does not name is never read, so
 # repeating it is unobservable and is left alone.
 #
-# The tag key of a tagged case is NOT checked -- not in conforms, not in check,
-# not in defect. A case that names its own tag key encodes to a document with
-# the tag key twice (enc writes the tag, and the case's own field writes it
-# again), so requiring a tag key to appear once would refuse schemas that are
-# well formed; excluding them would need wf to reject them, which it does not.
-# A tag key repeated in the value is still accepted. This is a known hole, not
-# an oversight.
+# The tag key of a tagged case is read the same way -- it is how the chain
+# picks its case -- so it is checked the same way, and at the case the tag
+# names: conforms, check and defect all ask key_once at the value's own tag
+# key, and a case whose tag matched is refused when the key is there twice.
+# The check sits at the case and not at the chain because a value whose tag
+# names no case is refused at the chain's end whatever its keys are, and
+# because the case is the only place the question has an answer: the case is
+# checked against the object with the tag key taken out, which is the object
+# its own schema is about.
+#
+# So the other half is wf's: a case's own schema may not read the tag key at
+# all (no_key, above wf). If it did, enc would write that key twice -- the tag
+# first, then the case's own field -- and the host builds the object as a JS
+# object, where the second write overwrites the first, so the value written
+# could not be read back. Refusing the schema is what keeps encode_conforms
+# true.
 
 # k is a key of the object r.
 def has_key(+k: String, r: Raw) -> Bool:
@@ -394,7 +403,7 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
     case SStrict{+s2} +x:
       Bool.and(conforms(~rule, s2, x, prev), no_extra(key_names(s2), x))
     case STagged{+k, +n, cs, rest} +x:
-      pick_bool(is_tag(k, n, x), conforms(~rule, cs, drop_key(k, x), None{}), conforms(~rule, rest, x, None{}))
+      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, drop_key(k, x), None{})), conforms(~rule, rest, x, None{}))
     case STagEnd{k} x:
       False{}  # the end of a tagged chain: no case matched
     case SBool{} RBool{b}:
@@ -622,7 +631,7 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
     case SStrict{+s2} +x:
       first(check(~rule, s2, x, prev), extra_err(key_names(s2), x))
     case STagged{+k, +n, cs, rest} +x:
-      pick_err(is_tag(k, n, x), check(~rule, cs, drop_key(k, x), None{}), check(~rule, rest, x, None{}))
+      pick_err(is_tag(k, n, x), first(key_err(key_once(k, x), k), check(~rule, cs, drop_key(k, x), None{})), check(~rule, rest, x, None{}))
     case STagEnd{k} x:
       tag_err(k, x)
     case SBool{} RBool{b}:
@@ -856,6 +865,21 @@ def tag_defect(+k: String, r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
     case x q:
       None{}
 
+# The tag key of a tagged case, taken twice, as defect replays it. check
+# reports it before the case's own schema is walked -- there is no place in the
+# schema for the second occurrence -- so the path is one field step at the
+# tag's own name and nothing after it. b is whether the key is not read once,
+# so nothing is reported exactly when key_once holds; a path of any other shape
+# is the case's own report, which the walk below answers.
+def tag_key_defect(b: Bool, +k: String, p: List<&2, Step>) -> Maybe<&2, Why>:
+  match b p:
+    case False{} q:
+      None{}
+    case True{} AtField{0n, +j} <> Nil{}:
+      pick_why(String.eq(j, k), Some{RepeatedKey{k}}, None{})
+    case True{} q:
+      None{}
+
 def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>, p: List<&2, Step>) -> Maybe<&2, Why>:
   match s r p:
     case SNat{} x q:
@@ -915,7 +939,7 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
     case SStrict{+s2} +x +q:
       pick_why(conforms(~rule, s2, x, prev), extra_defect(key_names(s2), x, q), defect(~rule, s2, x, prev, q))
     case STagged{+k, +n, cs, rest} +x +q:
-      pick_why(is_tag(k, n, x), defect(~rule, cs, drop_key(k, x), None{}, q), defect(~rule, rest, x, None{}, q))
+      pick_why(is_tag(k, n, x), first_why(tag_key_defect(Bool.not(key_once(k, x)), k, q), defect(~rule, cs, drop_key(k, x), None{}, q)), defect(~rule, rest, x, None{}, q))
     case STagEnd{k} x q:
       tag_defect(k, x, q)
     case SBool{} x q:
@@ -1285,8 +1309,18 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
 # ---- a well-formed schema ----
 #
 # wf is what the round trip needs: a key named once in its object or chain
-# (lookup reads the first), and an optional value that is not itself nullable.
-# Two constructors ask more than their own shape:
+# (lookup reads the first), an optional value that is not itself nullable, and
+# a tagged case whose own schema leaves the tag key alone.
+# Three constructors ask more than their own shape:
+#
+#   STagged writes its key and then the case's own object beside it, so the
+#   case's schema may not put that key anywhere in the same object (no_key).
+#   A case that names its own tag key encodes to a document holding the key
+#   twice: enc writes the tag and the case's own field writes it again, and
+#   the host builds that document as a JS object, where the second write --
+#   the spread of the case's own fields -- overwrites the first. What the
+#   encoder wrote is then not what the decoder reads, so refusing the schema
+#   is what keeps encode_conforms true.
 #
 #   SOptional is where a field may be absent, so it belongs immediately under
 #   a field and nowhere else: every other place a schema sits is guarded by
@@ -1346,6 +1380,43 @@ def nullable(s: Schema) -> Bool:
       nullable(rest)
     case _:
       False{}
+
+# ---- the object a schema's encoding lands in ----
+#
+# enc writes an object as one flat chain of keys. An SField writes its name and
+# its rest continues that object; an SVariant writes its name and the value
+# under it is a chain of its own (REnd ends it, so it is a value and not a
+# continuation). A wrapper -- a rule, a strict object, a bound, an optional --
+# writes no key of its own and hands its value straight to its inner schema,
+# so a key reaches the top of the object from inside any of them. A tagged
+# case's schema is the same object the tag key was written into, and so is the
+# rest of its chain.
+#
+# no_key is that, written down: k does not reach the top of the object enc
+# builds for s, for any value of s. wf asks it of a tagged case's own schema,
+# which is what keeps the tag key from being written twice.
+def no_key(+k: String, s: Schema) -> Bool:
+  match s:
+    case SField{+n, fs, rest}:
+      Bool.and(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), no_key(k, rest)))
+    case SVariant{+n, vs, rest}:
+      Bool.and(Bool.not(String.eq(n, k)), Bool.and(Bool.not(String.eq(k, n)), no_key(k, rest)))
+    case SStrict{s2}:
+      no_key(k, s2)
+    case SRule{s2, tag}:
+      no_key(k, s2)
+    case SStrLen{lo, hi, s2}:
+      no_key(k, s2)
+    case SListLen{lo, hi, s2}:
+      no_key(k, s2)
+    case SOpt{i}:
+      no_key(k, i)
+    case SOptional{i}:
+      no_key(k, i)
+    case STagged{+k2, n2, cs2, rest2}:
+      Bool.and(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(no_key(k, cs2), no_key(k, rest2))))
+    case _:
+      True{}
 
 # n is not a key of the record chain s (a chain ends in SEnd). Both orders are
 # asked, as fresh_v asks them: which of the two names a step puts first depends
@@ -1419,7 +1490,7 @@ def wf(s: Schema) -> Bool:
     case SStrict{+s2}:
       Bool.and(is_keyed(s2), Bool.and(Bool.not(opt_at(s2)), wf(s2)))
     case STagged{+k, +n, +cs, +rest}:
-      Bool.and(Bool.not(opt_at(cs)), Bool.and(wf(cs), Bool.and(fresh_t(k, n, rest), wf(rest))))
+      Bool.and(Bool.not(opt_at(cs)), Bool.and(wf(cs), Bool.and(no_key(k, cs), Bool.and(fresh_t(k, n, rest), wf(rest)))))
     case SVariant{+n, +vs, +rest}:
       Bool.and(Bool.not(opt_at(vs)), Bool.and(wf(vs), Bool.and(fresh_v(n, rest), wf(rest))))
     case STuple{+ts, +rest}:

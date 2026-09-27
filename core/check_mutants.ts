@@ -29,8 +29,8 @@ const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
   { law: "tagged_meaning", section: "a tagged case reads the object without its tag",
-    from: "      pick_bool(is_tag(k, n, x), conforms(~rule, cs, drop_key(k, x), None{}), conforms(~rule, rest, x, None{}))",
-    to: "      pick_bool(is_tag(k, n, x), conforms(~rule, cs, x, None{}), conforms(~rule, rest, x, None{}))",
+    from: "      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, drop_key(k, x), None{})), conforms(~rule, rest, x, None{}))",
+    to: "      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, x, None{})), conforms(~rule, rest, x, None{}))",
     at: { rule: "C.no_rule", k: "\"t\"", n: "\"a\"", cs: "C.SStrict{C.SEnd{}}", rest: "C.STagEnd{\"t\"}", r: "C.RKey{\"t\", C.RStr{\"a\"}, C.REnd{}}" },
     why: "a case sees the tag, so a strict case refuses a good value", failsIn: "Laws.tagged_meaning" },
   { law: "tag_end_refuses", section: "the end of a tagged chain accepts nothing",
@@ -217,6 +217,19 @@ const MUTANTS: Mutant[] = [
     counter: "{C.conforms(~C.no_rule, C.SVariant{\"a\", C.SNat{}, C.SVEnd{}}, C.RKey{\"z\", C.RNum{9n}, C.RKey{\"a\", C.RNum{1n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SVariant{\"a\", C.SNat{}, C.SVEnd{}}, C.RKey{\"a\", C.RNum{1n}, C.REnd{}}, None{}) : Bool}",
     why: "a variant key counts only where it stands first, so a key the schema does not name changes the answer when it stands before the variant key",
     failsIn: "Laws.unnamed_key_ignored" },
+  // The tag key's own test. The law is a Refused -- a conjunction of two
+  // claims -- so the instance is a counter: the half that stops holding is the
+  // one this counter states, and the def the proof must fail in is the law's
+  // own, whose two halves are decided by evaluation and nothing else. The
+  // mutation drops the test, and the case's own schema (SEnd{}) accepts the
+  // object the tag key was taken out of, so the value the law refuses is
+  // accepted; with the test in place the same reading is False.
+  { law: "repeated_tag_refused", section: "repeated_tag_refused",
+    from: "      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, drop_key(k, x), None{})), conforms(~rule, rest, x, None{}))",
+    to: "      pick_bool(is_tag(k, n, x), conforms(~rule, cs, drop_key(k, x), None{}), conforms(~rule, rest, x, None{}))",
+    counter: "{C.conforms(~C.no_rule, C.STagged{\"t\", \"a\", C.SEnd{}, C.STagEnd{\"t\"}}, C.RKey{\"t\", C.RStr{\"a\"}, C.RKey{\"t\", C.RStr{\"a\"}, C.REnd{}}}, None{}) == False{} : Bool}",
+    why: "the tag key's own test is gone, so a value holding the tag key twice conforms",
+    failsIn: "Laws.repeated_tag_refused" },
 ];
 
 runMutants(import.meta.dir, MUTANTS);
