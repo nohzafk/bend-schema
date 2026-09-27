@@ -325,30 +325,23 @@ def has_key(+k: String, r: Raw) -> Bool:
     case _:
       False{}
 
-# The two cases are separate defs so that only one of them runs: an argument is
-# evaluated before the call, so pick_bool(String.eq(k, name),
-# Bool.not(has_key(name, o)), key_once(name, o)) would scan the rest of the
-# object at every key and walk it to the end even after finding the name. The
-# def that recurses comes first because Bend has no forward reference.
-#
-# b is whether the key just read was name. Once it was, the rest of the object
-# must carry no other instance of it. The value is the first argument because a
-# self-call must read its arguments left to right, unchanged until one shrinks,
-# and only the value shrinks; and the value is matched first because a match
-# cannot be nested inside the branch of a match on another parameter.
-def key_once_at(r: Raw, b: Bool, +name: String) -> Bool:
+# name appears at most once among the keys of the object r. b is whether a key
+# read before r was already name; the flag carries forward, and a key that is
+# name while the flag is set is the second one -- refused here and nowhere
+# else. The value is the first argument because a self-call must read its
+# arguments left to right, unchanged until one shrinks, and only the value
+# shrinks; the value is matched first because a match cannot be nested inside
+# the branch of a match on another parameter. One pass, so a walk costs one
+# key per key, the same as the lookup beside it.
+def key_once_at(r: Raw, +b: Bool, +name: String) -> Bool:
   match r:
     case RKey{+k, +v, +o}:
-      match b:
-        case True{}:
-          Bool.not(has_key(name, o))
-        case False{}:
-          key_once_at(o, String.eq(k, name), name)
+      Bool.and(Bool.not(Bool.and(b, String.eq(k, name))), key_once_at(o, Bool.or(b, String.eq(k, name)), name))
     case _:
       True{}
 
-# name appears at most once among the keys of the object r: the walk starts at
-# the first key, with nothing read yet.
+# name appears at most once among the keys of the object r: nothing has been
+# read yet.
 def key_once(+name: String, r: Raw) -> Bool:
   key_once_at(r, False{}, name)
 
