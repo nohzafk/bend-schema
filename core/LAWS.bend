@@ -56,8 +56,9 @@ import ./core.bend as C
 # present, and an optional value is written null; keys the schema does not
 # name are ignored; the first error is depth first, by position. A rule runs
 # only after the shape it refines holds, and its error's path is relative to
-# the value it was given. Not pinned by a law: with a key repeated in an
-# object, lookup reads the first (a JSON object has no repeated keys).
+# the value it was given. (With a key repeated in an object, lookup reads the
+# first: a JSON object has no repeated keys, and a value that repeats one is
+# refused before any lookup is trusted -- repeated_key_refused.)
 
 law check_exact:
   for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
@@ -100,6 +101,31 @@ law variant_meaning:
   for +r: C.Raw
   for hc: {C.is_chain(s) == True{} : Bool}
   {C.conforms(~rule, s, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(s, r), 1n), C.present_conform(~rule, s, r))) : Bool}
+
+# ---- a key the schema reads, taken twice ----
+#
+# A key the schema READS as a field key (SField) or as a variant key
+# (SVariant) must appear at most once in the value: with the key repeated,
+# lookup reads the first one and the second is unreachable, so the value says
+# something the schema cannot mean, and it is refused. Both halves of that are
+# stated, and stated at explicit constructors and nothing else: the value does
+# not conform, and check reports RepeatedKey at that key's own name with no
+# step after it. Nothing else in the gate can catch a key_once that is wrong:
+# check_exact is a consistency law, which a key_once wrong in the same
+# direction on both sides satisfies, and the mutant has key_err stop
+# reporting, which leaves key_once itself untested.
+#
+# Known hole, deliberately left. The TAG key of a tagged case is not checked,
+# here or in conforms, check or defect. A case that names its own tag key
+# encodes to a document holding that key twice -- enc writes the tag, and the
+# case's own field writes it again -- so requiring a tag key to appear once
+# would make encode_conforms false for a schema wf accepts. A tag key
+# repeated in the value is therefore still accepted.
+def Refused(s: C.Schema, r: C.Raw, +p: List<&2, C.Step>, +w: C.Why) -> Type:
+  {C.conforms(~C.no_rule, s, r, None{}) == False{} : Bool} & {C.check(~C.no_rule, s, r, None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>}
+
+law repeated_key_refused:
+  Refused(C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"}) & Refused(C.SVariant{"a", C.SNat{}, C.SVEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"})
 
 # A tuple conforms exactly when the value is a list, as long as the tuple,
 # and each position conforms. Without it, a bug shared by check and conforms

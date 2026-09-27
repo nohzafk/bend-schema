@@ -854,6 +854,16 @@ def strict_acc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err
       %ex : {C.pick_why(_, C.extra_defect(ns, x, path), C.defect(~rule, s2, x, prev, path)) == Some{why} : Maybe<&2, C.Why>}
       extra_acc(ns, x, path, why, h)
 
+# ---- repeated_key_refused ----
+#
+# Both halves compute, at the explicit constructors the law names: key_once_at
+# sees the second "a" (the first has set its flag), conforms is False there,
+# and check reports the key at its own name before it looks at the value under
+# it. Nothing here rewrites; the law is decided by evaluation, which is the
+# point of stating it at literals.
+def Laws.repeated_key_refused():
+  (({==}, {==}), ({==}, {==}))
+
 # ---- what check reports is there ----
 #
 # The same walk again. Where check reports here, the path is empty and the
@@ -1015,15 +1025,30 @@ def field_tail_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m2: Maybe<&2, C.Err>
       %same_why(C.later_f_path(p2), w2, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.later_f_path(p2)) == Some{_} : Maybe<&2, C.Why>}
       field_path_key(~rule, p2, w2, name, fs, rest, k, v, o, prev, ex1, ih2(p2, w2, {==}))
 
-def field_step_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +name: String, +fs: C.Schema, +rest: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, +h: {C.first(C.under(C.AtField{0n, name}, m1), C.later_f(m2)) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex1: {Maybe.is_none(&2, C.Err, m1) == C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}) : Bool}, ih1: @p:List<&2, C.Step> -> @w:C.Why -> {m1 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {m2 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, rest, C.RKey{k, v, o}, None{}, p) == Some{w} : Maybe<&2, C.Why>}) -> {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
+def field_step_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +name: String, +fs: C.Schema, +rest: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, k0: Bool, +kc: {k0 == C.key_once_at(o, String.eq(k, name), name) : Bool}, +h: {C.first(C.key_err(k0, name), C.first(C.under(C.AtField{0n, name}, m1), C.later_f(m2))) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex1: {Maybe.is_none(&2, C.Err, m1) == C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}) : Bool}, ih1: @p:List<&2, C.Step> -> @w:C.Why -> {m1 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {m2 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, rest, C.RKey{k, v, o}, None{}, p) == Some{w} : Maybe<&2, C.Why>}) -> {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
   match m1:
     case Some{C.Err{+p1, +w1}}:
-      %same_path(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
-      %same_why(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.AtField{0n, name} <> p1) == Some{_} : Maybe<&2, C.Why>}
-      %MS.eq_refl_sym(name) : {C.guard(_, C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
-      ih1(p1, w1, {==})
+      match k0:
+        case True{}:
+          %same_path(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+          %same_why(C.AtField{0n, name} <> p1, w1, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.AtField{0n, name} <> p1) == Some{_} : Maybe<&2, C.Why>}
+          %kc : {C.pick_why(Bool.not(_), C.at_end(C.RepeatedKey{name}, p1), C.guard(String.eq(name, name), C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p1))) == Some{w1} : Maybe<&2, C.Why>}
+          %MS.eq_refl_sym(name) : {C.guard(_, C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
+          ih1(p1, w1, {==})
+        case False{}:
+          %same_path(C.AtField{0n, name} <> Nil{}, C.RepeatedKey{name}, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+          %same_why(C.AtField{0n, name} <> Nil{}, C.RepeatedKey{name}, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.AtField{0n, name} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
+          %kc : {C.pick_why(Bool.not(_), C.at_end(C.RepeatedKey{name}, Nil{}), C.guard(String.eq(name, name), C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, Nil{}))) == Some{C.RepeatedKey{name}} : Maybe<&2, C.Why>}
+          {==}
     case None{}:
-      field_tail_key(~rule, m2, name, fs, rest, k, v, o, prev, path, why, h, ex1, ih2)
+      match k0:
+        case True{}:
+          field_tail_key(~rule, m2, name, fs, rest, k, v, o, prev, path, why, h, ex1, ih2)
+        case False{}:
+          %same_path(C.AtField{0n, name} <> Nil{}, C.RepeatedKey{name}, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+          %same_why(C.AtField{0n, name} <> Nil{}, C.RepeatedKey{name}, path, why, h) : {C.defect(~rule, C.SField{name, fs, rest}, C.RKey{k, v, o}, prev, C.AtField{0n, name} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
+          %kc : {C.pick_why(Bool.not(_), C.at_end(C.RepeatedKey{name}, Nil{}), C.guard(String.eq(name, name), C.defect(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, Nil{}))) == Some{C.RepeatedKey{name}} : Maybe<&2, C.Why>}
+          {==}
 
 def acc_true(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, bb: Bool, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, +h: {C.true_err(bb) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}) -> {C.defect(~rule, C.STrue{}, C.RBool{bb}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
   match bb:
@@ -1287,23 +1312,43 @@ def var_dup(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m3: Maybe<&2, C.Err>, +vn: 
       %same_why(C.later_f_path(p3), w3, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, C.later_f_path(p3)) == Some{_} : Maybe<&2, C.Why>}
       var_dup_path(~rule, p3, w3, vn, vv, vr, k, v, o, prev, eb, ex1, hd(p3, w3, {==}), hs(p3, w3, {==}))
 
-def var_present(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>, +m3: Maybe<&2, C.Err>, +vn: String, +vv: C.Schema, +vr: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, +eb: {False{} == C.is_missing(C.lookup(vn, C.RKey{k, v, o})) : Bool}, +h: {C.first(C.under(C.AtField{0n, vn}, m1), C.later_f(m3)) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex1: {Maybe.is_none(&2, C.Err, m1) == C.conforms(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) : Bool}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {m1 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, hd: @p:List<&2, C.Step> -> @w:C.Why -> {m3 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.dup_defect(vr, C.RKey{k, v, o}, p) == Some{w} : Maybe<&2, C.Why>}, hs: @p:List<&2, C.Step> -> @w:C.Why -> {m3 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {head_is_field(p) == True{} : Bool}) -> {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
+# The second occurrence of a variant key: check reports it before it looks at
+# the value under the key, so defect carries nothing but the report -- at the
+# key's own name, with no step after it. hk is the test at the value it was
+# false on, which is what the walk above has left of kc.
+def var_key_repeat(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +vn: String, +vv: C.Schema, +vr: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, +eb: {False{} == C.is_missing(C.lookup(vn, C.RKey{k, v, o})) : Bool}, hk: {False{} == C.key_once_at(o, String.eq(k, vn), vn) : Bool}, +h: {Some{C.Err{C.AtField{0n, vn} <> Nil{}, C.RepeatedKey{vn}}} == Some{C.Err{path, why}} : Maybe<&2, C.Err>}) -> {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
+  %same_path(C.AtField{0n, vn} <> Nil{}, C.RepeatedKey{vn}, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+  %same_why(C.AtField{0n, vn} <> Nil{}, C.RepeatedKey{vn}, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, C.AtField{0n, vn} <> Nil{}) == Some{_} : Maybe<&2, C.Why>}
+  %eb : {C.pick_why(_, C.defect(~rule, vr, C.RKey{k, v, o}, None{}, C.AtField{0n, vn} <> Nil{}), C.pick_why(Bool.not(C.key_once(vn, C.RKey{k, v, o})), C.at_end(C.RepeatedKey{vn}, Nil{}), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, Nil{})))) == Some{C.RepeatedKey{vn}} : Maybe<&2, C.Why>}
+  %hk : {C.pick_why(Bool.not(_), C.at_end(C.RepeatedKey{vn}, Nil{}), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, Nil{}))) == Some{C.RepeatedKey{vn}} : Maybe<&2, C.Why>}
+  {==}
+
+def var_present(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err>, +m3: Maybe<&2, C.Err>, +vn: String, +vv: C.Schema, +vr: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, k0: Bool, +kc: {k0 == C.key_once_at(o, String.eq(k, vn), vn) : Bool}, +eb: {False{} == C.is_missing(C.lookup(vn, C.RKey{k, v, o})) : Bool}, +h: {C.first(C.key_err(k0, vn), C.first(C.under(C.AtField{0n, vn}, m1), C.later_f(m3))) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex1: {Maybe.is_none(&2, C.Err, m1) == C.conforms(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) : Bool}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {m1 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, hd: @p:List<&2, C.Step> -> @w:C.Why -> {m3 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.dup_defect(vr, C.RKey{k, v, o}, p) == Some{w} : Maybe<&2, C.Why>}, hs: @p:List<&2, C.Step> -> @w:C.Why -> {m3 == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {head_is_field(p) == True{} : Bool}) -> {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
   match m1:
     case Some{C.Err{+p1, +w1}}:
-      %same_path(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
-      %same_why(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, C.AtField{0n, vn} <> p1) == Some{_} : Maybe<&2, C.Why>}
-      %eb : {C.pick_why(_, C.defect(~rule, vr, C.RKey{k, v, o}, None{}, C.AtField{0n, vn} <> p1), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1))) == Some{w1} : Maybe<&2, C.Why>}
-      %MS.eq_refl_sym(vn) : {C.guard(_, C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
-      ih2(p1, w1, {==})
+      match k0:
+        case True{}:
+          %same_path(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, _) == Some{why} : Maybe<&2, C.Why>}
+          %same_why(C.AtField{0n, vn} <> p1, w1, path, why, h) : {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, C.AtField{0n, vn} <> p1) == Some{_} : Maybe<&2, C.Why>}
+          %eb : {C.pick_why(_, C.defect(~rule, vr, C.RKey{k, v, o}, None{}, C.AtField{0n, vn} <> p1), C.pick_why(Bool.not(C.key_once(vn, C.RKey{k, v, o})), C.at_end(C.RepeatedKey{vn}, p1), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1)))) == Some{w1} : Maybe<&2, C.Why>}
+          %kc : {C.pick_why(Bool.not(_), C.at_end(C.RepeatedKey{vn}, p1), C.guard(String.eq(vn, vn), C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1))) == Some{w1} : Maybe<&2, C.Why>}
+          %MS.eq_refl_sym(vn) : {C.guard(_, C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p1)) == Some{w1} : Maybe<&2, C.Why>}
+          ih2(p1, w1, {==})
+        case False{}:
+          var_key_repeat(~rule, vn, vv, vr, k, v, o, prev, path, why, eb, kc, h)
     case None{}:
-      var_dup(~rule, m3, vn, vv, vr, k, v, o, prev, path, why, eb, h, ex1, hd, hs)
+      match k0:
+        case True{}:
+          var_dup(~rule, m3, vn, vv, vr, k, v, o, prev, path, why, eb, h, ex1, hd, hs)
+        case False{}:
+          var_key_repeat(~rule, vn, vv, vr, k, v, o, prev, path, why, eb, kc, h)
 
-def var_acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, eb: {b == C.is_missing(C.lookup(vn, C.RKey{k, v, o})) : Bool}, +h: {C.pick_err(b, C.later_f(C.check(~rule, vr, C.RKey{k, v, o}, None{})), C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{})), C.later_f(C.dup_err(vr, C.RKey{k, v, o})))) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex2: {Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{})) == C.conforms(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) : Bool}, ih1: @p:List<&2, C.Step> -> @w:C.Why -> {C.check(~rule, vr, C.RKey{k, v, o}, None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vr, C.RKey{k, v, o}, None{}, p) == Some{w} : Maybe<&2, C.Why>}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, hd: @p:List<&2, C.Step> -> @w:C.Why -> {C.dup_err(vr, C.RKey{k, v, o}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.dup_defect(vr, C.RKey{k, v, o}, p) == Some{w} : Maybe<&2, C.Why>}, hs: @p:List<&2, C.Step> -> @w:C.Why -> {C.dup_err(vr, C.RKey{k, v, o}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {head_is_field(p) == True{} : Bool}) -> {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
+def var_acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +k: String, +v: C.Raw, +o: C.Raw, +prev: Maybe<&2, Nat>, +path: List<&2, C.Step>, +why: C.Why, k0: Bool, +kc: {k0 == C.key_once_at(o, String.eq(k, vn), vn) : Bool}, eb: {b == C.is_missing(C.lookup(vn, C.RKey{k, v, o})) : Bool}, +h: {C.pick_err(b, C.later_f(C.check(~rule, vr, C.RKey{k, v, o}, None{})), C.first(C.key_err(k0, vn), C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{})), C.later_f(C.dup_err(vr, C.RKey{k, v, o}))))) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, ex2: {Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{})) == C.conforms(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) : Bool}, ih1: @p:List<&2, C.Step> -> @w:C.Why -> {C.check(~rule, vr, C.RKey{k, v, o}, None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vr, C.RKey{k, v, o}, None{}, p) == Some{w} : Maybe<&2, C.Why>}, ih2: @p:List<&2, C.Step> -> @w:C.Why -> {C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.defect(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p) == Some{w} : Maybe<&2, C.Why>}, hd: @p:List<&2, C.Step> -> @w:C.Why -> {C.dup_err(vr, C.RKey{k, v, o}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {C.dup_defect(vr, C.RKey{k, v, o}, p) == Some{w} : Maybe<&2, C.Why>}, hs: @p:List<&2, C.Step> -> @w:C.Why -> {C.dup_err(vr, C.RKey{k, v, o}) == Some{C.Err{p, w}} : Maybe<&2, C.Err>} -> {head_is_field(p) == True{} : Bool}) -> {C.defect(~rule, C.SVariant{vn, vv, vr}, C.RKey{k, v, o}, prev, path) == Some{why} : Maybe<&2, C.Why>}:
   match b:
     case True{}:
       var_absent(~rule, C.check(~rule, vr, C.RKey{k, v, o}, None{}), vn, vv, vr, k, v, o, prev, path, why, eb, h, ih1)
     case False{}:
-      var_present(~rule, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}), C.dup_err(vr, C.RKey{k, v, o}), vn, vv, vr, k, v, o, prev, path, why, eb, h, ex2, ih2, hd, hs)
+      var_present(~rule, C.check(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}), C.dup_err(vr, C.RKey{k, v, o}), vn, vv, vr, k, v, o, prev, path, why, k0, kc, eb, h, ex2, ih2, hd, hs)
 
 # An SListLen whose check reported an error. The count is read before any
 # element, so the error is the count's own exactly when count_err reported one
@@ -1563,7 +1608,7 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
     case C.SField{+name, +fs, +rest} C.REnd{}:
       field_step_end(~rule, C.check(~rule, fs, C.RMissing{}, None{}), C.check(~rule, rest, C.REnd{}, None{}), name, fs, rest, prev, path, why, h, exact(~rule, fs, C.RMissing{}, None{}), p => w => hh => acc(~rule, fs, C.RMissing{}, None{}, p, w, hh), p => w => hh => acc(~rule, rest, C.REnd{}, None{}, p, w, hh))
     case C.SField{+name, +fs, +rest} C.RKey{+k, +v, +o}:
-      field_step_key(~rule, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.check(~rule, rest, C.RKey{k, v, o}, None{}), name, fs, rest, k, v, o, prev, path, why, h, exact(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), p => w => hh => acc(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p, w, hh), p => w => hh => acc(~rule, rest, C.RKey{k, v, o}, None{}, p, w, hh))
+      field_step_key(~rule, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.check(~rule, rest, C.RKey{k, v, o}, None{}), name, fs, rest, k, v, o, prev, path, why, C.key_once(name, C.RKey{k, v, o}), {==}, h, exact(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), p => w => hh => acc(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}, p, w, hh), p => w => hh => acc(~rule, rest, C.RKey{k, v, o}, None{}, p, w, hh))
     case C.SEnd{} C.RNum{n}:
       %same_path(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.SEnd{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.SEnd{}, C.RNum{n}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
@@ -1821,7 +1866,7 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
     case C.SVariant{+vn, +vv, +vr} C.REnd{}:
       var_end_tail(~rule, C.check(~rule, vr, C.REnd{}, None{}), vn, vv, vr, prev, path, why, h, p => w => hh => acc(~rule, vr, C.REnd{}, None{}, p, w, hh))
     case C.SVariant{+vn, +vv, +vr} C.RKey{+k, +v, +o}:
-      var_acc(~rule, C.is_missing(C.lookup(vn, C.RKey{k, v, o})), vn, vv, vr, k, v, o, prev, path, why, {==}, h, exact(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}), p => w => hh => acc(~rule, vr, C.RKey{k, v, o}, None{}, p, w, hh), p => w => hh => acc(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p, w, hh), p => w => hh => dup_acc(vr, C.RKey{k, v, o}, p, w, hh), p => w => hh => dup_shape(vr, C.RKey{k, v, o}, p, w, hh))
+      var_acc(~rule, C.is_missing(C.lookup(vn, C.RKey{k, v, o})), vn, vv, vr, k, v, o, prev, path, why, C.key_once(vn, C.RKey{k, v, o}), {==}, {==}, h, exact(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}), p => w => hh => acc(~rule, vr, C.RKey{k, v, o}, None{}, p, w, hh), p => w => hh => acc(~rule, vv, C.lookup(vn, C.RKey{k, v, o}), None{}, p, w, hh), p => w => hh => dup_acc(vr, C.RKey{k, v, o}, p, w, hh), p => w => hh => dup_shape(vr, C.RKey{k, v, o}, p, w, hh))
     case C.SVEnd{} C.RNum{n}:
       %same_path(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.SVEnd{}, C.RNum{n}, prev, _) == Some{why} : Maybe<&2, C.Why>}
       %same_why(Nil{}, C.NotObject{}, path, why, h) : {C.defect(~rule, C.SVEnd{}, C.RNum{n}, prev, Nil{}) == Some{_} : Maybe<&2, C.Why>}
