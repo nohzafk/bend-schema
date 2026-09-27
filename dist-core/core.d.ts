@@ -36,6 +36,7 @@ export declare function raw_len(r: Raw): bigint;
 export declare function count_ok(lo: bigint, hi: bigint, r: Raw): boolean;
 export declare function list_len_ok(lo: bigint, hi: bigint, r: Raw): boolean;
 export declare function has_key(k: string, r: Raw): boolean;
+export declare function key_once_at(r: Raw, b: boolean, name: string): boolean;
 export declare function key_once(name: string, r: Raw): boolean;
 export declare function key_err(b: boolean, name: string): BendMaybe<Err>;
 export declare function here(w: Why): BendMaybe<Err>;
@@ -120,6 +121,7 @@ declare const core: {
   "count_ok"(lo: bigint, hi: bigint, r: Raw): boolean;
   "list_len_ok"(lo: bigint, hi: bigint, r: Raw): boolean;
   "has_key"(k: string, r: Raw): boolean;
+  "key_once_at"(r: Raw, b: boolean, name: string): boolean;
   "key_once"(name: string, r: Raw): boolean;
   "key_err"(b: boolean, name: string): BendMaybe<Err>;
   "here"(w: Why): BendMaybe<Err>;

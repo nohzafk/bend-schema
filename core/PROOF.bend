@@ -140,6 +140,16 @@ def none_enum(b: Bool) -> {Maybe.is_none(&2, C.Err, C.enum_err(b)) == b : Bool}:
     case False{}:
       {==}
 
+# b is is_none(key_err(b, name)): the repeated-key test becomes an error
+# exactly where key_once says the key is not read once. Stated simple first so
+# that a rewrite replaces the error back with the test.
+def none_key_err(b: Bool, +name: String) -> {b == Maybe.is_none(&2, C.Err, C.key_err(b, name)) : Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 def none_dup_step(b: Bool, +n: String, +rr: C.Schema, +r: C.Raw, ih: {Maybe.is_none(&2, C.Err, C.dup_err(rr, r)) == C.none_present(rr, r) : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(b, C.later_f(C.dup_err(rr, r)), Some{C.Err{C.AtField{0n, n} <> Nil{}, C.TwoVariants{}}})) == Bool.and(b, C.none_present(rr, r)) : Bool}:
   match b:
     case True{}:
@@ -257,17 +267,19 @@ def extra_exact(+ns: List<&2, String>, r: C.Raw) -> {Maybe.is_none(&2, C.Err, C.
 
 # A variant: the key absent, go on with the rest; present, its value must
 # conform and no later key may be there.
-def var_exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +r: C.Raw, ih1: {Maybe.is_none(&2, C.Err, C.check(~rule, vr, r, None{})) == C.conforms(~rule, vr, r, None{}) : Bool}, ih2: {Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})) == C.conforms(~rule, vv, C.lookup(vn, r), None{}) : Bool}, nd: {Maybe.is_none(&2, C.Err, C.dup_err(vr, r)) == C.none_present(vr, r) : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(b, C.later_f(C.check(~rule, vr, r, None{})), C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r))))) == C.pick_bool(b, C.conforms(~rule, vr, r, None{}), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}:
+def var_exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +r: C.Raw, ih1: {Maybe.is_none(&2, C.Err, C.check(~rule, vr, r, None{})) == C.conforms(~rule, vr, r, None{}) : Bool}, ih2: {Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})) == C.conforms(~rule, vv, C.lookup(vn, r), None{}) : Bool}, nd: {Maybe.is_none(&2, C.Err, C.dup_err(vr, r)) == C.none_present(vr, r) : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(b, C.later_f(C.check(~rule, vr, r, None{})), C.first(C.key_err(C.key_once_at(r, False{}, vn), vn), C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r)))))) == C.pick_bool(b, C.conforms(~rule, vr, r, None{}), Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)))) : Bool}:
   match b:
     case True{}:
       %none_later_f(C.check(~rule, vr, r, None{})) : {_ == C.conforms(~rule, vr, r, None{}) : Bool}
       ih1
     case False{}:
-      %none_first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r))) : {_ == Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)) : Bool}
-      %none_under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})) : {Bool.and(_, Maybe.is_none(&2, C.Err, C.later_f(C.dup_err(vr, r)))) == Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)) : Bool}
-      %none_later_f(C.dup_err(vr, r)) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), _) == Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)) : Bool}
-      %ih2 : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), Maybe.is_none(&2, C.Err, C.dup_err(vr, r))) == Bool.and(_, C.none_present(vr, r)) : Bool}
-      %nd : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), Maybe.is_none(&2, C.Err, C.dup_err(vr, r))) == Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), _) : Bool}
+      %none_first(C.key_err(C.key_once_at(r, False{}, vn), vn), C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r)))) : {_ == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}
+      %none_key_err(C.key_once_at(r, False{}, vn), vn) : {Bool.and(_, Maybe.is_none(&2, C.Err, C.first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r))))) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}
+      %none_first(C.under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})), C.later_f(C.dup_err(vr, r))) : {Bool.and(C.key_once_at(r, False{}, vn), _) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}
+      %none_under(C.AtField{0n, vn}, C.check(~rule, vv, C.lookup(vn, r), None{})) : {Bool.and(C.key_once_at(r, False{}, vn), Bool.and(_, Maybe.is_none(&2, C.Err, C.later_f(C.dup_err(vr, r))))) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}
+      %none_later_f(C.dup_err(vr, r)) : {Bool.and(C.key_once_at(r, False{}, vn), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), _)) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) : Bool}
+      %ih2 : {Bool.and(C.key_once_at(r, False{}, vn), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), Maybe.is_none(&2, C.Err, C.dup_err(vr, r)))) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(_, C.none_present(vr, r))) : Bool}
+      %nd : {Bool.and(C.key_once_at(r, False{}, vn), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), Maybe.is_none(&2, C.Err, C.dup_err(vr, r)))) == Bool.and(C.key_once_at(r, False{}, vn), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, vv, C.lookup(vn, r), None{})), _)) : Bool}
       {==}
 
 # arms: s r
@@ -420,11 +432,13 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
       %exact(~rule, rest, C.REnd{}, None{}) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.RMissing{}, None{})), Maybe.is_none(&2, C.Err, C.check(~rule, rest, C.REnd{}, None{}))) == Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.RMissing{}, None{})), _) : Bool}
       {==}
     case C.SField{+name, +fs, +rest} C.RKey{+k, +v, +o}:
-      %none_first(C.under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{}))) : {_ == Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{})) : Bool}
-      %none_under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})) : {Bool.and(_, Maybe.is_none(&2, C.Err, C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{})))) == Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{})) : Bool}
-      %none_later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{})) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), _) == Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{})) : Bool}
-      %exact(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), Maybe.is_none(&2, C.Err, C.check(~rule, rest, C.RKey{k, v, o}, None{}))) == Bool.and(_, C.conforms(~rule, rest, C.RKey{k, v, o}, None{})) : Bool}
-      %exact(~rule, rest, C.RKey{k, v, o}, None{}) : {Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), Maybe.is_none(&2, C.Err, C.check(~rule, rest, C.RKey{k, v, o}, None{}))) == Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), _) : Bool}
+      %none_first(C.key_err(C.key_once_at(o, String.eq(k, name), name), name), C.first(C.under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{})))) : {_ == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %none_key_err(C.key_once_at(o, String.eq(k, name), name), name) : {Bool.and(_, Maybe.is_none(&2, C.Err, C.first(C.under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{}))))) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %none_first(C.under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{}))) : {Bool.and(C.key_once_at(o, String.eq(k, name), name), _) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %none_under(C.AtField{0n, name}, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})) : {Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(_, Maybe.is_none(&2, C.Err, C.later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{}))))) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %none_later_f(C.check(~rule, rest, C.RKey{k, v, o}, None{})) : {Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), _)) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(C.conforms(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %exact(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{}) : {Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), Maybe.is_none(&2, C.Err, C.check(~rule, rest, C.RKey{k, v, o}, None{})))) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(_, C.conforms(~rule, rest, C.RKey{k, v, o}, None{}))) : Bool}
+      %exact(~rule, rest, C.RKey{k, v, o}, None{}) : {Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), Maybe.is_none(&2, C.Err, C.check(~rule, rest, C.RKey{k, v, o}, None{})))) == Bool.and(C.key_once_at(o, String.eq(k, name), name), Bool.and(Maybe.is_none(&2, C.Err, C.check(~rule, fs, C.lookup(name, C.RKey{k, v, o}), None{})), _)) : Bool}
       {==}
     case C.SEnd{} C.RNum{n}:
       {==}

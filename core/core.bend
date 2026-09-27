@@ -325,25 +325,32 @@ def has_key(+k: String, r: Raw) -> Bool:
     case _:
       False{}
 
-# name appears at most once among the keys of the object r. The two cases are
-# separate defs so that only one of them runs: an argument is evaluated before
-# the call, so pick_bool(String.eq(k, name), Bool.not(has_key(name, o)),
-# key_once(name, o)) would scan the rest of the object at every key and walk it
-# to the end even after finding the name.
-def key_once(+name: String, r: Raw) -> Bool:
+# The two cases are separate defs so that only one of them runs: an argument is
+# evaluated before the call, so pick_bool(String.eq(k, name),
+# Bool.not(has_key(name, o)), key_once(name, o)) would scan the rest of the
+# object at every key and walk it to the end even after finding the name. The
+# def that recurses comes first because Bend has no forward reference.
+#
+# b is whether the key just read was name. Once it was, the rest of the object
+# must carry no other instance of it. The value is the first argument because a
+# self-call must read its arguments left to right, unchanged until one shrinks,
+# and only the value shrinks; and the value is matched first because a match
+# cannot be nested inside the branch of a match on another parameter.
+def key_once_at(r: Raw, b: Bool, +name: String) -> Bool:
   match r:
     case RKey{+k, +v, +o}:
-      key_once_at(String.eq(k, name), name, o)
+      match b:
+        case True{}:
+          Bool.not(has_key(name, o))
+        case False{}:
+          key_once_at(o, String.eq(k, name), name)
     case _:
       True{}
 
-# The first key of r that is name is gone: no later key may be it either.
-def key_once_at(b: Bool, +name: String, r: Raw) -> Bool:
-  match b:
-    case True{}:
-      Bool.not(has_key(name, r))
-    case False{}:
-      key_once(name, r)
+# name appears at most once among the keys of the object r: the walk starts at
+# the first key, with nothing read yet.
+def key_once(+name: String, r: Raw) -> Bool:
+  key_once_at(r, False{}, name)
 
 # The repeated key as check reports it: at the key's own name, with no step
 # after it (the second occurrence is not a place in the schema). The test is
