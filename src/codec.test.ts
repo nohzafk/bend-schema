@@ -8,13 +8,13 @@
 // measure_budget.ts, so the numbers in codec.ts and the gate cannot drift.
 
 import { describe, expect, test } from "bun:test";
-import * as kernel from "../dist-core/core.js";
-import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.js";
+import * as kernel from "../dist-core/core.mjs";
+import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
 import { BUDGET, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toRaw } from "./codec";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit
-// leaves them undeclared in dist-core/core.d.ts: these are their run-time types.
+// leaves them undeclared in dist-core/core.d.mts: these are their run-time types.
 const { enc, dec } = kernel as unknown as {
   enc: (s: Schema, x: unknown) => Raw;
   dec: (s: Schema, r: Raw) => BendMaybe<unknown>;
@@ -231,6 +231,11 @@ describe("a bound a host can write", () => {
   test("the three constructors round-trip through enc and dec", () => {
     expect(dec(bool, enc(bool, true))).toEqual({ $: "Some", value: true });
     expect(dec(bool, enc(bool, false))).toEqual({ $: "Some", value: false });
+    // Known failure under bend 2.0.32, reported as known by test.sh and not
+    // fixed here: the ES-module target hands a Nat to the host as a JS number,
+    // so this gives { $: "Some", value: 6 } while the emitted core.d.mts still
+    // declares bigint. The declaration and the runtime disagree, which is
+    // upstream's to fix; this line is what says so until they do.
     expect(dec(inSix, enc(inSix, 6n))).toEqual({ $: "Some", value: 6n });
     expect(dec(three, enc(three, "abc"))).toEqual({ $: "Some", value: "abc" });
   });
