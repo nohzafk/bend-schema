@@ -7,10 +7,12 @@
 //
 // The instance is named by `at`, which gives a value for each of the law's
 // binders: the tool reads the law's statement out of LAWS.bend and builds the
-// instance from it, so a row cannot state something that is not the law. One
-// law shape `at` cannot express keeps a hand-written `counter` -- enum_admits,
-// whose claim is the witness type OneOf(ns, x) rather than an equation; the
-// run prints "(counter not tied to the law)" for it.
+// instance from it, so a row cannot state something that is not the law. Two
+// claim shapes `at` cannot express keep a hand-written `counter` instead --
+// enum_admits, whose claim is the witness type OneOf(ns, x) rather than an
+// equation, and unnamed_key_ignored's second and third readings, which are the
+// 2nd and 3rd conjunct of a law whose claim `at` reads only the first of; the
+// run prints "(counter not tied to the law)" for each.
 //
 // Two decode_encode rows are instances the core's own premise leaves out: the
 // mutants strengthen wf, so wf is false on the core there, check 1 is vacuous
@@ -164,15 +166,56 @@ const MUTANTS: Mutant[] = [
     why: "a key the schema reads twice is reported as nothing, so check passes a value that does not conform", failsIn: "none_key_err" },
   // The D3 law is a conjunction of three readings: an unnamed key stands
   // before the keys the schema reads, after them, and before a variant key.
-  // `at` reads a law's first claim, so the instance here is the first reading;
-  // the mutation is what makes a key standing before the named one change the
-  // answer, which is the only way a reading before can be false. `at` gives no
-  // value for anything because the law binds nothing: it is at literals.
+  // One row per reading, because the three break independently and a single
+  // row's failure would not say which one is load-bearing.
+  //
+  // `at` can only state the FIRST reading. The tool reads a law's claim as its
+  // first `{...}`, and this law's claim is a three-way conjunction, so an `at`
+  // instance here is the reading-1 equation and no other -- the two rows for
+  // readings 2 and 3 carry a `counter` instead, the tool's own escape for a
+  // claim shape `at` cannot express, and its line says the counter is not tied
+  // to the law. The cost is real and is the reason the text of each counter is
+  // the law's own conjunct, copied character for character: nothing checks
+  // that it still is, so an edit to LAWS.bend's second or third reading must
+  // be carried here by hand.
+  //
+  // Each mutation was measured against one reading at a time (a scratch core
+  // per mutation, one def per reading): under the mutation its own reading's
+  // equation goes false and the other two still check.
+  //
+  // Reading 1 -- a key standing BEFORE the field the schema reads. conforms
+  // reads the object's first key as the field's name.
   { law: "unnamed_key_ignored", section: "unnamed_key_ignored",
     from: "      Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{})))",
     to: "      Bool.and(String.eq(k, name), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{}))))",
     at: {},
     why: "conforms reads an object's first key as the field's name, so a key the schema does not name changes the answer when it stands before the one the schema reads",
+    failsIn: "LAWS.unnamed_key_ignored" },
+  // Reading 2 -- a key standing AFTER the field the schema reads. Nothing in
+  // conforms refuses a later key: SEnd ignores whatever keys are left over, so
+  // the two sides of the equation reach the same True and the unnamed key is
+  // unobservable. The mutation is what makes it reachable-and-refused: a key
+  // counts as read once the field's key has gone by, so key_once refuses every
+  // key standing after it -- which is what "and nothing after it" would mean.
+  // The "z" after "a" then flips the left side to False while the value with
+  // no "z" stays True.
+  { law: "unnamed_key_ignored", section: "unnamed_key_ignored",
+    from: "      Bool.and(Bool.not(Bool.and(b, String.eq(k, name))), key_once_at(o, Bool.or(b, String.eq(k, name)), name))",
+    to: "      Bool.and(Bool.not(b), key_once_at(o, Bool.or(b, String.eq(k, name)), name))",
+    counter: "{C.conforms(~C.no_rule, C.SField{\"a\", C.SNat{}, C.SEnd{}}, C.RKey{\"a\", C.RNum{1n}, C.RKey{\"z\", C.RNum{9n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SField{\"a\", C.SNat{}, C.SEnd{}}, C.RKey{\"a\", C.RNum{1n}, C.REnd{}}, None{}) : Bool}",
+    why: "key_once refuses every key that stands after the one the schema reads, so a key the schema does not name changes the answer when it stands after it",
+    failsIn: "LAWS.unnamed_key_ignored" },
+  // Reading 3 -- a key standing BEFORE a variant key. The variant's key is
+  // looked up wherever it stands, so a key in front of it is skipped and the
+  // same two branches are taken as without it. The mutation asks instead
+  // whether the object's FIRST key is the variant's: an unnamed key in front
+  // of the variant key now hides it, the chain moves on to SVEnd, and SVEnd
+  // conforms to nothing.
+  { law: "unnamed_key_ignored", section: "unnamed_key_ignored",
+    from: "      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o}))))",
+    to: "      pick_bool(Bool.not(String.eq(k, name)), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o}))))",
+    counter: "{C.conforms(~C.no_rule, C.SVariant{\"a\", C.SNat{}, C.SVEnd{}}, C.RKey{\"z\", C.RNum{9n}, C.RKey{\"a\", C.RNum{1n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SVariant{\"a\", C.SNat{}, C.SVEnd{}}, C.RKey{\"a\", C.RNum{1n}, C.REnd{}}, None{}) : Bool}",
+    why: "a variant key counts only where it stands first, so a key the schema does not name changes the answer when it stands before the variant key",
     failsIn: "LAWS.unnamed_key_ignored" },
 ];
 
