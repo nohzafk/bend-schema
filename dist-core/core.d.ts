@@ -8,7 +8,7 @@ export type BendUnit = { $: "Unit" };
 export type Raw = { $: "RNum"; "n": bigint } | { $: "RBool"; "b": boolean } | { $: "RNull" } | { $: "RStr"; "s": string } | { $: "RBad" } | { $: "RTooBig" } | { $: "RMissing" } | { $: "RNil" } | { $: "RCons"; "head": Raw; "tail": Raw } | { $: "REnd" } | { $: "RKey"; "key": string; "val": Raw; "rest": Raw };
 export type Schema = { $: "SNat" } | { $: "SNatIn"; "lo": bigint; "hi": bigint } | { $: "SStr" } | { $: "SStrLen"; "lo": bigint; "hi": bigint; "s": Schema } | { $: "SOpt"; "inner": Schema } | { $: "SList"; "elem": Schema } | { $: "SField"; "name": string; "s": Schema; "rest": Schema } | { $: "SEnd" } | { $: "SRule"; "s": Schema; "tag": bigint } | { $: "SStrict"; "s": Schema } | { $: "STagged"; "key": string; "name": string; "s": Schema; "rest": Schema } | { $: "STagEnd"; "key": string } | { $: "SBool" } | { $: "STrue" } | { $: "SEnum"; "names": BendList<string> } | { $: "SVariant"; "name": string; "s": Schema; "rest": Schema } | { $: "SVEnd" } | { $: "STuple"; "s": Schema; "rest": Schema } | { $: "STEnd" } | { $: "SOptional"; "inner": Schema } | { $: "SListLen"; "lo": bigint; "hi": bigint; "s": Schema };
 export type Step = { $: "AtIndex"; "i": bigint } | { $: "AtField"; "skip": bigint; "name": string } | { $: "BoundAt"; "i": bigint; "key": string } | { $: "AtKey"; "key": string };
-export type Why = { $: "Missing" } | { $: "NotNat" } | { $: "NotString" } | { $: "NotBool" } | { $: "NotList" } | { $: "NotObject" } | { $: "NoElements" } | { $: "OpenNotLast" } | { $: "LastNotOpen" } | { $: "NotIncreasing"; "prev": bigint; "got": bigint } | { $: "NotTrue" } | { $: "NotOneOf" } | { $: "NoVariant" } | { $: "TwoVariants" } | { $: "TooShort" } | { $: "TooLong" } | { $: "LengthNotIn"; "lo": bigint; "hi": bigint } | { $: "NotIn"; "lo": bigint; "hi": bigint } | { $: "UnknownKey" } | { $: "TooLarge" } | { $: "CountNotIn"; "lo": bigint; "hi": bigint };
+export type Why = { $: "Missing" } | { $: "NotNat" } | { $: "NotString" } | { $: "NotBool" } | { $: "NotList" } | { $: "NotObject" } | { $: "NoElements" } | { $: "OpenNotLast" } | { $: "LastNotOpen" } | { $: "NotIncreasing"; "prev": bigint; "got": bigint } | { $: "NotTrue" } | { $: "NotOneOf" } | { $: "NoVariant" } | { $: "TwoVariants" } | { $: "TooShort" } | { $: "TooLong" } | { $: "LengthNotIn"; "lo": bigint; "hi": bigint } | { $: "NotIn"; "lo": bigint; "hi": bigint } | { $: "UnknownKey" } | { $: "RepeatedKey"; "key": string } | { $: "TooLarge" } | { $: "CountNotIn"; "lo": bigint; "hi": bigint };
 export type Err = { $: "Err"; "path": BendList<Step>; "why": Why };
 export type Both<A, B> = { $: "Both"; "a": A; "b": B };
 
@@ -35,6 +35,9 @@ export declare function raw_list(r: Raw): boolean;
 export declare function raw_len(r: Raw): bigint;
 export declare function count_ok(lo: bigint, hi: bigint, r: Raw): boolean;
 export declare function list_len_ok(lo: bigint, hi: bigint, r: Raw): boolean;
+export declare function has_key(k: string, r: Raw): boolean;
+export declare function key_once(name: string, r: Raw): boolean;
+export declare function key_err(b: boolean, name: string): BendMaybe<Err>;
 export declare function here(w: Why): BendMaybe<Err>;
 export declare function under(st: Step, m: BendMaybe<Err>): BendMaybe<Err>;
 export declare function len_err(lo: bigint, hi: bigint, r: Raw): BendMaybe<Err>;
@@ -71,7 +74,6 @@ export declare function enum_defect(names: BendList<string>, r: Raw, p: BendList
 export declare function no_variant(p: BendList<Step>): BendMaybe<Why>;
 export declare function dup_defect(s: Schema, r: Raw, p: BendList<Step>): BendMaybe<Why>;
 export declare function at_end(w: Why, p: BendList<Step>): BendMaybe<Why>;
-export declare function has_key(k: string, r: Raw): boolean;
 export declare function extra_defect(ns: BendList<string>, r: Raw, p: BendList<Step>): BendMaybe<Why>;
 export declare function tag_defect(k: string, r: Raw, p: BendList<Step>): BendMaybe<Why>;
 export declare function check0(s: Schema, r: Raw): BendMaybe<Err>;
@@ -117,6 +119,9 @@ declare const core: {
   "raw_len"(r: Raw): bigint;
   "count_ok"(lo: bigint, hi: bigint, r: Raw): boolean;
   "list_len_ok"(lo: bigint, hi: bigint, r: Raw): boolean;
+  "has_key"(k: string, r: Raw): boolean;
+  "key_once"(name: string, r: Raw): boolean;
+  "key_err"(b: boolean, name: string): BendMaybe<Err>;
   "here"(w: Why): BendMaybe<Err>;
   "under"(st: Step, m: BendMaybe<Err>): BendMaybe<Err>;
   "len_err"(lo: bigint, hi: bigint, r: Raw): BendMaybe<Err>;
@@ -153,7 +158,6 @@ declare const core: {
   "no_variant"(p: BendList<Step>): BendMaybe<Why>;
   "dup_defect"(s: Schema, r: Raw, p: BendList<Step>): BendMaybe<Why>;
   "at_end"(w: Why, p: BendList<Step>): BendMaybe<Why>;
-  "has_key"(k: string, r: Raw): boolean;
   "extra_defect"(ns: BendList<string>, r: Raw, p: BendList<Step>): BendMaybe<Why>;
   "tag_defect"(k: string, r: Raw, p: BendList<Step>): BendMaybe<Why>;
   "check0"(s: Schema, r: Raw): BendMaybe<Err>;

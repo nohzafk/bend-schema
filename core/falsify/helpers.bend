@@ -14,6 +14,8 @@ def why_eq(x: C.Why, y: C.Why) -> Bool:
       True{}
     case C.UnknownKey{} C.UnknownKey{}:
       True{}
+    case C.RepeatedKey{a} C.RepeatedKey{b}:
+      String.eq(a, b)
     case C.NotList{} C.NotList{}:
       True{}
     case C.NotObject{} C.NotObject{}:

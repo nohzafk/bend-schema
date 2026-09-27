@@ -122,8 +122,8 @@ const MUTANTS: Mutant[] = [
     counter: "{C.conforms(~C.no_rule, C.SEnum{\"a\" <> Nil{}}, C.RStr{\"b\"}, None{}) == False{} : Bool}",
     why: "any string is accepted by a non-empty list", failsIn: "one_of" },
   { law: "variant_meaning", section: "a variant chain, read by counting",
-    from: "      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o})))",
-    to: "      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}))",
+    from: "      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o}))))",
+    to: "      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(key_once(name, RKey{k, v, o}), conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{})))",
     at: { rule: "C.no_rule", s: "C.SVariant{\"a\", C.SNat{}, C.SVariant{\"b\", C.SNat{}, C.SVEnd{}}}", r: "C.RKey{\"a\", C.RNum{1n}, C.RKey{\"b\", C.RNum{2n}, C.REnd{}}}" },
     why: "conforms stops at the first key it finds, so two keys conform", failsIn: "vm_raw" },
   { law: "check_exact", section: EXACT,
@@ -154,6 +154,10 @@ const MUTANTS: Mutant[] = [
     from: "      RBool{True{}}", to: "      RBool{False{}}",
     at: { s: "C.STrue{}", x: "Unit{}" },
     why: "enc writes false where the schema accepts only true (dec reads either, so the round trip holds)", failsIn: "ec" },
+  { law: "check_exact", section: EXACT,
+    from: "      Some{Err{AtField{0n, name} <> Nil{}, RepeatedKey{name}}}", to: "      None{}",
+    at: { rule: "C.no_rule", s: "C.SField{\"a\", C.SNat{}, C.SEnd{}}", r: "C.RKey{\"a\", C.RNum{1n}, C.RKey{\"a\", C.RNum{2n}, C.REnd{}}}", prev: "None{}" },
+    why: "a key the schema reads twice is reported as nothing, so check passes a value that does not conform", failsIn: "key_err_none" },
 ];
 
 runMutants(import.meta.dir, MUTANTS);

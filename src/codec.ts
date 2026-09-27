@@ -139,6 +139,8 @@ export function whyText(w: Why): string {
       return `must have ${w.lo} to ${w.hi} elements`;
     case "UnknownKey":
       return "is not a key this object allows";
+    case "RepeatedKey":
+      return `is a second ${w.key}`;
     case "NotIn":
       return `must be from ${w.lo} to ${w.hi}`;
     case "TooLarge":

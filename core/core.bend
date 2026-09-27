@@ -99,6 +99,7 @@ type Why is Data:
   LengthNotIn{lo: Nat, hi: Nat}
   NotIn{lo: Nat, hi: Nat}
   UnknownKey{}
+  RepeatedKey{key: String}
   TooLarge{}
   CountNotIn{lo: Nat, hi: Nat}
 
@@ -300,6 +301,62 @@ def count_ok(+lo: Nat, +hi: Nat, +r: Raw) -> Bool:
 def list_len_ok(+lo: Nat, +hi: Nat, +r: Raw) -> Bool:
   Bool.and(raw_list(r), count_ok(lo, hi, r))
 
+# ---- a key the schema reads ----
+#
+# A key the schema reads as a field key (SField) or as a variant key (SVariant)
+# must appear at most once in the value: with a key repeated, lookup reads the
+# first one and the second is unreachable, so the value says something the
+# schema cannot mean. A key the schema does not name is never read, so
+# repeating it is unobservable and is left alone.
+#
+# The tag key of a tagged case is NOT checked -- not in conforms, not in check,
+# not in defect. A case that names its own tag key encodes to a document with
+# the tag key twice (enc writes the tag, and the case's own field writes it
+# again), so requiring a tag key to appear once would refuse schemas that are
+# well formed; excluding them would need wf to reject them, which it does not.
+# A tag key repeated in the value is still accepted. This is a known hole, not
+# an oversight.
+
+# k is a key of the object r.
+def has_key(+k: String, r: Raw) -> Bool:
+  match r:
+    case RKey{j, v, o}:
+      Bool.or(String.eq(k, j), has_key(k, o))
+    case _:
+      False{}
+
+# name appears at most once among the keys of the object r. The two cases are
+# separate defs so that only one of them runs: an argument is evaluated before
+# the call, so pick_bool(String.eq(k, name), Bool.not(has_key(name, o)),
+# key_once(name, o)) would scan the rest of the object at every key and walk it
+# to the end even after finding the name.
+def key_once(+name: String, r: Raw) -> Bool:
+  match r:
+    case RKey{+k, +v, +o}:
+      key_once_at(String.eq(k, name), name, o)
+    case _:
+      True{}
+
+# The first key of r that is name is gone: no later key may be it either.
+def key_once_at(b: Bool, +name: String, r: Raw) -> Bool:
+  match b:
+    case True{}:
+      Bool.not(has_key(name, r))
+    case False{}:
+      key_once(name, r)
+
+# The repeated key as check reports it: at the key's own name, with no step
+# after it (the second occurrence is not a place in the schema). The test is
+# passed in rather than read here (a match cannot scrutinize a computed value):
+# b is key_once(name, r), so nothing is reported exactly when key_once holds,
+# which is what check_exact needs.
+def key_err(b: Bool, +name: String) -> Maybe<&2, Err>:
+  match b:
+    case True{}:
+      None{}
+    case False{}:
+      Some{Err{AtField{0n, name} <> Nil{}, RepeatedKey{name}}}
+
 # ---- what a valid value is ----
 
 def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>) -> Bool:
@@ -327,7 +384,7 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
     case SField{+name, fs, rest} REnd{}:
       Bool.and(conforms(~rule, fs, RMissing{}, None{}), conforms(~rule, rest, REnd{}, None{}))
     case SField{+name, fs, rest} RKey{+k, +v, +o}:
-      Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{}))
+      Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{})))
     case SEnd{} REnd{}:
       True{}
     case SEnd{} RKey{k, v, o}:
@@ -349,7 +406,7 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
     case SVariant{+name, +vs, +rest} REnd{}:
       conforms(~rule, rest, REnd{}, None{})
     case SVariant{+name, +vs, +rest} RKey{+k, +v, +o}:
-      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o})))
+      pick_bool(is_missing(lookup(name, RKey{k, v, o})), conforms(~rule, rest, RKey{k, v, o}, None{}), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), none_present(rest, RKey{k, v, o}))))
     case STuple{ts, rest} RCons{h, t}:
       Bool.and(conforms(~rule, ts, h, None{}), conforms(~rule, rest, t, None{}))
     case STEnd{} RNil{}:
@@ -551,7 +608,7 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
     case SField{+name, fs, rest} REnd{}:
       first(under(AtField{0n, name}, check(~rule, fs, RMissing{}, None{})), later_f(check(~rule, rest, REnd{}, None{})))
     case SField{+name, fs, rest} RKey{+k, +v, +o}:
-      first(under(AtField{0n, name}, check(~rule, fs, lookup(name, RKey{k, v, o}), None{})), later_f(check(~rule, rest, RKey{k, v, o}, None{})))
+      first(key_err(key_once(name, RKey{k, v, o}), name), first(under(AtField{0n, name}, check(~rule, fs, lookup(name, RKey{k, v, o}), None{})), later_f(check(~rule, rest, RKey{k, v, o}, None{}))))
     case SField{name, fs, rest} x:
       here(missing_or(x, NotObject{}))
     case SEnd{} REnd{}:
@@ -583,7 +640,7 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
     case SVariant{+name, +vs, +rest} REnd{}:
       later_f(check(~rule, rest, REnd{}, None{}))
     case SVariant{+name, +vs, +rest} RKey{+k, +v, +o}:
-      pick_err(is_missing(lookup(name, RKey{k, v, o})), later_f(check(~rule, rest, RKey{k, v, o}, None{})), first(under(AtField{0n, name}, check(~rule, vs, lookup(name, RKey{k, v, o}), None{})), later_f(dup_err(rest, RKey{k, v, o}))))
+      pick_err(is_missing(lookup(name, RKey{k, v, o})), later_f(check(~rule, rest, RKey{k, v, o}, None{})), first(key_err(key_once(name, RKey{k, v, o}), name), first(under(AtField{0n, name}, check(~rule, vs, lookup(name, RKey{k, v, o}), None{})), later_f(dup_err(rest, RKey{k, v, o})))))
     case SVariant{+name, +vs, +rest} x:
       here(missing_or(x, NotObject{}))
     case SVEnd{} REnd{}:
@@ -775,14 +832,6 @@ def at_end(w: Why, p: List<&2, Step>) -> Maybe<&2, Why>:
     case st <> q:
       None{}
 
-# k is a key of the object r.
-def has_key(+k: String, r: Raw) -> Bool:
-  match r:
-    case RKey{j, v, o}:
-      Bool.or(String.eq(k, j), has_key(k, o))
-    case _:
-      False{}
-
 # At a strict object the path is one key, and the replay checks it on its
 # own: the key is there, and it is not one of the names.
 def extra_defect(ns: List<&2, String>, +r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
@@ -847,8 +896,8 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       guard(conforms(~rule, fs, RMissing{}, None{}), defect(~rule, rest, REnd{}, None{}, AtField{k, n} <> q))
     case SField{+name, fs, rest} REnd{} q:
       guard(conforms(~rule, fs, RMissing{}, None{}), defect(~rule, rest, REnd{}, None{}, q))
-    case SField{+name, fs, rest} RKey{+k, +v, +o} AtField{0n, n} <> q:
-      guard(String.eq(n, name), defect(~rule, fs, lookup(name, RKey{k, v, o}), None{}, q))
+    case SField{+name, fs, rest} RKey{+k, +v, +o} AtField{0n, n} <> +q:
+      pick_why(Bool.not(key_once(name, RKey{k, v, o})), at_end(RepeatedKey{name}, q), guard(String.eq(n, name), defect(~rule, fs, lookup(name, RKey{k, v, o}), None{}, q)))
     case SField{+name, fs, rest} RKey{+k, +v, +o} AtField{1n+j, n} <> q:
       guard(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), defect(~rule, rest, RKey{k, v, o}, None{}, AtField{j, n} <> q))
     case SField{+name, fs, rest} RKey{+k, +v, +o} q:
@@ -880,7 +929,7 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
     case SVariant{+name, +vs, +rest} REnd{} q:
       defect(~rule, rest, REnd{}, None{}, q)
     case SVariant{+name, +vs, +rest} RKey{+k, +v, +o} AtField{0n, +n} <> +q:
-      pick_why(is_missing(lookup(name, RKey{k, v, o})), defect(~rule, rest, RKey{k, v, o}, None{}, AtField{0n, n} <> q), guard(String.eq(n, name), defect(~rule, vs, lookup(name, RKey{k, v, o}), None{}, q)))
+      pick_why(is_missing(lookup(name, RKey{k, v, o})), defect(~rule, rest, RKey{k, v, o}, None{}, AtField{0n, n} <> q), pick_why(Bool.not(key_once(name, RKey{k, v, o})), at_end(RepeatedKey{name}, q), guard(String.eq(n, name), defect(~rule, vs, lookup(name, RKey{k, v, o}), None{}, q))))
     case SVariant{+name, +vs, +rest} RKey{+k, +v, +o} AtField{1n+j, +n} <> +q:
       pick_why(is_missing(lookup(name, RKey{k, v, o})), defect(~rule, rest, RKey{k, v, o}, None{}, AtField{j, n} <> q), guard(conforms(~rule, vs, lookup(name, RKey{k, v, o}), None{}), dup_defect(rest, RKey{k, v, o}, AtField{j, n} <> q)))
     case SVariant{+name, +vs, +rest} RKey{+k, +v, +o} +q:
