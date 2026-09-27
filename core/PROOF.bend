@@ -2721,8 +2721,8 @@ def tag_other(+k: String, +n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fres
 def skip_f(+n: String, s: C.Schema, +v: C.Raw, +o: C.Raw, +hf: {C.fresh_f(n, s) == True{} : Bool}) -> {C.dec(s, o) == C.dec(s, C.RKey{n, v, o}) : Maybe<&2, C.Meaning(s)>}:
   match s:
     case C.SField{+m, +fs, +rest}:
-      %not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf)) : {C.dec(C.SField{m, fs, rest}, o) == C.both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.pick_raw(_, v, C.lookup(m, o))), C.dec(rest, C.RKey{n, v, o})) : Maybe<&2, C.Both<C.Meaning(fs), C.Meaning(rest)>>}
-      %skip_f(n, rest, v, o, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf)) : {C.dec(C.SField{m, fs, rest}, o) == C.both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.lookup(m, o)), _) : Maybe<&2, C.Both<C.Meaning(fs), C.Meaning(rest)>>}
+      %not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf))) : {C.dec(C.SField{m, fs, rest}, o) == C.both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.pick_raw(_, v, C.lookup(m, o))), C.dec(rest, C.RKey{n, v, o})) : Maybe<&2, C.Both<C.Meaning(fs), C.Meaning(rest)>>}
+      %skip_f(n, rest, v, o, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf))) : {C.dec(C.SField{m, fs, rest}, o) == C.both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.lookup(m, o)), _) : Maybe<&2, C.Both<C.Meaning(fs), C.Meaning(rest)>>}
       {==}
     case C.SEnd{}:
       {==}
@@ -3427,6 +3427,56 @@ def np(+n: String, s: C.Schema, +v: C.Raw, +hf: {C.fresh_v(n, s) == True{} : Boo
     case C.STEnd{}:
       {==}
 
+# n is not a key of what enc writes for the record chain s: enc writes the
+# chain's own keys and nothing else, and the chain names none of them n. The
+# key test is read with its flag already set -- the read that set it is the
+# schema's own first key, and this says the walk past it never reads n again.
+def key_once_enc(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_f(n, s) == True{} : Bool}) -> {True{} == C.key_once_at(C.enc(s, x), True{}, n) : Bool}:
+  match s x:
+    case C.SBool{} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SBool{}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SNatIn{lo_, hi_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s2} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SStrLen{lo_, hi_, s2}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SNat{} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SNat{}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SStr{} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SStr{}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SOpt{i_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SOpt{i_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SList{e_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SList{e_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SField{+m, +fs, +rest} C.Both{+a, +b}:
+      %not_true(String.eq(m, n), and_l(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)) : {True{} == Bool.and(Bool.not(_), C.key_once_at(C.enc(rest, b), True{}, n)) : Bool}
+      key_once_enc(n, rest, b, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)))
+    case C.SEnd{} Unit{}:
+      {==}
+    case C.SRule{s2_, tag_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SRule{s2_, tag_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SStrict{s2_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SStrict{s2_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.STagged{k_, n_, cs_, rest_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.STagged{k_, n_, cs_, rest_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.STagEnd{k_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.STagEnd{k_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.STrue{} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.STrue{}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SEnum{names_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SEnum{names_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SVariant{k_, vs_, rest_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SVariant{k_, vs_, rest_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SVEnd{} e:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SVEnd{}, e), True{}, n) : Bool}, e)
+    case C.STuple{ts_, rest_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.STuple{ts_, rest_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.STEnd{} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.STEnd{}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SOptional{i_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SOptional{i_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SListLen{lo_, hi_, s2_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SListLen{lo_, hi_, s2_}, v), True{}, n) : Bool}, to_empty(hf))
+
 # A present value of an optional schema conforms as its inner schema does.
 def opt_conf(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, i: C.Schema, r: C.Raw, +hn: {False{} == C.nullish(r) : Bool}) -> {C.conforms(~rule, i, r, None{}) == C.conforms(~rule, C.SOpt{i}, r, None{}) : Bool}:
   match r:
@@ -3637,13 +3687,13 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
     case C.SField{+m, +fs, +rest} C.RCons{head__, tail__}:
       Empty.absurd({C.conforms(~rule, C.SField{m, fs, rest}, C.RCons{head__, tail__}, None{}) == C.conforms(~rule, C.SField{m, fs, rest}, C.RKey{n, v, C.RCons{head__, tail__}}, None{}) : Bool}, to_empty(ho))
     case C.SField{+m, +fs, +rest} C.REnd{}:
-      %lk_skip(n, m, v, C.REnd{}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{})) == Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.REnd{}}, None{})) : Bool}
-      %skip_c(~rule, n, rest, v, C.REnd{}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf), {==}) : {Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{})) == Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), _) : Bool}
+      %lk_skip(n, m, v, C.REnd{}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)))) : {Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{})) == Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.REnd{}}, None{})) : Bool}
+      %skip_c(~rule, n, rest, v, C.REnd{}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)), {==}) : {Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{})) == Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), _) : Bool}
       {==}
     case C.SField{+m, +fs, +rest} C.RKey{+k, +w, +o2}:
-      %kc_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(_, Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{n, v, C.RKey{k, w, o2}}), None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
-      %lk_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
-      %skip_c(~rule, n, rest, v, C.RKey{k, w, o2}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf), {==}) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), _)) : Bool}
+      %kc_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(_, Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{n, v, C.RKey{k, w, o2}}), None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
+      %lk_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
+      %skip_c(~rule, n, rest, v, C.RKey{k, w, o2}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), and_r(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), C.fresh_f(n, rest)), hf)), {==}) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), _)) : Bool}
       {==}
     case C.SEnd{} C.RNum{n__}:
       Empty.absurd({C.conforms(~rule, C.SEnd{}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SEnd{}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
@@ -4063,7 +4113,9 @@ def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.na
     case C.SList{+e} +h <> +t:
       and_true2(C.conforms(~C.no_rule, e, C.enc(e, h), None{}), C.conforms(~C.no_rule, C.SList{e}, C.enc(C.SList{e}, t), None{}), ec(e, h, and_r(Bool.not(C.opt_at(e)), C.wf(e), hw), and_l(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn), and_l(C.bounds_ok(e, h), C.bounds_ok(C.SList{e}, t), hb)), ec(C.SList{e}, t, hw, and_r(C.names_ok(e, h), C.names_ok(C.SList{e}, t), hn), and_r(C.bounds_ok(e, h), C.bounds_ok(C.SList{e}, t), hb)))
     case C.SField{+n, +fs, +rest} C.Both{+a, +b}:
-      %lk_self(n, C.enc(fs, a), C.enc(rest, b)) : {Bool.and(C.conforms(~C.no_rule, fs, _, None{}), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(fs, a), C.enc(rest, b)}, None{})) == True{} : Bool}
+      %lk_self(n, C.enc(fs, a), C.enc(rest, b)) : {Bool.and(C.key_once_at(C.enc(rest, b), String.eq(n, n), n), Bool.and(C.conforms(~C.no_rule, fs, _, None{}), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(fs, a), C.enc(rest, b)}, None{}))) == True{} : Bool}
+      %MS.eq_refl_sym(n) : {Bool.and(C.key_once_at(C.enc(rest, b), _, n), Bool.and(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(fs, a), C.enc(rest, b)}, None{}))) == True{} : Bool}
+      %key_once_enc(n, rest, b, and_l(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw))) : {Bool.and(_, Bool.and(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(fs, a), C.enc(rest, b)}, None{}))) == True{} : Bool}
       %skip_c(~C.no_rule, n, rest, C.enc(fs, a), C.enc(rest, b), and_l(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)), obj_f(n, rest, b, and_l(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)))) : {Bool.and(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), _) == True{} : Bool}
       and_true2(C.conforms(~C.no_rule, fs, C.enc(fs, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(fs, a, and_l(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw), and_l(C.names_ok(fs, a), C.names_ok(rest, b), hn), and_l(C.bounds_ok(fs, a), C.bounds_ok(rest, b), hb)), ec(rest, b, and_r(C.fresh_f(n, rest), C.wf(rest), and_r(C.wf(fs), Bool.and(C.fresh_f(n, rest), C.wf(rest)), hw)), and_r(C.names_ok(fs, a), C.names_ok(rest, b), hn), and_r(C.bounds_ok(fs, a), C.bounds_ok(rest, b), hb)))
     case C.SEnd{} Unit{}:

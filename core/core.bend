@@ -1347,11 +1347,14 @@ def nullable(s: Schema) -> Bool:
     case _:
       False{}
 
-# n is not a key of the record chain s (a chain ends in SEnd).
+# n is not a key of the record chain s (a chain ends in SEnd). Both orders are
+# asked, as fresh_v asks them: which of the two names a step puts first depends
+# on which of them is the value's key there, and asking both spares a proof
+# that String.eq is symmetric.
 def fresh_f(+n: String, s: Schema) -> Bool:
   match s:
-    case SField{m, fs, rest}:
-      Bool.and(Bool.not(String.eq(n, m)), fresh_f(n, rest))
+    case SField{+m, fs, rest}:
+      Bool.and(Bool.not(String.eq(m, n)), Bool.and(Bool.not(String.eq(n, m)), fresh_f(n, rest)))
     case SEnd{}:
       True{}
     case _:
