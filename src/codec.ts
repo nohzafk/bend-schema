@@ -15,7 +15,7 @@
 // TooLarge at that node's path. Nothing here is a rule about values: a size is
 // not a shape, and a host cannot choose the sizes it is sent.
 
-import type { BendList, BendMaybe, Err, Raw, Step, Why } from "../dist-core/core.js";
+import type { BendList, BendMaybe, Err, Raw, Step, Why } from "../dist-core/core.mjs";
 
 // The largest Nat the runtime holds: bend's own Nat.add(Nat.mul(65535,
 // 4294967295 + 1), 4294967295). A number past it is not a Nat at all, so it

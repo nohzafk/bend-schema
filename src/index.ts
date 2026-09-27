@@ -6,8 +6,8 @@
 // the core's Meaning values and plain JS, and `.refine()` predicates, whose
 // errors say `proved: false`.
 
-import * as core from "../dist-core/core.js";
-import type { BendList, Schema as Node, Step } from "../dist-core/core.js";
+import * as core from "../dist-core/core.mjs";
+import type { BendList, Schema as Node, Step } from "../dist-core/core.mjs";
 import { toRaw, whyText } from "./codec.ts";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
@@ -15,7 +15,7 @@ import { toRaw, whyText } from "./codec.ts";
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
 export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec.ts";
-export type { Raw } from "../dist-core/core.js";
+export type { Raw } from "../dist-core/core.mjs";
 
 // ------------------------------------------------------------------ issues
 

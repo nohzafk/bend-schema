@@ -100,7 +100,7 @@ Write a schema once in TypeScript, use it in a Bend function whose laws you
 prove, and call that function from TypeScript again. The loop is:
 
 ```
-schema.ts ──gen──▶ schema.bend ──import──▶ core.bend ──bend-emit──▶ dist/core.js ──import──▶ app.ts
+schema.ts ──gen──▶ schema.bend ──import──▶ core.bend ──bend-emit──▶ dist/core.mjs ──import──▶ app.ts
 ```
 
 **1. Export your schemas** from a TypeScript module:
@@ -148,7 +148,7 @@ laws in `core/LAWS.bend`.
 
 ```sh
 bun add -d github:nohzafk/bend-emit
-bunx bend-emit core.bend dist       # writes dist/core.js and dist/core.d.ts
+bunx bend-emit core.bend dist       # writes dist/core.mjs and dist/core.d.mts
 ```
 
 **5. Call it from TypeScript.** `toRaw` converts a JSON value into the
@@ -157,7 +157,7 @@ core's `Raw` input:
 ```ts
 // app.ts
 import { toRaw } from "bend-schema";
-import { config_ok } from "./dist/core.js";
+import { config_ok } from "./dist/core.mjs";
 
 config_ok(toRaw({ name: "a", seats: 3 }));    // true
 config_ok(toRaw({ name: "a", seats: 999 }));  // false

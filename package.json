@@ -5,8 +5,8 @@
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.2.0",
-    "bend-emit": "github:nohzafk/bend-emit",
-    "bend-falsify": "github:nohzafk/bend-falsify#fa5e717",
+    "bend-emit": "github:nohzafk/bend-emit#3088cbd",
+    "bend-falsify": "github:nohzafk/bend-falsify#a50873f",
     "typescript": "^7.0.2"
   },
   "exports": {

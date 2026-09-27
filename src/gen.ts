@@ -15,7 +15,7 @@
 // (`type Schema is Data:`), which is why this file goes with bend-schema rather
 // than in a package of its own: a new constructor touches both.
 
-import type { BendList, Schema as Node } from "../dist-core/core.js";
+import type { BendList, Schema as Node } from "../dist-core/core.mjs";
 import type { Schema } from "./index.ts";
 
 const q = (s: string) => JSON.stringify(s);
