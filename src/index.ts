@@ -14,7 +14,7 @@ import { toRaw, whyText } from "./codec.ts";
 // bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, KEYS_MAX, toRaw } from "./codec.ts";
+export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec.ts";
 export type { Raw } from "../dist-core/core.js";
 
 // ------------------------------------------------------------------ issues

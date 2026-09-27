@@ -17,7 +17,22 @@
 
 import type { BendList, BendMaybe, Err, Raw, Step, Why } from "../dist-core/core.js";
 
-const NAT_MAX = 2 ** 48 - 1;
+// The largest Nat the runtime holds: bend's own Nat.add(Nat.mul(65535,
+// 4294967295 + 1), 4294967295). A number past it is not a Nat at all, so it
+// is not a value the core can be given.
+export const NAT_MAX = 2 ** 48 - 1;
+
+// `nat(name, v)` is v when the runtime can hold it as a Nat, and an Error
+// otherwise. It is toRaw's RNum rule, thrown instead of reported: a host that
+// must refuse a number before building anything -- billing's `units`, which is
+// not part of the plan it checks -- needs the refusal here, and the message
+// names the field, the bound and the value.
+export function nat(name: string, v: number): number {
+  if (!Number.isSafeInteger(v) || v < 0 || v > NAT_MAX) {
+    throw new Error(`${name} must be a whole number from 0 to ${NAT_MAX} (${name}=${v})`);
+  }
+  return v;
+}
 
 // The most list elements and object keys one value may hold, counted over
 // every level of nesting and summed: `[[1,2],[3]]` is 2 + 3 = 5. Past it, a

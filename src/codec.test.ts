@@ -10,7 +10,7 @@
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.js";
 import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.js";
-import { BUDGET, KEYS_MAX, errText, toRaw } from "./codec";
+import { BUDGET, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toRaw } from "./codec";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit
@@ -242,5 +242,29 @@ describe("a bound a host can write", () => {
     expect(dec(three, enc(three, "abcd"))).toEqual({ $: "Some", value: "abcd" });
     const r = check(three, enc(three, "abcd"));
     expect(r.$ === "None" ? null : errText(r.value)).toBe("the value: must be 1 to 3 characters long");
+  });
+});
+
+describe("the host-side Nat guard", () => {
+  // nat is toRaw's RNum rule thrown rather than reported, so the two must
+  // agree on where the bound is: the same numbers, one as RNum/RBad, one as v
+  // or a refusal. A host that writes a number into the core's input needs the
+  // refusal before it builds anything, and the message must name the field,
+  // the bound and the value.
+  test("it returns the value where toRaw says RNum, and refuses where it says RBad", () => {
+    for (const v of [0, 1, 2 ** 48 - 1, NAT_MAX]) {
+      expect(hostNat("units", v)).toBe(v);
+      expect(toRaw(v)).toEqual({ $: "RNum", n: BigInt(v) });
+    }
+    for (const v of [2 ** 48, -1, 1.5, NaN, Infinity, 2 ** 53]) {
+      expect(toRaw(v)).toEqual({ $: "RBad" });
+      expect(() => hostNat("units", v)).toThrow();
+    }
+  });
+
+  test("NAT_MAX is the largest the runtime holds, and the refusal names all three", () => {
+    expect(NAT_MAX).toBe(2 ** 48 - 1);
+    expect(hostNat("units", NAT_MAX)).toBe(NAT_MAX);
+    expect(() => hostNat("units", NAT_MAX + 1)).toThrow(`units must be a whole number from 0 to ${NAT_MAX} (units=${NAT_MAX + 1})`);
   });
 });
