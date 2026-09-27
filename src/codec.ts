@@ -22,13 +22,16 @@ import type { BendList, BendMaybe, Err, Raw, Step, Why } from "../dist-core/core
 // is not a value the core can be given.
 export const NAT_MAX = 2 ** 48 - 1;
 
+// One rule, two ways out: the runtime holds v as a Nat, or it does not.
+const natFit = (v: number): boolean => Number.isSafeInteger(v) && v >= 0 && v <= NAT_MAX;
+
 // `nat(name, v)` is v when the runtime can hold it as a Nat, and an Error
 // otherwise. It is toRaw's RNum rule, thrown instead of reported: a host that
 // must refuse a number before building anything -- billing's `units`, which is
 // not part of the plan it checks -- needs the refusal here, and the message
 // names the field, the bound and the value.
 export function nat(name: string, v: number): number {
-  if (!Number.isSafeInteger(v) || v < 0 || v > NAT_MAX) {
+  if (!natFit(v)) {
     throw new Error(`${name} must be a whole number from 0 to ${NAT_MAX} (${name}=${v})`);
   }
   return v;
@@ -76,7 +79,7 @@ export function toRaw(v: unknown): Raw {
   let left = BUDGET;
   const build = (v: unknown): Raw => {
     if (v === null) return { $: "RNull" };
-    if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 && v <= NAT_MAX ? { $: "RNum", n: BigInt(v) } : { $: "RBad" };
+    if (typeof v === "number") return natFit(v) ? { $: "RNum", n: BigInt(v) } : { $: "RBad" };
     if (typeof v === "boolean") return { $: "RBool", b: v };
     if (typeof v === "string") return { $: "RStr", s: v };
     if (Array.isArray(v)) {
