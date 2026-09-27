@@ -157,7 +157,11 @@ const MUTANTS: Mutant[] = [
   { law: "check_exact", section: EXACT,
     from: "      Some{Err{AtField{0n, name} <> Nil{}, RepeatedKey{name}}}", to: "      None{}",
     at: { rule: "C.no_rule", s: "C.SField{\"a\", C.SNat{}, C.SEnd{}}", r: "C.RKey{\"a\", C.RNum{1n}, C.RKey{\"a\", C.RNum{2n}, C.REnd{}}}", prev: "None{}" },
-    why: "a key the schema reads twice is reported as nothing, so check passes a value that does not conform", failsIn: "key_err_none" },
+    // With the report gone, the proof dies in the lemma that reads the report
+    // as the test's absence, not in the test itself (the def this row used to
+    // name, key_err_none, has never existed): a report that stops is not a
+    // key_once that is wrong.
+    why: "a key the schema reads twice is reported as nothing, so check passes a value that does not conform", failsIn: "none_key_err" },
 ];
 
 runMutants(import.meta.dir, MUTANTS);

@@ -972,7 +972,9 @@ def conforms0(s: Schema, r: Raw) -> Bool:
 #
 # A second reading of a variant chain, by counting: the value is an object,
 # exactly one of the chain's keys is in it, and every key that is there holds
-# a value that conforms.
+# a value that conforms. A key that is there is read the way conforms reads
+# it, key_once included: a key the chain names, taken twice, is not read once,
+# so the counting reading refuses it exactly where conforms does.
 
 def is_chain(s: Schema) -> Bool:
   match s:
@@ -1009,7 +1011,7 @@ def count_present(s: Schema, +r: Raw) -> Nat:
 def present_conform(~rule: Nat -> Raw -> Maybe<&2, Err>, +s: Schema, +r: Raw) -> Bool:
   match s:
     case SVariant{+n, vs, rest}:
-      Bool.and(Bool.or(is_missing(lookup(n, r)), conforms(~rule, vs, lookup(n, r), None{})), present_conform(~rule, rest, r))
+      pick_bool(is_missing(lookup(n, r)), present_conform(~rule, rest, r), Bool.and(key_once(n, r), Bool.and(conforms(~rule, vs, lookup(n, r), None{}), present_conform(~rule, rest, r))))
     case _:
       True{}
 

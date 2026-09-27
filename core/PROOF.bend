@@ -2203,7 +2203,7 @@ def count_zero(s: C.Schema, +r: C.Raw) -> {Nat.is_eq(C.count_present(s, r), 0n) 
     case C.SListLen{lo_, hi_, s_}:
       {==}
 
-def np_pc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +cv: Bool, +c2: Bool, +rr: C.Schema, +r: C.Raw, ih: {Bool.and(cv, C.none_present(rr, r)) == Bool.and(C.none_present(rr, r), Bool.and(cv, C.present_conform(~rule, rr, r))) : Bool}) -> {Bool.and(cv, Bool.and(b, C.none_present(rr, r))) == Bool.and(Bool.and(b, C.none_present(rr, r)), Bool.and(cv, Bool.and(Bool.or(b, c2), C.present_conform(~rule, rr, r)))) : Bool}:
+def np_pc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +cv: Bool, +vn: String, +vv: C.Schema, +rr: C.Schema, +r: C.Raw, ih: {Bool.and(cv, C.none_present(rr, r)) == Bool.and(C.none_present(rr, r), Bool.and(cv, C.present_conform(~rule, rr, r))) : Bool}) -> {Bool.and(cv, Bool.and(b, C.none_present(rr, r))) == Bool.and(Bool.and(b, C.none_present(rr, r)), Bool.and(cv, C.pick_bool(b, C.present_conform(~rule, rr, r), Bool.and(C.key_once(vn, r), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.present_conform(~rule, rr, r)))))) : Bool}:
   match b:
     case True{}:
       ih
@@ -2246,7 +2246,7 @@ def np_pc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +r: C.Raw, +cv: 
     case C.SEnum{names_}:
       {==}
     case C.SVariant{+vn, +vv, +vr}:
-      np_pc_step(~rule, C.is_missing(C.lookup(vn, r)), cv, C.conforms(~rule, vv, C.lookup(vn, r), None{}), vr, r, np_pc(~rule, vr, r, cv))
+      np_pc_step(~rule, C.is_missing(C.lookup(vn, r)), cv, vn, vv, vr, r, np_pc(~rule, vr, r, cv))
     case C.SVEnd{}:
       {==}
     case C.STuple{s_, rest_}:
@@ -2258,13 +2258,23 @@ def np_pc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +r: C.Raw, +cv: 
     case C.SListLen{lo_, hi_, s_}:
       {==}
 
-def var_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +r: C.Raw, ih: {C.conforms(~rule, vr, r, None{}) == Bool.and(True{}, Bool.and(Nat.is_eq(C.count_present(vr, r), 1n), C.present_conform(~rule, vr, r))) : Bool}) -> {C.pick_bool(b, C.conforms(~rule, vr, r, None{}), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r))) == Bool.and(Nat.is_eq(Nat.add(C.one_if_there(b), C.count_present(vr, r)), 1n), Bool.and(Bool.or(b, C.conforms(~rule, vv, C.lookup(vn, r), None{})), C.present_conform(~rule, vr, r))) : Bool}:
+# The key's own case, in two splits. b is whether the chain's key is in the
+# value: an absent key adds nothing to the count and says nothing of the
+# value, which is the IH untouched. A key that is there adds 1, so the rest
+# must hold none (count_zero turned round) and the value under the key must
+# conform (np_pc) -- and it must be read once (k0), which is what conforms
+# asks at the same place; a key taken twice leaves false on both sides.
+def var_key(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, k0: Bool, +vn: String, +vv: C.Schema, +vr: C.Schema, +r: C.Raw, +kc: {k0 == C.key_once(vn, r) : Bool}, ih: {C.conforms(~rule, vr, r, None{}) == Bool.and(True{}, Bool.and(Nat.is_eq(C.count_present(vr, r), 1n), C.present_conform(~rule, vr, r))) : Bool}) -> {C.pick_bool(b, C.conforms(~rule, vr, r, None{}), Bool.and(k0, Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)))) == Bool.and(Nat.is_eq(Nat.add(C.one_if_there(b), C.count_present(vr, r)), 1n), C.pick_bool(b, C.present_conform(~rule, vr, r), Bool.and(k0, Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.present_conform(~rule, vr, r))))) : Bool}:
   match b:
     case True{}:
       ih
     case False{}:
-      %Equal.sym(Bool, Nat.is_eq(C.count_present(vr, r), 0n), C.none_present(vr, r), count_zero(vr, r)) : {Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)) == Bool.and(_, Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.present_conform(~rule, vr, r))) : Bool}
-      np_pc(~rule, vr, r, C.conforms(~rule, vv, C.lookup(vn, r), None{}))
+      match k0:
+        case True{}:
+          %Equal.sym(Bool, Nat.is_eq(C.count_present(vr, r), 0n), C.none_present(vr, r), count_zero(vr, r)) : {Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.none_present(vr, r)) == Bool.and(_, Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.present_conform(~rule, vr, r))) : Bool}
+          np_pc(~rule, vr, r, C.conforms(~rule, vv, C.lookup(vn, r), None{}))
+        case False{}:
+          Equal.sym(Bool, Bool.and(Nat.is_eq(Nat.add(C.one_if_there(b), C.count_present(vr, r)), 1n), False{}), False{}, and_false_l(Nat.is_eq(Nat.add(C.one_if_there(b), C.count_present(vr, r)), 1n)))
 
 def vm_raw(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, r: C.Raw, +vn: String, +vv: C.Schema, +vr: C.Schema, hc: {C.is_chain(vr) == True{} : Bool}, ih: @rr:C.Raw -> {C.conforms(~rule, vr, rr, None{}) == Bool.and(C.is_object(rr), Bool.and(Nat.is_eq(C.count_present(vr, rr), 1n), C.present_conform(~rule, vr, rr))) : Bool}) -> {C.conforms(~rule, C.SVariant{vn, vv, vr}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SVariant{vn, vv, vr}, r), 1n), C.present_conform(~rule, C.SVariant{vn, vv, vr}, r))) : Bool}:
   match r:
@@ -2289,7 +2299,7 @@ def vm_raw(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, r: C.Raw, +vn: String, +vv: 
     case C.REnd{}:
       ih(C.REnd{})
     case C.RKey{+k, +v, +o}:
-      var_key(~rule, C.is_missing(C.lookup(vn, C.RKey{k, v, o})), vn, vv, vr, C.RKey{k, v, o}, ih(C.RKey{k, v, o}))
+      var_key(~rule, C.is_missing(C.lookup(vn, C.RKey{k, v, o})), C.key_once(vn, C.RKey{k, v, o}), vn, vv, vr, C.RKey{k, v, o}, {==}, ih(C.RKey{k, v, o}))
 
 # arms: s
 # arms leaf: Empty.absurd({C.conforms(~rule, $S, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present($S, r), 1n), C.present_conform(~rule, $S, r))) : Bool}, to_empty(hc))
@@ -2442,6 +2452,24 @@ def and_r(a: Bool, +b: Bool, h: {Bool.and(a, b) == True{} : Bool}) -> {b == True
     case False{}:
       Empty.absurd({b == True{} : Bool}, to_empty(h))
 
+# The two conjuncts behind the key test. A key a schema reads that is in the
+# value carries key_once first, and what conforms asks at that key and after
+# it come behind it; a premise that says the whole conjunction holds is read
+# as either of the two, for the value under the key (l) or for the rest (r).
+def and_key_l(a: Bool, +b: Bool, +c: Bool, h: {Bool.and(a, Bool.and(b, c)) == True{} : Bool}) -> {b == True{} : Bool}:
+  match a:
+    case True{}:
+      and_l(b, c, h)
+    case False{}:
+      Empty.absurd({b == True{} : Bool}, to_empty(h))
+
+def and_key_r(a: Bool, +b: Bool, +c: Bool, h: {Bool.and(a, Bool.and(b, c)) == True{} : Bool}) -> {c == True{} : Bool}:
+  match a:
+    case True{}:
+      and_r(b, c, h)
+    case False{}:
+      Empty.absurd({c == True{} : Bool}, to_empty(h))
+
 def not_true(b: Bool, h: {Bool.not(b) == True{} : Bool}) -> {False{} == b : Bool}:
   match b:
     case True{}:
@@ -2515,6 +2543,13 @@ def lk_self(+n: String, +v: C.Raw, +o: C.Raw) -> {v == C.lookup(n, C.RKey{n, v, 
 # Reading past a key of another name.
 def lk_skip(+n: String, +m: String, +v: C.Raw, +o: C.Raw, ne: {False{} == String.eq(n, m) : Bool}) -> {C.lookup(m, o) == C.lookup(m, C.RKey{n, v, o}) : C.Raw}:
   %ne : {C.lookup(m, o) == C.pick_raw(_, v, C.lookup(m, o)) : C.Raw}
+  {==}
+
+# The same for the key test: a key of another name is compared to m and never
+# matches, so it can be neither the first read of m nor a second one, and the
+# test reads the same past it as without it.
+def kc_skip(+n: String, +m: String, +v: C.Raw, +o: C.Raw, ne: {False{} == String.eq(n, m) : Bool}) -> {C.key_once(m, o) == C.key_once(m, C.RKey{n, v, o}) : Bool}:
+  %ne : {C.key_once(m, o) == C.key_once_at(o, _, m) : Bool}
   {==}
 
 # A key no variant of a well-formed chain names is absent from what enc
@@ -2858,12 +2893,12 @@ def some_inr(-A: Data, -B: Data, m: Maybe<&2, B>, h: {Maybe.is_some(&2, B, m) ==
       Empty.absurd({Maybe.is_some(&2, Either<&2, &2, A, B>, C.map_inr(A, B, None{})) == True{} : Bool}, to_empty(h))
 
 # The variant case: by whether the key is there.
-def cd_var(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vs: C.Schema, +rest: C.Schema, +n: String, +x: C.Raw, ihr: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(rest), C.dec(rest, x)) == True{} : Bool}, ihv: {C.conforms(~rule, vs, C.lookup(n, x), None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(vs), C.dec(vs, C.lookup(n, x))) == True{} : Bool}, hc: {C.pick_bool(b, C.conforms(~rule, rest, x, None{}), Bool.and(C.conforms(~rule, vs, C.lookup(n, x), None{}), C.none_present(rest, x))) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>, C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>, b, C.map_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, x)), C.map_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.lookup(n, x))))) == True{} : Bool}:
+def cd_var(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +vs: C.Schema, +rest: C.Schema, +n: String, +x: C.Raw, ihr: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(rest), C.dec(rest, x)) == True{} : Bool}, ihv: {C.conforms(~rule, vs, C.lookup(n, x), None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(vs), C.dec(vs, C.lookup(n, x))) == True{} : Bool}, hc: {C.pick_bool(b, C.conforms(~rule, rest, x, None{}), Bool.and(C.key_once(n, x), Bool.and(C.conforms(~rule, vs, C.lookup(n, x), None{}), C.none_present(rest, x)))) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>, C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>, b, C.map_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, x)), C.map_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.lookup(n, x))))) == True{} : Bool}:
   match b:
     case True{}:
       some_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, x), ihr(hc))
     case False{}:
-      some_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.lookup(n, x)), ihv(and_l(C.conforms(~rule, vs, C.lookup(n, x), None{}), C.none_present(rest, x), hc)))
+      some_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.lookup(n, x)), ihv(and_key_l(C.key_once(n, x), C.conforms(~rule, vs, C.lookup(n, x), None{}), C.none_present(rest, x), hc)))
 
 def cd_tag(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +cs: C.Schema, +rest: C.Schema, +xd: C.Raw, +x: C.Raw, ihc: {C.conforms(~rule, cs, xd, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(cs), C.dec(cs, xd)) == True{} : Bool}, ihr: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {Maybe.is_some(&2, C.Meaning(rest), C.dec(rest, x)) == True{} : Bool}, hc: {C.pick_bool(b, C.conforms(~rule, cs, xd, None{}), C.conforms(~rule, rest, x, None{})) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>, C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(cs), C.Meaning(rest)>>, b, C.map_inl(C.Meaning(cs), C.Meaning(rest), C.dec(cs, xd)), C.map_inr(C.Meaning(cs), C.Meaning(rest), C.dec(rest, x)))) == True{} : Bool}:
   match b:
@@ -3016,7 +3051,7 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
     case C.SField{+fn, +fs, +rest} C.REnd{}:
       some_both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.RMissing{}), C.dec(rest, C.REnd{}), cd(~rule, fs, C.RMissing{}, and_l(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{}), hc)), cd(~rule, rest, C.REnd{}, and_r(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{}), hc)))
     case C.SField{+fn, +fs, +rest} C.RKey{+k, +v, +o}:
-      some_both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.lookup(fn, C.RKey{k, v, o})), C.dec(rest, C.RKey{k, v, o}), cd(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), and_l(C.conforms(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}), hc)), cd(~rule, rest, C.RKey{k, v, o}, and_r(C.conforms(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}), hc)))
+      some_both(C.Meaning(fs), C.Meaning(rest), C.dec(fs, C.lookup(fn, C.RKey{k, v, o})), C.dec(rest, C.RKey{k, v, o}), cd(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), and_key_l(C.key_once(fn, C.RKey{k, v, o}), C.conforms(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}), hc)), cd(~rule, rest, C.RKey{k, v, o}, and_key_r(C.key_once(fn, C.RKey{k, v, o}), C.conforms(~rule, fs, C.lookup(fn, C.RKey{k, v, o}), None{}), C.conforms(~rule, rest, C.RKey{k, v, o}, None{}), hc)))
     case C.SEnd{} C.RNum{n}:
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SEnd{}), C.dec(C.SEnd{}, C.RNum{n})) == True{} : Bool}, to_empty(hc))
     case C.SEnd{} C.RBool{+bb}:
@@ -3424,7 +3459,7 @@ def var_skip(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, +vs: C.Schema,
     case C.REnd{}:
       {==}
     case C.RKey{+k, +w, +o}:
-      %hm : {C.conforms(~rule, rest, C.RKey{k, w, o}, None{}) == C.pick_bool(_, C.conforms(~rule, rest, C.RKey{k, w, o}, None{}), Bool.and(C.conforms(~rule, vs, C.lookup(n, C.RKey{k, w, o}), None{}), C.none_present(rest, C.RKey{k, w, o}))) : Bool}
+      %hm : {C.conforms(~rule, rest, C.RKey{k, w, o}, None{}) == C.pick_bool(_, C.conforms(~rule, rest, C.RKey{k, w, o}, None{}), Bool.and(C.key_once(n, C.RKey{k, w, o}), Bool.and(C.conforms(~rule, vs, C.lookup(n, C.RKey{k, w, o}), None{}), C.none_present(rest, C.RKey{k, w, o})))) : Bool}
       {==}
     case C.RNum{n_}:
       Empty.absurd({C.conforms(~rule, rest, C.RNum{n_}, None{}) == C.conforms(~rule, C.SVariant{n, vs, rest}, C.RNum{n_}, None{}) : Bool}, to_empty(ho))
@@ -3606,8 +3641,9 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
       %skip_c(~rule, n, rest, v, C.REnd{}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf), {==}) : {Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), C.conforms(~rule, rest, C.REnd{}, None{})) == Bool.and(C.conforms(~rule, fs, C.RMissing{}, None{}), _) : Bool}
       {==}
     case C.SField{+m, +fs, +rest} C.RKey{+k, +w, +o2}:
-      %lk_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{})) == Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{})) : Bool}
-      %skip_c(~rule, n, rest, v, C.RKey{k, w, o2}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf), {==}) : {Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{})) == Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), _) : Bool}
+      %kc_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(_, Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{n, v, C.RKey{k, w, o2}}), None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
+      %lk_skip(n, m, v, C.RKey{k, w, o2}, not_true(String.eq(n, m), and_l(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf))) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, _, None{}), C.conforms(~rule, rest, C.RKey{n, v, C.RKey{k, w, o2}}, None{}))) : Bool}
+      %skip_c(~rule, n, rest, v, C.RKey{k, w, o2}, and_r(Bool.not(String.eq(n, m)), C.fresh_f(n, rest), hf), {==}) : {Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), C.conforms(~rule, rest, C.RKey{k, w, o2}, None{}))) == Bool.and(C.key_once(m, C.RKey{k, w, o2}), Bool.and(C.conforms(~rule, fs, C.lookup(m, C.RKey{k, w, o2}), None{}), _)) : Bool}
       {==}
     case C.SEnd{} C.RNum{n__}:
       Empty.absurd({C.conforms(~rule, C.SEnd{}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SEnd{}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
