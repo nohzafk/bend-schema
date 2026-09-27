@@ -162,6 +162,18 @@ const MUTANTS: Mutant[] = [
     // name, key_err_none, has never existed): a report that stops is not a
     // key_once that is wrong.
     why: "a key the schema reads twice is reported as nothing, so check passes a value that does not conform", failsIn: "none_key_err" },
+  // The D3 law is a conjunction of three readings: an unnamed key stands
+  // before the keys the schema reads, after them, and before a variant key.
+  // `at` reads a law's first claim, so the instance here is the first reading;
+  // the mutation is what makes a key standing before the named one change the
+  // answer, which is the only way a reading before can be false. `at` gives no
+  // value for anything because the law binds nothing: it is at literals.
+  { law: "unnamed_key_ignored", section: "unnamed_key_ignored",
+    from: "      Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{})))",
+    to: "      Bool.and(String.eq(k, name), Bool.and(key_once(name, RKey{k, v, o}), Bool.and(conforms(~rule, fs, lookup(name, RKey{k, v, o}), None{}), conforms(~rule, rest, RKey{k, v, o}, None{}))))",
+    at: {},
+    why: "conforms reads an object's first key as the field's name, so a key the schema does not name changes the answer when it stands before the one the schema reads",
+    failsIn: "LAWS.unnamed_key_ignored" },
 ];
 
 runMutants(import.meta.dir, MUTANTS);

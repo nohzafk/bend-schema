@@ -60,7 +60,7 @@ echo "== 1b. the laws on concrete instances =="
 # the core, which is how that is shown.
 for L in exact accurate enum_accepts enum_admits variant strict tuple tagged \
          too_large rules sbool_meaning snat_in_meaning sstr_len_meaning \
-         soptional_meaning slist_len_meaning; do
+         soptional_meaning slist_len_meaning unnamed_key; do
   if ! OUT=$(LAW=$L bunx bend-falsify core/falsify/spec.ts 2>&1); then
     echo "$OUT"
     echo "FAIL: $L does not hold on the instances it is checked over"

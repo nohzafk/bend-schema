@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -261,4 +261,43 @@ soptEdges.forEach(([s, r, ok], i) => instances.push(...(!law || law === "soption
   name: `soptional_edge_${i}`,
   claim: `{C.conforms(~H.no_rule, ${s}, ${r}, None{}) == ${ok ? "True{}" : "False{}"} : Bool}`,
 }] : [])));
+// ---- a key the schema does not name (D3) ----
+//
+// The law's three readings at literals: an unnamed key before the keys the
+// schema reads, after them, and before a variant key. Edge cases first, since
+// the checker stops at the first failing instance: the key the schema DOES
+// name is not a key it does not name -- repeated, it is refused, and that is
+// repeated_key_refused's law -- and a value the schema refuses stays refused
+// however many keys stand around it. A repeat of a key nothing reads is here
+// too: nothing in the core reads an unnamed key, so a second one leaves the
+// answer alone. Both claims are checked on the values that conform: the
+// answer written here, and the law's own reading, that conforms at the value
+// with the extra key is conforms at the value without it.
+const d3Rec = 'C.SField{"a", C.SNat{}, C.SEnd{}}';
+const d3Var = 'C.SVariant{"a", C.SNat{}, C.SVEnd{}}';
+const d3Named = obj([["a", N(1)]]);
+const d3Cases: [string, string, R, boolean][] = [
+  ["rec_named", d3Rec, d3Named, true],
+  ["rec_before", d3Rec, obj([["z", N(9)], ["a", N(1)]]), true],
+  ["rec_after", d3Rec, obj([["a", N(1)], ["z", N(9)]]), true],
+  ["rec_before_twice", d3Rec, obj([["z", N(9)], ["z", N(9)], ["a", N(1)]]), true],
+  ["rec_before_bool", d3Rec, obj([["z", TRUE], ["a", N(1)]]), true],
+  ["var_named", d3Var, d3Named, true],
+  ["var_before", d3Var, obj([["z", N(9)], ["a", N(1)]]), true],
+  ["var_after", d3Var, obj([["a", N(1)], ["z", N(9)]]), true],
+  ["rec_named_twice", d3Rec, obj([["a", N(1)], ["a", N(2)]]), false],
+  ["rec_named_absent", d3Rec, obj([["z", N(9)]]), false],
+  ["rec_named_wrong", d3Rec, obj([["z", N(9)], ["a", STR]]), false],
+  ["rec_empty", d3Rec, obj([]), false],
+  ["var_named_absent", d3Var, obj([["z", N(9)]]), false],
+  ["var_empty", d3Var, obj([]), false],
+];
+d3Cases.forEach(([nm, s, r, ok], i) => instances.push(...(!law || law === "unnamed_key" ? [{
+  name: `unnamed_key_${i}_${nm}`,
+  claim: `{C.conforms(~H.no_rule, ${s}, ${r}, None{}) == ${ok ? "True{}" : "False{}"} : Bool}`,
+}, ...(ok ? [{
+  name: `unnamed_key_law_${i}_${nm}`,
+  claim: `{C.conforms(~H.no_rule, ${s}, ${r}, None{}) == C.conforms(~H.no_rule, ${s}, ${d3Named}, None{}) : Bool}`,
+}] : [])] : [])));
+
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };

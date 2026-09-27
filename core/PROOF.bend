@@ -864,6 +864,17 @@ def strict_acc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, m1: Maybe<&2, C.Err
 def Laws.repeated_key_refused():
   (({==}, {==}), ({==}, {==}))
 
+# ---- unnamed_key_ignored ----
+#
+# Every reading computes, at the explicit constructors the law names: a first
+# key that is not the field's is not looked at, the unnamed key is never looked
+# up wherever it stands, and at the variant the same two values go through
+# pick_bool and none_present over the concrete chain. Nothing here rewrites;
+# the law is decided by evaluation, which is the point of stating it at
+# literals.
+def Laws.unnamed_key_ignored():
+  ({==}, ({==}, {==}))
+
 # ---- what check reports is there ----
 #
 # The same walk again. Where check reports here, the path is empty and the

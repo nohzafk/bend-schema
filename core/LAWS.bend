@@ -127,6 +127,40 @@ def Refused(s: C.Schema, r: C.Raw, +p: List<&2, C.Step>, +w: C.Why) -> Type:
 law repeated_key_refused:
   Refused(C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"}) & Refused(C.SVariant{"a", C.SNat{}, C.SVEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"a", C.RNum{2n}, C.REnd{}}}, C.AtField{0n, "a"} <> Nil{}, C.RepeatedKey{"a"})
 
+# ---- a key the schema does not name ----
+#
+# A key the schema does not name is ignored, so adding one to an object that
+# already conforms leaves the answer alone -- before the keys the schema reads,
+# or after them. Stated at explicit constructors, like repeated_key_refused,
+# and that is the point of it (D3): the general form is FALSE. key_names names
+# the keys of a chain and nothing else -- the SField and the SVariant it walks,
+# not the wrappers a chain may sit in -- so its list says nothing about a
+# wrapper, and a key outside that list can still be one the schema needs. The
+# counterexample, which is why this law is at literals: with
+# s = SOpt{SField{"a", SNat{}, SEnd{}}}, k = "a" and r = REnd{}, the premise
+# Bool.not(in_names(k, key_names(s))) holds, because key_names(SOpt{i}) is Nil{}
+# and Nil{} names no key at all, yet conforms(SOpt{i}, r) is False while
+# conforms(SOpt{i}, RKey{"a", RNum{1}, REnd{}}) is True: the key is not extra
+# at all, it is the one the wrapper's own schema asks for. A variant chain
+# stands beside the record in the law because at literals it costs the same
+# computation: none_present over a concrete chain reduces, and no skip lemma is
+# wanted for it.
+#
+# What is deliberately not here. The reordering half of "non-canonical still
+# decodes" is unproved: no def in the core reorders an object's keys -- lookup,
+# drop_key, has_key and no_extra read them, and none of them moves one -- so a
+# permuted value has nothing here to be an instance of. And a key the schema
+# does not name that appears TWICE is left alone as well (core.bend, "a key the
+# schema does not name"): a key nothing reads is unobservable however often it
+# is written, so it is not refused, unlike the repeated key of
+# repeated_key_refused. Neither is stated as a law: the first has no code to be
+# false about, the second is unobservable by construction.
+
+law unnamed_key_ignored:
+  {C.conforms(~C.no_rule, C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"z", C.RNum{9n}, C.RKey{"a", C.RNum{1n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.REnd{}}, None{}) : Bool} &
+  {C.conforms(~C.no_rule, C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.RKey{"z", C.RNum{9n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SField{"a", C.SNat{}, C.SEnd{}}, C.RKey{"a", C.RNum{1n}, C.REnd{}}, None{}) : Bool} &
+  {C.conforms(~C.no_rule, C.SVariant{"a", C.SNat{}, C.SVEnd{}}, C.RKey{"z", C.RNum{9n}, C.RKey{"a", C.RNum{1n}, C.REnd{}}}, None{}) == C.conforms(~C.no_rule, C.SVariant{"a", C.SNat{}, C.SVEnd{}}, C.RKey{"a", C.RNum{1n}, C.REnd{}}, None{}) : Bool}
+
 # A tuple conforms exactly when the value is a list, as long as the tuple,
 # and each position conforms. Without it, a bug shared by check and conforms
 # (both skipping a position) passes the two laws above.
