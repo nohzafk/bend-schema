@@ -233,7 +233,7 @@ function toNode(x: Schema<any>): Node {
 
 // ------------------------------------------- Meaning <-> plain JS (not proved)
 
-type M = any; // a core Meaning(s) value: bigint, string, boolean, Unit, Both, Either, Maybe, List
+type M = any; // a core Meaning(s) value: number (a Nat), string, boolean, Unit, Both, Either, Maybe, List
 
 const unit = { $: "Unit" };
 const both = (a: M, b: M) => ({ $: "Both", a, b });
