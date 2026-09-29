@@ -21,10 +21,16 @@
 set -e
 cd "$(dirname "$0")"
 
-# The installed compiler, wherever it is; the recorded one is recorded, not
-# required (a bump with the same output is not a change).
-PATH="$HOME/.bend/bin:$PATH"
+# The bend this package declares (BEND_VERSION): the one in
+# ~/projects/.toolchains/bend-<v>/ if it is there, else the installed one. The
+# gate refuses any other before anything runs, and so does bend-emit.
+BEND_VERSION=$(tr -d ' \t\n\r' < BEND_VERSION)
+PATH="${BEND_TOOLCHAINS:-$HOME/projects/.toolchains}/bend-$BEND_VERSION/bin:$HOME/.bend/bin:$PATH"
 export PATH
+if [ "$(bend version 2>/dev/null)" != "bend $BEND_VERSION" ]; then
+  echo "FAIL: this gate needs bend $BEND_VERSION; bend on PATH says: $(bend version 2>&1)"
+  exit 1
+fi
 BEND_NO_TELEMETRY=1
 export BEND_NO_TELEMETRY
 
@@ -76,13 +82,13 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 bunx bend-emit core/core.bend "$TMP" > /dev/null
 if ! cmp -s dist-core/core.mjs "$TMP/core.mjs" || ! cmp -s dist-core/core.d.mts "$TMP/core.d.mts"; then
-  echo "FAIL: dist-core/ is not what $(cat dist-core/BEND-VERSION) builds here"
+  echo "FAIL: dist-core/ is not what bend $BEND_VERSION builds here"
   diff -u dist-core/core.mjs "$TMP/core.mjs" | head -40
   diff -u dist-core/core.d.mts "$TMP/core.d.mts" | head -40
   echo "FAIL: rebuild and commit dist-core/ if the new module is wanted"
   exit 1
 fi
-echo "dist-core/ is what $(cat dist-core/BEND-VERSION) builds"
+echo "dist-core/ is what bend $BEND_VERSION builds"
 
 echo "== 3. the tests =="
 # The module builder is the bend-emit dev dependency; its repository holds

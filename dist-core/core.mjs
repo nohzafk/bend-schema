@@ -149,7 +149,6 @@ function run_lib(f, n) {
 // Effect
 // ======
 
-// An effect source registers each effect under its def's key, as in C.
 const $0eff = Object.create(null);
 
 function io_eff(k, run, need) {
@@ -1900,7 +1899,7 @@ function $bounds_ok$($0, $1) {
 }
 
 function $String$eq$(_a_0, _b_0) {
-  return $String$eq$fin$(($String$cmp$(_a_0, _b_0)));
+  return $Cmp$is_eq$(($String$order$(_a_0, _b_0)));
 }
 
 function $Bool$and$(_a_0, _b_0) {
@@ -2266,10 +2265,33 @@ function $Empty$absurd$(_e_0) {
   throw "bend: runtime fail-stop";
 }
 
-function $String$eq$fin$(_r_0) {
-  const _t_0 = _r_0["fst"];
-  const _c_0 = _r_0["snd"];
-  return $Cmp$is_eq$(_c_0);
+function $Cmp$is_eq$(_c_0) {
+  if (_c_0.$ === "EQ") {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function $String$order$(_a_0, _b_0) {
+  return $Pair$snd$(($String$cmp$(_a_0, _b_0)));
+}
+
+function $Cmp$is_le$(_c_0) {
+  if (_c_0.$ === "GT") {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+function $Maybe$is_none$(_m_0) {
+  return $Bool$not$(($Maybe$is_some$(_m_0)));
+}
+
+function $Pair$snd$(_p_0) {
+  const _b_0 = _p_0["snd"];
+  return _b_0;
 }
 
 function $String$cmp$(_a_0, _b_0) {
@@ -2294,28 +2316,12 @@ function $String$cmp$(_a_0, _b_0) {
   }
 }
 
-function $Cmp$is_le$(_c_0) {
-  if (_c_0.$ === "LT") {
-    return true;
-  } else if (_c_0.$ === "EQ") {
-    return true;
+function $Maybe$is_some$(_m_0) {
+  if (_m_0.$ === "None") {
+    return false;
   } else {
-    return false;
-  }
-}
-
-function $Cmp$is_eq$(_c_0) {
-  if (_c_0.$ === "LT") {
-    return false;
-  } else if (_c_0.$ === "EQ") {
     return true;
-  } else {
-    return false;
   }
-}
-
-function $Maybe$is_none$(_m_0) {
-  return $Bool$not$(($Maybe$is_some$(_m_0)));
 }
 
 function $String$cmp$fin$(_t1_0, _t2_0, _hc_0) {
@@ -2334,16 +2340,8 @@ function $String$cmp$fin$(_t1_0, _t2_0, _hc_0) {
 
 function $Char$cmp$(_a_0, _b_0) {
   const _x_0 = _a_0.codePointAt(0);
-  const _y_0 = _b_0.codePointAt(0);
-  return {$: "Tuple", "fst": {$: "Tuple", "fst": char_new(_x_0), "snd": char_new(_y_0)}, "snd": cmp_new(_x_0, _y_0)};
-}
-
-function $Maybe$is_some$(_m_0) {
-  if (_m_0.$ === "None") {
-    return false;
-  } else {
-    return true;
-  }
+  const _x_1 = _b_0.codePointAt(0);
+  return {$: "Tuple", "fst": {$: "Tuple", "fst": _a_0, "snd": _b_0}, "snd": cmp_new(_x_0, _x_1)};
 }
 
 function $String$cmp$rec$(_h1b_0, _h2b_0, _rr_0) {
