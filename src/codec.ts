@@ -41,25 +41,25 @@ export function nat(name: string, v: number): number {
 // every level of nesting and summed: `[[1,2],[3]]` is 2 + 3 = 5. Past it, a
 // node becomes RTooBig.
 //
-// Measured, not guessed (with bend 2.0.34 on a macOS arm64 Mac, each shape in
+// Measured, not guessed (with bend 2.0.35 on a macOS arm64 Mac, each shape in
 // its own process). Each shape below is the largest count where toRaw, check0,
 // conforms0, enc and dec all return in bun, and what the next step throws:
 //
-//   flat list       19949   check0: RangeError
-//   nested object    8192   check0: RangeError
-//   nested list     18777   converting: RangeError
-//   list of lists  >199000  (not the binding shape)
-//   list of objects >199000 (not the binding shape)
-//   mixed          >100000  (not the binding shape)
-//   flat object     not measured: past 600 s, and KEYS_MAX (below) caps it
+//   flat list       30000   check0: RangeError
+//   nested object    6257   check0: RangeError
+//   nested list      6257   check0: RangeError
+//   list of lists   29929   survived the largest count tried
+//   list of objects 29929   survived the largest count tried
+//   mixed           15224   survived the largest count tried
+//   flat object      6656   check0: RangeError (25 probes, 903 s)
 //
-// The binding shape is the nested object, at 8192, and a value at the budget
-// keeps some 2.7x of margin under it. (On bend 2.0.27 the nested object reached
-// about 10,600 and a flat object bound first, at 6144, which is why KEYS_MAX
-// exists; the budget was set to half of that, 3072, and is kept.) One budget
-// covers lists, objects and nesting alike, and what makes it enough is the
-// invariant: toRaw never builds a value whose count is past it, so the walk
-// that follows is bounded by it.
+// The binding shapes are the nested object and the nested list, both at 6257,
+// and a value at the budget keeps about 2.0x of margin under them. (On bend
+// 2.0.27 the nested object reached about 10,600 and a flat object bound first,
+// at 6144, which is why KEYS_MAX exists; the budget was set to half of that,
+// 3072, and is kept.) One budget covers lists, objects and nesting alike, and
+// what makes it enough is the invariant: toRaw never builds a value whose count
+// is past it, so the walk that follows is bounded by it.
 
 export const BUDGET = 3072;
 
