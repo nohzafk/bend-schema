@@ -7,6 +7,10 @@ Define a schema once. Check JSON against it from TypeScript or from
 its path. The checker is written in Bend, and its laws are machine-checked
 for every schema and every value.
 
+The npm package and the GitHub repository are `bend-schema`. The package on
+BendHub is `bend-schema-lib`, because the hub requires a name of at least 12
+characters and `bend-schema` is 11.
+
 ## Install
 
 ```sh
