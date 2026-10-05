@@ -1,8 +1,8 @@
 import Base
 import ./LAWS.bend as Laws
 import ./core.bend as C
-import ../vendor/bendlib/packages/bend-mathlib/string.bend as MS
-import ../vendor/bendlib/packages/bend-mathlib/nat.bend as MN
+import bend-mathlib@0.7.1.0/string.bend as MS
+import bend-mathlib@0.7.1.0/nat.bend as MN
 
 # The proofs of bend-schema's laws. The gate is `bend core/PROOF.bend` (through
 # tools/bend-check). Each law's proof sits under its own

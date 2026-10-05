@@ -119,10 +119,14 @@ bun src/gen-cli.ts src/gen.schemas.ts "$GEN/schemas.bend"
 tools/bend-check "$GEN/schemas.bend"
 
 echo "== 5. the facts this core rests on =="
-# They are bend-mathlib's, from the vendor/bendlib submodule (nohzafk/bendlib,
-# branch ours); PROOF.bend checking in step 1 checks the imported lemmas too.
-# bendlib's own gate holds their negative controls.
-test -f vendor/bendlib/packages/bend-mathlib/nat.bend || { echo "FAIL: run git submodule update --init"; exit 1; }
-echo "  vendor/bendlib at $(git -C vendor/bendlib rev-parse --short HEAD)"
+# They come from the hub: PROOF.bend imports bend-mathlib@0.7.1.0 by name, and
+# step 1 checks the imported lemmas too. bendlib's own gate holds their
+# negative controls.
+#
+# The hub pins bend-mathlib to the one bend it checks on, so the version in
+# PROOF.bend is not free to move: 0.7.1.0 is the 2.0.34 line this package's
+# bend (2.0.35) is on, and it fails to check under 2.0.32. Raise it only with
+# the bend in BEND_VERSION.
+echo "  bend-mathlib@0.7.1.0, from the hub"
 
 echo "PASS: bend-schema's gate"

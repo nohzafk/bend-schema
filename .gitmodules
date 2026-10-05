@@ -1,4 +1,0 @@
-[submodule "vendor/bendlib"]
-	path = vendor/bendlib
-	url = https://github.com/nohzafk/bendlib
-	branch = ours
