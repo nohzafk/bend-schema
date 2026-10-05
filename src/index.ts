@@ -117,6 +117,9 @@ export class Schema<T> {
    * a bound or a refinement, which its type cannot rule out. */
   encode(x: T): unknown {
     const out = rawToJs(enc(this.node, toMeaning(this, x)));
+    // An absent top-level value is legitimate for an Optional schema, and
+    // JSON has no way to write it, so it stays undefined rather than throwing.
+    if (out === undefined) return undefined;
     const e = this.check(out);
     if (e) throw new Error(`bend-schema: encode: ${e.text()}`);
     return out;
@@ -250,7 +253,7 @@ function toJs(x: Schema<any>, m: M): unknown {
     case "listLen": return toJs(k.inner, m);
     case "list": { const out = []; for (let l = m; l.$ === "Con"; l = l.tail) out.push(toJs(k.elem, l.head)); return out; }
     case "tuple": { const out = []; let b = m; for (const it of k.items) { out.push(toJs(it, b.a)); b = b.b; } return out; }
-    case "object": { const out: Record<string, unknown> = {}; let b = m; for (const [n, f] of k.fields) { const x = toJs(f, b.a); if (x !== undefined) out[n] = x; b = b.b; } return out; }
+    case "object": { const out: Record<string, unknown> = {}; let b = m; for (const [n, f] of k.fields) { const x = toJs(f, b.a); if (x !== undefined) put(out, n, x); b = b.b; } return out; }
     case "strict": return toJs(k.obj, m);
     case "oneKey": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [n]: toJs(c, e.value) }; e = e.value; } throw new Error("unreachable: Empty"); }
     case "tagged": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [k.key]: n, ...(toJs(c, e.value) as object) }; e = e.value; } throw new Error("unreachable: Empty"); }
@@ -287,6 +290,13 @@ function toMeaning(x: Schema<any>, v: any): M {
 
 const inj = (i: number, m: M): M => (i === 0 ? { $: "Inl", value: m } : { $: "Inr", value: inj(i - 1, m) });
 
+// `out[n] = x` is a prototype setter for a field named `__proto__`, which would
+// silently drop it -- a required field gone from a value parse calls valid, and
+// an encode whose own re-check then fails. defineProperty has no such case.
+function put(out: Record<string, unknown>, n: string, x: unknown): void {
+  Object.defineProperty(out, n, { value: x, enumerable: true, writable: true, configurable: true });
+}
+
 function rawToJs(r: core.Raw): unknown {
   switch (r.$) {
     case "RNum": return Number(r.n);
@@ -294,7 +304,11 @@ function rawToJs(r: core.Raw): unknown {
     case "RNull": return null;
     case "RStr": return r.s;
     case "RNil": case "RCons": { const out = []; for (let l: core.Raw = r; l.$ === "RCons"; l = l.tail) out.push(rawToJs(l.head)); return out; }
-    case "REnd": case "RKey": { const out: Record<string, unknown> = {}; for (let l: core.Raw = r; l.$ === "RKey"; l = l.rest) if (l.val.$ !== "RMissing") out[l.key] = rawToJs(l.val); return out; }
+    case "REnd": case "RKey": { const out: Record<string, unknown> = {}; for (let l: core.Raw = r; l.$ === "RKey"; l = l.rest) if (l.val.$ !== "RMissing") put(out, l.key, rawToJs(l.val)); return out; }
+    // An absent value is legitimate at the top level of an Optional schema. JSON
+    // cannot write it, so it reads as undefined; a nested one never reaches
+    // here, because the RKey arm drops it.
+    case "RMissing": return undefined;
     default: throw new Error(`bend-schema: encode produced ${r.$}`);
   }
 }

@@ -143,7 +143,7 @@ SHIPPED=$(npm pack --dry-run --json 2>/dev/null | grep -o '"path": "core/[^"]*"'
 for f in core/core.bend core/LAWS.bend core/PROOF.bend core/LICENSE; do
   echo "$SHIPPED" | grep -q "\"$f\"" || { echo "FAIL: $f is not in the package"; exit 1; }
 done
-for f in src/index.ts src/gen.ts src/gen-cli.ts; do
+for f in src/index.ts src/codec.ts src/gen.ts src/gen-cli.ts; do
   grep -nE 'from "\./[^"]*\.ts"|from "\.\./[^"]*\.ts"' "$f" \
     && { echo "FAIL: $f imports a .ts path; a consumer's tsc rejects it (TS5097)"; exit 1; }
 done

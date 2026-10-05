@@ -20,11 +20,12 @@
 // the package, so the core sits at <pkg>/core/core.bend, and the output file's
 // own directory gives the relative path to it. The caller passes no path.
 //
-// Nothing here needs bun. `import.meta.dirname` is Node's name, and bun's;
-// `import.meta.dir` is bun-only, which is why this file does not use it. A
-// runtime new enough to strip types (Node 23.6+, or 22.6 with
-// `--experimental-strip-types`) runs both this file and the schema module it
-// imports, since a schema uses only erasable syntax.
+// Nothing here needs bun's own APIs. `import.meta.dirname` is Node's name, and
+// bun's; `import.meta.dir` is bun-only, which is why this file does not use it.
+// Node can strip types from a `.ts` file, but not from one inside
+// `node_modules`: a consumer's installed copy is always in there, so Node
+// refuses to run it (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING) and the
+// shebang above is what makes the command work.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";

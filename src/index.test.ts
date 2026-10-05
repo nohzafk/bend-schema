@@ -65,6 +65,38 @@ describe("parse", () => {
     expect((Plan.check({ ...good, name: "" })!).text()).toBe("name: must be 1 to 20 characters long");
     expect((s.nat().check("x")!).text()).toMatch(/^the value: must be a whole number/);
   });
+
+  // A non-plain object has no own enumerable keys, so without this it converted
+  // to an empty object and the core accepted it against any object schema with
+  // no required key. A host can be handed one; parsing must not claim it fits.
+  test("a value that is not JSON is refused, not read as an empty object", () => {
+    for (const v of [new Date(), new Map([["a", 1]]), new Set([1]), new (class {})()]) {
+      const r = s.object({ a: s.nat().optional() }).strict().parse(v);
+      expect(r.ok).toBe(false);
+    }
+    expect(s.object({}).parse(new Date()).ok).toBe(false);
+  });
+
+  test("a plain object and Object.create(null) are still objects", () => {
+    expect(s.object({ a: s.nat() }).parse({ a: 1 }).ok).toBe(true);
+    const bare = Object.create(null);
+    bare.a = 1;
+    expect(s.object({ a: s.nat() }).parse(bare).ok).toBe(true);
+  });
+
+  // `out["__proto__"] = x` hits the prototype setter, so the field vanished
+  // from a value parse called valid.
+  test("a field named __proto__ survives parse and encode", () => {
+    const P = s.object({ ["__proto__"]: s.str() }).strict();
+    const r = P.parse(JSON.parse('{"__proto__":"hello"}'));
+    expect(r.ok).toBe(true);
+    expect(JSON.stringify((r as { ok: true; value: unknown }).value)).toBe('{"__proto__":"hello"}');
+    expect(P.encode({ ["__proto__"]: "hello" })).toEqual({ ["__proto__"]: "hello" });
+  });
+
+  test("encoding an absent top-level optional is undefined", () => {
+    expect(s.str().optional().encode(undefined)).toBe(undefined);
+  });
 });
 
 describe("refine", () => {

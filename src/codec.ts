@@ -2,10 +2,10 @@
 //
 // It knows no schema, so it decides nothing about shapes: a whole number from 0
 // to the runtime's Nat bound (2^48-1) is RNum, a boolean RBool, null RNull, a
-// string RStr, an array a chain of RCons, an object a chain of RKey in its own
-// key order, and anything else (a fraction, a negative, NaN, undefined) is
-// RBad, for check to report where it sits. Every rule about shapes is the
-// proved core's (LAWS.bend).
+// string RStr, an array a chain of RCons, a plain object a chain of RKey in its
+// own key order, and anything else (a fraction, a negative, NaN, undefined, a
+// Date or any other non-plain object) is RBad, for check to report where it
+// sits. Every rule about shapes is the proved core's (LAWS.bend).
 //
 // Size is the one thing it decides, because it is the one thing the core
 // cannot: the compiled JS walks a list or an object with one native JS frame
@@ -88,6 +88,12 @@ export function toRaw(v: unknown): Raw {
       return heads.reduceRight<Raw>((tail, head) => ({ $: "RCons", head, tail }), { $: "RNil" });
     }
     if (typeof v === "object") {
+      // A plain object, and nothing else. A Date, Map, Set or class instance is
+      // not JSON, and carries no own enumerable keys, so it would otherwise
+      // become an empty REnd -- a value the core would accept as conforming to
+      // any object schema with no required key.
+      const proto = Object.getPrototypeOf(v);
+      if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       const entries = Object.entries(v as object);
       if (entries.length > KEYS_MAX || entries.length > left) return { $: "RTooBig" };
       left -= entries.length;

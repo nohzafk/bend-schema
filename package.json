@@ -17,6 +17,14 @@
   "bin": {
     "bend-schema": "./src/gen-cli.ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nohzafk/bend-schema.git"
+  },
+  "homepage": "https://github.com/nohzafk/bend-schema#readme",
+  "bugs": {
+    "url": "https://github.com/nohzafk/bend-schema/issues"
+  },
   "files": [
     "src/index.ts",
     "src/codec.ts",

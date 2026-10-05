@@ -9,15 +9,16 @@ for every schema and every value.
 
 ## Install
 
-bend-schema is not on npm. Install it from GitHub:
-
 ```sh
-bun add github:nohzafk/bend-schema
+bun add bend-schema
 ```
 
 Use it with [Bun](https://bun.sh). The package ships TypeScript source, and
 Node.js refuses to run TypeScript from `node_modules`. You do not need Bend
 installed.
+
+The `bend-schema` command emits Bend source, and it runs under Bun whether you
+start it with `bunx` or `npx`: its shebang is `env bun`.
 
 ## Quick start
 
@@ -66,18 +67,19 @@ own `.refine()` function, which runs only after the proved check passes.
 | `.nullable()` | the value may be `null` |
 | `.refine(fn, message)` | a custom check (not proved) |
 
-See **[docs/schemas.md](docs/schemas.md)** for how to write schemas:
+See **[docs/schemas.md](https://github.com/nohzafk/bend-schema/blob/main/docs/schemas.md)**
+for how to write schemas:
 objects, unions, custom rules, error messages and encoding.
 
 ## Examples
 
 Each example is a small runnable project with tests:
 
-- [`examples/api-server`](examples/api-server): an HTTP endpoint that
+- [`examples/api-server`](https://github.com/nohzafk/bend-schema/tree/main/examples/api-server): an HTTP endpoint that
   validates the request body and returns the error path in a 400.
-- [`examples/config-loader`](examples/config-loader): reads a JSON config
+- [`examples/config-loader`](https://github.com/nohzafk/bend-schema/tree/main/examples/config-loader): reads a JSON config
   file and reports the first mistake in one line.
-- [`examples/event-log`](examples/event-log): an append-only JSON-lines log
+- [`examples/event-log`](https://github.com/nohzafk/bend-schema/tree/main/examples/event-log): an append-only JSON-lines log
   that writes and reads with the same schema.
 
 ## Ask an AI agent to write a schema
@@ -179,12 +181,18 @@ The laws in `core/LAWS.bend` hold for every schema, every rule and every value:
 - **Exact:** `check` reports no error if and only if the value conforms.
 - **Accurate:** the reported path leads to a real error of the reported kind.
 - **Round trip:** decoding an encoded value gives back the same value.
-- **Encoding conforms:** what the encoder writes always passes the check.
+- **Encoding conforms:** what the encoder writes passes the check whenever each
+  enum value is one of its names and each bound holds of the value.
 - Each combinator (enum, tuple, variant, tagged union, strict, bounds) has a
   law that states what it accepts.
 
 Not proved: the TypeScript builder, the conversion between JS values and the
 core, and `.refine()` predicates. These are covered by tests.
+
+Two things the TypeScript layer does not carry, because they are not Bend values
+and the core never sees them: a non-plain object (a `Date`, `Map` or class
+instance) is refused as not being JSON, and an object key named `__proto__` is
+the JavaScript prototype, not a field.
 
 ## Limits
 
