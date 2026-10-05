@@ -16,6 +16,12 @@ package is `bend-schema-lib`.
 bun add bend-schema
 ```
 
+From a Bend file there is no install step: import the checker from the hub.
+
+```bend
+import bend-schema-lib@0.1.0.0/core.bend as S
+```
+
 Use it with [Bun](https://bun.sh). The package ships TypeScript source, and
 Node.js refuses to run TypeScript from `node_modules`. You do not need Bend
 installed.
@@ -155,7 +161,7 @@ The test suite proves it.
 [bend-emit](https://github.com/nohzafk/bend-emit):
 
 ```sh
-bun add -d github:nohzafk/bend-emit
+bun add -d bend-emit
 bunx bend-emit core.bend dist       # writes dist/core.mjs and dist/core.d.mts
 ```
 
