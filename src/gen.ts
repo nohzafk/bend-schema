@@ -16,7 +16,7 @@
 // than in a package of its own: a new constructor touches both.
 
 import type { BendList, Schema as Node } from "../dist-core/core.mjs";
-import type { Schema } from "./index.ts";
+import type { Schema } from "./index";
 
 const q = (s: string) => JSON.stringify(s);
 const n = (x: bigint | number) => `${x}n`;

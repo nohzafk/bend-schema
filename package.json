@@ -23,6 +23,9 @@
     "src/gen.ts",
     "src/gen-cli.ts",
     "core/core.bend",
+    "core/LAWS.bend",
+    "core/PROOF.bend",
+    "core/LICENSE",
     "dist-core/",
     "LICENSE",
     "README.md"

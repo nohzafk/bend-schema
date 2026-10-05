@@ -118,10 +118,11 @@ export const schemas = { config: Config };
 ```
 
 **2. Generate Bend source.** The command executes `schema.ts`, so that file
-should contain only schemas.
+should contain only schemas. It runs under Bun — Node cannot strip the types
+from TypeScript in `node_modules`.
 
 ```sh
-npx bend-schema gen schema.ts schema.bend
+bunx bend-schema gen schema.ts schema.bend
 ```
 
 `schema.bend` defines `config_schema()` and imports the proved checker from
@@ -141,7 +142,9 @@ def config_ok(r: S.Raw) -> Bool:
 ```
 
 Here you can state and prove laws about your own functions, and build on the
-laws in `core/LAWS.bend`.
+laws in `core/LAWS.bend`. Import `core/PROOF.bend` alongside them: its proofs
+are what close them, and a file that imports `LAWS.bend` alone does not check.
+The test suite proves it.
 
 **4. Turn the core into a typed ES module** with
 [bend-emit](https://github.com/nohzafk/bend-emit):

@@ -1,6 +1,8 @@
-#!/usr/bin/env node
-// The command: `bend-schema gen <module.ts> <out.bend>`, run with node (`node`,
-// `npx`) or bun (`bunx`).
+#!/usr/bin/env bun
+// The command: `bend-schema gen <module.ts> <out.bend>`, run with bun (`bunx`)
+// or node (`npx`). Bun does the work either way: the shebang is `env bun`,
+// because the command executes the module and Node refuses to strip types from
+// TypeScript in node_modules.
 //
 // The module must export `schemas` — an object whose keys name the Bend defs:
 //
@@ -26,8 +28,8 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { emit } from "./gen.ts";
-import type { Schema } from "./index.ts";
+import { emit } from "./gen";
+import type { Schema } from "./index";
 
 const pkgCore = resolve(import.meta.dirname, "../core/core.bend");
 const args = process.argv.slice(2);

@@ -8,13 +8,13 @@
 
 import * as core from "../dist-core/core.mjs";
 import type { BendList, Schema as Node, Step } from "../dist-core/core.mjs";
-import { toRaw, whyText } from "./codec.ts";
+import { toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
 // bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec.ts";
+export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
 export type { Raw } from "../dist-core/core.mjs";
 
 // ------------------------------------------------------------------ issues
