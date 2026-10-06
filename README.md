@@ -80,6 +80,68 @@ See **[docs/schemas.md](https://github.com/nohzafk/bend-schema/blob/main/docs/sc
 for how to write schemas:
 objects, unions, custom rules, error messages and encoding.
 
+## Optional Effect v4 adapter
+
+Convert an existing schema into an Effect codec (a schema with decoding and
+encoding). The adapter is a separate entry point; importing `bend-schema`
+does not load or require Effect.
+
+```sh
+bun add bend-schema effect@4.0.1
+```
+
+```ts
+import { s } from "bend-schema";
+import { toEffect } from "bend-schema/effect";
+import { Schema } from "effect";
+import { Rpc } from "effect/rpc";
+
+const Message = toEffect(s.object({ text: s.str(), note: s.str().optional() }));
+const decoded = Schema.decodeUnknownSync(Message)({ text: "hello", extra: true });
+// decoded is inferred as { text: string; note?: string }; extra is dropped.
+const encoded = Schema.encodeSync(Message)(decoded);
+
+const Echo = Rpc.make("Echo", { payload: Message, success: Message });
+```
+
+The API infers `T` from the input schema; no type assertion is needed:
+
+```ts
+function toEffect<T>(schema: Schema<T>): EffectSchema.decodeTo<
+  EffectSchema.declareConstructor<T, T, readonly []>, typeof EffectSchema.Unknown
+>;
+// Schema is bend-schema's type; EffectSchema is effect's Schema module.
+```
+
+The concrete return type keeps Effect's constructor input (`~type.make.in`)
+as `T`. RPC clients therefore accept the inferred object, tagged union, or
+string payload and reject incorrectly typed fields at compile time. Widening
+the adapter to `EffectSchema.Codec<T, unknown>` erases that constructor input
+to `unknown`; keep the inferred return type when passing it to `Rpc.make`.
+TypeScript checks field types, not refinement predicates or numeric ranges;
+those are still validated at runtime.
+
+Decoding returns `schema.parse(input).value`, not the untouched input.
+Encoding validates the decoded value with `parse`, then calls `schema.encode`.
+Both directions are synchronous and require no Effect services.
+
+- **Errors:** the first parse error keeps its path and reason in an Effect
+  `SchemaIssue.Pointer` and `InvalidValue`. Effect adds surrounding field paths
+  when the codec is nested. The bend-schema `proved` flag is not carried over.
+- **Semantics:** unknown keys are dropped unless the object is strict. Optional
+  fields, tagged unions, refinements and the existing size limits still apply.
+  Effect parse options do not replace bend-schema's validation rules.
+- **Representation:** the encoded type is `unknown`, as with `schema.encode`.
+  The Effect AST uses an opaque declaration, not a generated structural schema;
+  it does not expose the Bend shape for JSON Schema generation. No Bend datatype
+  parser or source generator is involved.
+- **Failures:** thrown schema configuration errors and thrown refinement
+  callbacks remain programming errors, not validation issues. Exceptions from
+  `encode` become Effect validation issues with the exception's message.
+
+Effect is an optional peer dependency (`^4.0.1`); tests pin `4.0.1`.
+Effect v3 and v4 prereleases are not supported by this adapter.
+
 ## Examples
 
 Each example is a small runnable project with tests:

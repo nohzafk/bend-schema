@@ -139,11 +139,11 @@ echo "== 6. what the package ships =="
 #
 # LAWS.bend is a file of open laws; PROOF.bend is what closes them. A consumer
 # that imports LAWS.bend alone does not check, so both ship together.
-SHIPPED=$(npm pack --dry-run --json 2>/dev/null | grep -o '"path": "core/[^"]*"')
-for f in core/core.bend core/LAWS.bend core/PROOF.bend core/LICENSE; do
+SHIPPED=$(npm pack --dry-run --json 2>/dev/null | grep -o '"path": "[^"]*"')
+for f in core/core.bend core/LAWS.bend core/PROOF.bend core/LICENSE src/effect.ts; do
   echo "$SHIPPED" | grep -q "\"$f\"" || { echo "FAIL: $f is not in the package"; exit 1; }
 done
-for f in src/index.ts src/codec.ts src/gen.ts src/gen-cli.ts; do
+for f in src/index.ts src/codec.ts src/gen.ts src/gen-cli.ts src/effect.ts; do
   grep -nE 'from "\./[^"]*\.ts"|from "\.\./[^"]*\.ts"' "$f" \
     && { echo "FAIL: $f imports a .ts path; a consumer's tsc rejects it (TS5097)"; exit 1; }
 done

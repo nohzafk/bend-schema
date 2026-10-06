@@ -1,18 +1,26 @@
 {
   "name": "bend-schema",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "bend-emit": "0.3.1",
     "bend-falsify": "github:nohzafk/bend-falsify#a50873f",
+    "effect": "4.0.1",
     "typescript": "^7.0.2"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "effect": { "optional": true }
   },
   "exports": {
     ".": "./src/index.ts",
     "./codec": "./src/codec.ts",
-    "./gen": "./src/gen.ts"
+    "./gen": "./src/gen.ts",
+    "./effect": "./src/effect.ts"
   },
   "bin": {
     "bend-schema": "./src/gen-cli.ts"
@@ -28,6 +36,7 @@
   "files": [
     "src/index.ts",
     "src/codec.ts",
+    "src/effect.ts",
     "src/gen.ts",
     "src/gen-cli.ts",
     "core/core.bend",
