@@ -41,6 +41,7 @@ export function printNode(x: Node): string {
     case "SStr":
     case "SBool":
     case "STrue":
+    case "SJson":
     case "SEnd":
     case "STEnd":
     case "SVEnd":

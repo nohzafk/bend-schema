@@ -7,8 +7,8 @@
 // errors say `proved: false`.
 
 import * as core from "../dist-core/core.mjs";
-import type { BendList, Schema as Node, Step } from "../dist-core/core.mjs";
-import { toRaw, whyText } from "./codec";
+import type { BendList, BendMap, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
+import { toJsonRaw, toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
 // bend-emit cannot write as a TS signature; they are untyped here.
@@ -16,6 +16,9 @@ const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw
 
 export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
 export type { Raw } from "../dist-core/core.mjs";
+
+/** JSON values exposed by the builder are ordinary JavaScript values. */
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 // ------------------------------------------------------------------ issues
 
@@ -53,6 +56,7 @@ type Kind =
   | { k: "strLen"; lo: number; hi: number; inner: Schema<string> }
   | { k: "bool" }
   | { k: "true" }
+  | { k: "json" }
   | { k: "nullable"; inner: Schema<any> }
   | { k: "optional"; inner: Schema<any> }
   | { k: "list"; elem: Schema<any> }
@@ -97,7 +101,7 @@ export class Schema<T> {
   /** Check v, then read it as T. */
   parse(v: unknown): Result<T> {
     const node = this.node;
-    const raw = toRaw(v);
+    const raw = rawFor(this, v, toRaw(v));
     const e = core.check0(node, raw);
     if (e.$ === "Some") return { ok: false, error: new Issue(pathOf(e.value.path), whyText(e.value.why), true) };
     const m = dec(node, raw);
@@ -197,6 +201,7 @@ export const s = {
   str: () => new StrSchema({ k: "str" }),
   bool: () => new Schema<boolean>({ k: "bool" }),
   true: () => new Schema<true>({ k: "true" }),
+  json: () => new Schema<Json>({ k: "json" }),
   list: <T>(elem: Schema<T>) => new ListSchema<T>({ k: "list", elem }),
   tuple: <A extends Schema<any>[]>(...items: A) =>
     new Schema<{ [I in keyof A]: Infer<A[I]> }>({ k: "tuple", items }),
@@ -221,6 +226,7 @@ function toNode(x: Schema<any>): Node {
     case "strLen": return { $: "SStrLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
     case "bool": return { $: "SBool" };
     case "true": return { $: "STrue" };
+    case "json": return { $: "SJson" };
     case "nullable": return { $: "SOpt", inner: toNode(k.inner) };
     case "optional": return { $: "SOptional", inner: toNode(k.inner) };
     case "listLen": return { $: "SListLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
@@ -234,12 +240,115 @@ function toNode(x: Schema<any>): Node {
   }
 }
 
-// ------------------------------------------- Meaning <-> plain JS (not proved)
+function rawAtKey(raw: core.Raw, name: string): core.Raw {
+  for (let r = raw; r.$ === "RKey"; r = r.rest) if (r.key === name) return r.val;
+  return { $: "RMissing" };
+}
+
+// toRaw owns the single whole-value budget. This pass only replaces values at
+// SJson positions; a boundary marker from that first pass must not be hidden by
+// a fresh per-subtree toJsonRaw budget.
+function rawFor(x: Schema<any>, v: any, raw: core.Raw): core.Raw {
+  const k = x.kind;
+  switch (k.k) {
+    case "json": return raw.$ === "RTooBig" ? raw : toJsonRaw(v);
+    case "strLen": return rawFor(k.inner, v, raw);
+    case "listLen": return rawFor(k.inner, v, raw);
+    case "nullable": return v === null ? raw : rawFor(k.inner, v, raw);
+    case "optional": return v === undefined ? { $: "RMissing" } : rawFor(k.inner, v, raw);
+    case "strict": return rawFor(k.obj, v, raw);
+    case "list": {
+      if (!Array.isArray(v) || raw.$ !== "RCons" && raw.$ !== "RNil") return raw;
+      let r: core.Raw = raw;
+      const heads: core.Raw[] = [];
+      for (let i = 0; i < v.length; i++) {
+        if (r.$ !== "RCons") return raw;
+        heads.push(rawFor(k.elem, v[i], r.head));
+        r = r.tail;
+      }
+      if (r.$ !== "RNil") return raw;
+      return heads.reduceRight<core.Raw>((tail, head) => ({ $: "RCons", head, tail }), { $: "RNil" });
+    }
+    case "tuple": {
+      if (!Array.isArray(v)) return raw;
+      let r: core.Raw = raw;
+      const heads: core.Raw[] = [];
+      for (const item of k.items) {
+        if (r.$ !== "RCons") return raw;
+        heads.push(rawFor(item, v[heads.length], r.head));
+        r = r.tail;
+      }
+      if (r.$ !== "RNil") return raw;
+      return heads.reduceRight<core.Raw>((tail, head) => ({ $: "RCons", head, tail }), { $: "RNil" });
+    }
+    case "object": {
+      if (raw.$ !== "REnd" && raw.$ !== "RKey") return raw;
+      const fields = new Map(k.fields.map(([name, field]) => [name, field]));
+      const entries: [string, core.Raw][] = [];
+      for (let r: core.Raw = raw; r.$ === "RKey"; r = r.rest) {
+        const field = fields.get(r.key);
+        entries.push([r.key, field ? rawFor(field, v?.[r.key], r.val) : r.val]);
+      }
+      return entries.reduceRight<core.Raw>((rest, [key, val]) => ({ $: "RKey", key, val, rest }), { $: "REnd" });
+    }
+    case "oneKey": {
+      if (v === null || typeof v !== "object") return raw;
+      const selected = k.cases.find(([name]) => name in v);
+      if (!selected) return raw;
+      return replaceRawKey(raw, selected[0], rawFor(selected[1], v[selected[0]], rawAtKey(raw, selected[0])));
+    }
+    case "tagged": {
+      if (v === null || typeof v !== "object") return raw;
+      const selected = k.cases.find(([name]) => v[k.key] === name);
+      if (!selected) return raw;
+      return rawFor(selected[1], v, raw);
+    }
+    default: return raw;
+  }
+}
+
+function replaceRawKey(raw: core.Raw, name: string, value: core.Raw): core.Raw {
+  if (raw.$ === "REnd") return raw;
+  if (raw.$ !== "RKey") return raw;
+  if (raw.key === name) return { ...raw, val: value };
+  return { ...raw, rest: replaceRawKey(raw.rest, name, value) };
+}
+
 
 type M = any; // a core Meaning(s) value: number (a Nat), string, boolean, Unit, Both, Either, Maybe, List
 
 const unit = { $: "Unit" };
 const both = (a: M, b: M) => ({ $: "Both", a, b });
+
+function bitsToNumber(bits: { hi: number; lo: number }): number {
+  const view = new DataView(new ArrayBuffer(8));
+  view.setUint32(0, bits.hi, false);
+  view.setUint32(4, bits.lo, false);
+  return view.getFloat64(0, false);
+}
+
+function jsonToJs(value: CoreJson): Json {
+  switch (value.$) {
+    case "JNull": return null;
+    case "JBool": return value.value;
+    case "JNumber": return bitsToNumber(value.value);
+    case "JString": return value.value;
+    case "JArray": {
+      const out: Json[] = [];
+      for (let xs = value.values; xs.$ === "Con"; xs = xs.tail) out.push(jsonToJs(xs.head));
+      return out;
+    }
+    case "JObject": {
+      const out: Record<string, Json> = {};
+      const visit = (tree: BendMap<CoreJson>): void => {
+        if (tree.$ === "MLeaf") put(out, tree.key, jsonToJs(tree.val));
+        else if (tree.$ === "MNode") { visit(tree.lo); visit(tree.hi); }
+      };
+      visit(value.values);
+      return out;
+    }
+  }
+}
 
 function toJs(x: Schema<any>, m: M): unknown {
   const k = x.kind;
@@ -248,6 +357,7 @@ function toJs(x: Schema<any>, m: M): unknown {
     case "str": case "bool": case "enum": return m;
     case "strLen": return toJs(k.inner, m);
     case "true": return true;
+    case "json": return jsonToJs(m as CoreJson);
     case "nullable": return m.$ === "None" ? null : toJs(k.inner, m.value);
     case "optional": return m.$ === "None" ? undefined : toJs(k.inner, m.value);
     case "listLen": return toJs(k.inner, m);
@@ -267,6 +377,7 @@ function toMeaning(x: Schema<any>, v: any): M {
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v);
     case "true": return unit;
+    case "json": return jsonFromRaw(toJsonRaw(v));
     case "nullable": return v === null ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v) };
     case "optional": return v === undefined ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v) };
     case "listLen": return toMeaning(k.inner, v);
@@ -286,6 +397,11 @@ function toMeaning(x: Schema<any>, v: any): M {
       return inj(i, toMeaning(k.cases[i]![1], rest));
     }
   }
+}
+
+function jsonFromRaw(raw: core.Raw): CoreJson {
+  if (raw.$ === "RJson") return raw.value;
+  throw new Error(`bend-schema: encode: JSON value cannot be encoded (${raw.$})`);
 }
 
 const inj = (i: number, m: M): M => (i === 0 ? { $: "Inl", value: m } : { $: "Inr", value: inj(i - 1, m) });
@@ -309,6 +425,7 @@ function rawToJs(r: core.Raw): unknown {
     // cannot write it, so it reads as undefined; a nested one never reaches
     // here, because the RKey arm drops it.
     case "RMissing": return undefined;
+    case "RJson": return jsonToJs(r.value);
     default: throw new Error(`bend-schema: encode produced ${r.$}`);
   }
 }

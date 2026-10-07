@@ -7,7 +7,7 @@ import { Every, schemas } from "./gen.schemas.ts";
 
 const FORMS = [
   "SStrict{", "SField{", "SEnd{}", "SStr{}", "SStrLen{", "SNat{}", "SNatIn{", "SBool{}",
-  "STrue{}", "SEnum{", "SOpt{", "SList{", "STuple{", "STEnd{}", "SVariant{", "SVEnd{}",
+  "STrue{}", "SJson{}", "SEnum{", "SOpt{", "SList{", "STuple{", "STEnd{}", "SVariant{", "SVEnd{}",
   "STagged{", "STagEnd{",
 ];
 

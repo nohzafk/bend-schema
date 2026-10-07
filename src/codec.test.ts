@@ -1,3 +1,49 @@
+describe("the JSON host codec", () => {
+  const jsonValue = (raw: Raw) => raw.$ === "RJson" ? raw.value : null;
+
+  test("encodes finite numbers as binary64 bits without losing negative zero", () => {
+    for (const value of [-0, -12, 1.5, 2 ** 48, 2 ** 53 + 1]) {
+      const raw = toJsonRaw(value);
+      expect(raw.$).toBe("RJson");
+      const json = jsonValue(raw);
+      expect(json?.$).toBe("JNumber");
+      if (json?.$ === "JNumber") {
+        const view = new DataView(new ArrayBuffer(8));
+        view.setFloat64(0, value, false);
+        expect(json.value).toEqual({ $: "NumberBits", hi: view.getUint32(0, false), lo: view.getUint32(4, false) });
+      }
+    }
+    expect(Object.is(-0, 0)).toBe(false);
+    expect(toJsonRaw(NaN)).toEqual({ $: "RBad" });
+    expect(toJsonRaw(Infinity)).toEqual({ $: "RBad" });
+    expect(toJsonRaw(-Infinity)).toEqual({ $: "RBad" });
+  });
+
+  test("builds empty and nested JSON containers, including __proto__ safely", () => {
+    expect(toJsonRaw([])).toEqual({ $: "RJson", value: { $: "JArray", values: { $: "Nil" } } });
+    expect(toJsonRaw({})).toEqual({ $: "RJson", value: { $: "JObject", values: { $: "MTip" } } });
+    const proto = JSON.parse('{"__proto__":{"safe":true}}') as unknown;
+    const raw = toJsonRaw(proto);
+    expect(raw.$).toBe("RJson");
+    const json = jsonValue(raw);
+    expect(json?.$).toBe("JObject");
+    if (json?.$ === "JObject") expect(json.values).toEqual({ $: "MLeaf", key: "__proto__", val: { $: "JObject", values: { $: "MLeaf", key: "safe", val: { $: "JBool", value: true } } } });
+    const nullProto = Object.create(null) as Record<string, unknown>;
+    nullProto.x = [null, "s"];
+    expect(toJsonRaw(nullProto).$).toBe("RJson");
+  });
+
+  test("preserves the codec size and non-JSON boundaries", () => {
+    expect(toJsonRaw(Array.from({ length: BUDGET + 1 }, () => null))).toEqual({ $: "RTooBig" });
+    expect(toJsonRaw(Object.fromEntries(Array.from({ length: KEYS_MAX + 1 }, (_, i) => [`k${i}`, null])))).toEqual({ $: "RTooBig" });
+    expect(toJsonRaw({ value: undefined })).toEqual({ $: "RBad" });
+    expect(toJsonRaw(new Date())).toEqual({ $: "RBad" });
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(toJsonRaw(cyclic)).toEqual({ $: "RBad" });
+  });
+});
+
 // The codec and the proved check, at run time: what reaches the core, and what
 // comes back.
 //
@@ -10,7 +56,7 @@
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.mjs";
 import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
-import { BUDGET, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toRaw } from "./codec";
+import { BUDGET, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit

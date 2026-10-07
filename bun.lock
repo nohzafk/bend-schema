@@ -6,7 +6,7 @@
       "name": "bend-schema",
       "devDependencies": {
         "@types/bun": "^1.2.0",
-        "bend-emit": "0.3.1",
+        "bend-emit": "0.3.3",
         "bend-falsify": "github:nohzafk/bend-falsify#a50873f",
         "effect": "4.0.1",
         "typescript": "^7.0.2",
@@ -64,7 +64,7 @@
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
-    "bend-emit": ["bend-emit@0.3.1", "", { "bin": { "bend-emit": "src/cli.js" } }, "sha512-wiMGcvLd/kbDvHeOyCvFsBOlQhtwlwC9ziVMPsrSOtAWPWTtcUL5TNvJgNvOWphXnKDsGpLudQrEzt9Vd904Cg=="],
+    "bend-emit": ["bend-emit@0.3.3", "", { "bin": { "bend-emit": "src/cli.js" } }, "sha512-Bhl1kpyioLXYGkbyDt/c3yc1ng4njYy/EZVDWqEBqr1S6N1woCD3OItE5sgt7vCNEMrmcg7drnbIc1RPKg5H3w=="],
 
     "bend-falsify": ["bend-falsify@github:nohzafk/bend-falsify#a50873f", { "bin": { "bend-falsify": "./src/falsify.ts" } }, "nohzafk-bend-falsify-a50873f", "sha512-rXVweLsx8rVHzoMY/jLkKQezVt9JV+Iu+Tk9L0oFfe2AtSuXzlhqTHK2DhUHDkyKzgSODqS+QFATCY6+mD52Pg=="],
 

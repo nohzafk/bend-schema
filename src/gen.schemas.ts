@@ -22,6 +22,7 @@ export const Every = s.object({
     workers: s.nat().in(1, 64),
     active: s.bool(),
     always: s.true(),
+    anything: s.json(),
     tier: s.enum(["free", "pro"]),
     note: s.str().nullable(),
     tags: s.list(s.str().len(1, 8)),

@@ -15,7 +15,7 @@
 // TooLarge at that node's path. Nothing here is a rule about values: a size is
 // not a shape, and a host cannot choose the sizes it is sent.
 
-import type { BendList, BendMaybe, Err, Raw, Step, Why } from "../dist-core/core.mjs";
+import type { BendList, BendMap, BendMaybe, Err, Json, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
 
 // The largest Nat the runtime holds: bend's own Nat.add(Nat.mul(65535,
 // 4294967295 + 1), 4294967295). A number past it is not a Nat at all, so it
@@ -105,6 +105,75 @@ export function toRaw(v: unknown): Raw {
   return build(v);
 }
 
+const numberView = new DataView(new ArrayBuffer(8));
+
+function numberBits(v: number): NumberBits | null {
+  if (!Number.isFinite(v)) return null;
+  numberView.setFloat64(0, v, false);
+  const bits = { $: "NumberBits" as const, hi: numberView.getUint32(0, false), lo: numberView.getUint32(4, false) };
+  return Object.is(bitsNumber(bits), v) ? bits : null;
+}
+
+function bitsNumber(bits: NumberBits): number {
+  numberView.setUint32(0, bits.hi, false);
+  numberView.setUint32(4, bits.lo, false);
+  return numberView.getFloat64(0, false);
+}
+
+// Internal seam for the JSON branch of host input. Failures retain the same
+// boundary markers as toRaw, so index can attach them without accepting an
+// invalid Json value.
+export function toJsonRaw(v: unknown): Raw {
+  let left = BUDGET;
+  const active = new WeakSet<object>();
+  const build = (value: unknown): Json | Raw => {
+    if (value === null) return { $: "JNull" };
+    if (typeof value === "boolean") return { $: "JBool", value };
+    if (typeof value === "number") {
+      const bits = numberBits(value);
+      return bits === null || !Number.isFinite(bitsNumber(bits)) ? { $: "RBad" } : { $: "JNumber", value: bits };
+    }
+    if (typeof value === "string") return { $: "JString", value };
+    if (Array.isArray(value)) {
+      if (value.length > left || active.has(value)) return value.length > left ? { $: "RTooBig" } : { $: "RBad" };
+      left -= value.length;
+      active.add(value);
+      const items = Array.from(value, build);
+      active.delete(value);
+      if (items.some((item) => item.$ === "RBad" || item.$ === "RTooBig")) {
+        return items.find((item) => item.$ === "RTooBig") ?? { $: "RBad" };
+      }
+      let values: BendList<Json> = { $: "Nil" };
+      for (let i = items.length - 1; i >= 0; i--) values = { $: "Con", head: items[i] as Json, tail: values };
+      return { $: "JArray", values };
+    }
+    if (typeof value === "object") {
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
+      if (active.has(value)) return { $: "RBad" };
+      const entries = Object.entries(value as object);
+      if (entries.length > KEYS_MAX || entries.length > left) return { $: "RTooBig" };
+      left -= entries.length;
+      active.add(value);
+      const values = entries.map(([key, child]) => [key, build(child)] as const);
+      active.delete(value);
+      const bad = values.find(([, child]) => child.$ === "RTooBig" || child.$ === "RBad");
+      if (bad) return bad[1].$ === "RTooBig" ? bad[1] : { $: "RBad" };
+      const leaves: BendMap<Json>[] = values.map(([key, child]) => ({ $: "MLeaf", key, val: child as Json }));
+      const mapTree = (lo: number, hi: number): BendMap<Json> => {
+        if (lo >= hi) return { $: "MTip" };
+        if (hi - lo === 1) return leaves[lo];
+        const mid = lo + Math.floor((hi - lo) / 2);
+        return { $: "MNode", pos: BigInt(mid), lo: mapTree(lo, mid), hi: mapTree(mid, hi) };
+      };
+      return { $: "JObject", values: mapTree(0, leaves.length) };
+    }
+    return { $: "RBad" };
+  };
+  const result = build(v);
+  return result.$ === "RBad" || result.$ === "RTooBig" ? result : { $: "RJson", value: result as Json };
+}
+
 export const NONE: BendMaybe<bigint> = { $: "None" };
 
 function steps(p: BendList<Step>): Step[] {
@@ -164,6 +233,8 @@ export function whyText(w: Why): string {
       return `is a second ${w.key}`;
     case "NotIn":
       return `must be from ${w.lo} to ${w.hi}`;
+    case "NotJson":
+      return "must be a JSON value";
     case "TooLarge":
       return "too large";
   }

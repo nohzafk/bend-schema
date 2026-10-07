@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { s, type Infer } from "./index.ts";
+import { s, type Infer, type Json } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -132,6 +132,53 @@ describe("the builder", () => {
   test("a bound must be whole", () => {
     expect(() => s.nat().in(-1, 3)).toThrow();
     expect(() => s.str().len(0, 1.5)).toThrow();
+  });
+});
+
+describe("json schema", () => {
+  const Json = s.json();
+
+  test("accepts JSON numbers and preserves IEEE-754 identity", () => {
+    for (const value of [0, -0, 0.1, -12.5, Number.MAX_VALUE, Number.MIN_VALUE]) {
+      const parsed = Json.parse(value);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(Object.is(parsed.value, value)).toBe(true);
+      expect(Object.is(Json.encode(value), value)).toBe(true);
+    }
+    expect(Json.check(Infinity)?.message).toBe("must be a JSON value");
+  });
+
+  test("round-trips containers, ordering, empty values and __proto__", () => {
+    const value = JSON.parse('{"first":[],"__proto__":{"x":-0},"last":[null,true,1.25]}');
+    const parsed = Json.parse(value);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(Object.keys(parsed.value as object)).toEqual(["first", "__proto__", "last"]);
+      expect(Object.is((parsed.value as any).__proto__.x, -0)).toBe(true);
+      expect(parsed.value).toEqual(value);
+    }
+    expect(Json.encode(value)).toEqual(value);
+    expect(Json.parse([])).toEqual({ ok: true, value: [] });
+    expect(Json.parse({})).toEqual({ ok: true, value: {} });
+  });
+
+  test("uses JSON conversion recursively inside ordinary schemas", () => {
+    const Nested = s.object({
+      values: s.list(s.json()),
+      pair: s.tuple(s.str(), s.json()),
+      choice: s.oneKey({ payload: s.json() }),
+      tagged: s.tagged("kind", { item: s.object({ value: s.json() }) }),
+    });
+    const value: Infer<typeof Nested> = { values: [0.5, { a: -0 }], pair: ["x", null], choice: { payload: [true] }, tagged: { kind: "item", value: { n: 2.25 } } };
+    const parsed = Nested.parse(value);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(Object.is((parsed.value.values[1] as Record<string, Json>).a, -0)).toBe(true);
+    expect(Nested.encode(value)).toEqual(value);
+  });
+
+  test("does not turn ordinary schema numbers into JSON numbers", () => {
+    expect(s.nat().parse(4)).toEqual({ ok: true, value: 4 });
+    expect(s.nat().check(0.5)?.message).toMatch(/whole number/);
   });
 });
 

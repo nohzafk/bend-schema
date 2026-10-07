@@ -32,6 +32,17 @@ import Base
 # below (check0, conforms0). `prev` is carried but no case reads it today; a
 # stateful combinator would.
 
+type NumberBits is Data:
+  NumberBits{hi: U32, lo: U32}
+
+type Json is Data:
+  JNull{}
+  JBool{value: Bool}
+  JNumber{value: NumberBits}
+  JString{value: String}
+  JArray{values: List<&2, Json>}
+  JObject{values: Map<&2, Json>}
+
 type Raw is Data:
   RNum{n: Nat}
   RBool{b: Bool}
@@ -44,6 +55,7 @@ type Raw is Data:
   RCons{head: Raw, tail: Raw}
   REnd{}
   RKey{key: String, val: Raw, rest: Raw}
+  RJson{value: Json}
 
 type Schema is Data:
   SNat{}
@@ -67,6 +79,7 @@ type Schema is Data:
   STEnd{}
   SOptional{inner: Schema}
   SListLen{lo: Nat, hi: Nat, s: Schema}
+  SJson{}
 
 # A step of a path. Positions count what was passed on the way, so that
 # following a path never compares two names: AtIndex{i} is element i of a
@@ -102,9 +115,39 @@ type Why is Data:
   RepeatedKey{key: String}
   TooLarge{}
   CountNotIn{lo: Nat, hi: Nat}
+  NotJson{}
 
 type Err is Data:
   Err{path: List<&2, Step>, why: Why}
+
+# JSON numbers use IEEE-754 binary64 bits. The exponent occupies the high
+# word's bits 20 through 30; all ones denotes infinity or NaN.
+def finite_number(bits: NumberBits) -> Bool:
+  match bits:
+    case NumberBits{+hi, lo}:
+      Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))
+
+# Every number in the JSON tree is finite.
+def valid_json(value: Json) -> Bool:
+  match value:
+    case JNull{}:
+      True{}
+    case JBool{value}:
+      True{}
+    case JNumber{bits}:
+      finite_number(bits)
+    case JString{text}:
+      True{}
+    case JArray{Nil{}}:
+      True{}
+    case JArray{head <> tail}:
+      Bool.and(valid_json(head), valid_json(JArray{tail}))
+    case JObject{MTip{}}:
+      True{}
+    case JObject{MLeaf{key, val}}:
+      valid_json(val)
+    case JObject{MNode{pos, lo, hi}}:
+      Bool.and(valid_json(JObject{lo}), valid_json(JObject{hi}))
 
 # ---- reading a value ----
 
@@ -390,6 +433,8 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
       True{}
     case SList{+e} RCons{h, t}:
       Bool.and(conforms(~rule, e, h, None{}), conforms(~rule, SList{e}, t, None{}))
+    case SJson{} RJson{value}:
+      valid_json(value)
     case SField{+name, fs, rest} REnd{}:
       Bool.and(conforms(~rule, fs, RMissing{}, None{}), conforms(~rule, rest, REnd{}, None{}))
     case SField{+name, fs, rest} RKey{+k, +v, +o}:
@@ -612,6 +657,10 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       None{}
     case SList{+e} RCons{h, t}:
       first(under(AtIndex{0n}, check(~rule, e, h, None{})), later_l(check(~rule, SList{e}, t, None{})))
+    case SJson{} RJson{value}:
+      in_err(valid_json(value), NotJson{})
+    case SJson{} x:
+      here(missing_or(x, NotJson{}))
     case SList{e} x:
       here(missing_or(x, NotList{}))
     case SField{+name, fs, rest} REnd{}:
@@ -882,6 +931,10 @@ def tag_key_defect(b: Bool, +k: String, p: List<&2, Step>) -> Maybe<&2, Why>:
 
 def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>, p: List<&2, Step>) -> Maybe<&2, Why>:
   match s r p:
+    case SJson{} RJson{value} q:
+      guard(Bool.not(valid_json(value)), at_end(NotJson{}, q))
+    case SJson{} x q:
+      at_end(missing_or(x, NotJson{}), q)
     case SNat{} x q:
       nat_defect(x, q)
     case SStr{} x q:
@@ -1147,6 +1200,8 @@ def Meaning(s: Schema) -> Data:
       Both<Meaning(ts), Meaning(rest)>
     case STEnd{}:
       Unit
+    case SJson{}:
+      Json
 
 def enc(s: Schema, x: Meaning(s)) -> Raw:
   match s x:
@@ -1202,6 +1257,8 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
       RCons{enc(ts, a), enc(rest, b)}
     case STEnd{} Unit{}:
       RNil{}
+    case SJson{} value:
+      RJson{value}
 
 def lcons(-A: Data, h: Maybe<&2, A>, t: Maybe<&2, List<&2, A>>) -> Maybe<&2, List<&2, A>>:
   match h t:
@@ -1303,6 +1360,8 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       both(Meaning(ts), Meaning(rest), dec(ts, h), dec(rest, t))
     case STEnd{} RNil{}:
       Some{Unit{}}
+    case SJson{} RJson{value}:
+      Some{value}
     case _ _:
       None{}
 
@@ -1495,6 +1554,8 @@ def wf(s: Schema) -> Bool:
       Bool.and(Bool.not(opt_at(vs)), Bool.and(wf(vs), Bool.and(fresh_v(n, rest), wf(rest))))
     case STuple{+ts, +rest}:
       Bool.and(Bool.not(opt_at(ts)), Bool.and(wf(ts), Bool.and(Bool.not(opt_at(rest)), wf(rest))))
+    case SJson{}:
+      True{}
     case _:
       True{}
 
@@ -1535,6 +1596,8 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
       names_ok(rest, b)
     case STuple{ts, rest} Both{a, b}:
       Bool.and(names_ok(ts, a), names_ok(rest, b))
+    case SJson{} value:
+      True{}
     case _ _:
       True{}
 
@@ -1581,5 +1644,7 @@ def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
       bounds_ok(rest, b)
     case STuple{ts, rest} Both{a, b}:
       Bool.and(bounds_ok(ts, a), bounds_ok(rest, b))
+    case SJson{} value:
+      valid_json(value)
     case _ _:
       True{}
