@@ -280,24 +280,6 @@ function $finite_number$(_bits_0) {
   return $Bool$not$((_x_0 === 2146435072));
 }
 
-function $key_in$(_key_0, _members_0) {
-  const $stk = [];
-  for (;;) {
-  if (_members_0.$ === "Nil") {
-    return $unwind$($stk, false);
-  } else {
-    const _t_0 = _members_0["head"];
-    const _other_0 = _t_0["key"];
-    const _rest_0 = _members_0["tail"];
-    const _x_0 = ($String$eq$(_key_0, _other_0));
-    {
-      $stk.push(($r) => { const _x_1 = ($r); return (_x_0 || _x_1); });
-      const $a1 = _rest_0; _members_0 = $a1; continue;
-    }
-  }
-  }
-}
-
 function $valid_json$(_value_0) {
   const $stk = [];
   for (;;) {
@@ -329,13 +311,11 @@ function $valid_json$(_value_0) {
       return $unwind$($stk, true);
     } else {
       const _t_2 = _t_1["head"];
-      const _key_0 = _t_2["key"];
       const _val_0 = _t_2["value"];
       const _tail_1 = _t_1["tail"];
       {
         const $t0 = ($valid_json$(_val_0));
-        const $t1 = ($Bool$not$(($key_in$(_key_0, _tail_1))));
-        $stk.push(($r) => ($Bool$and$($t0, ($Bool$and$($t1, ($r))))));
+        $stk.push(($r) => ($Bool$and$($t0, ($r))));
         const $a0 = new $C$JObject$members(_tail_1); _value_0 = $a0; continue;
       }
     }
@@ -2774,16 +2754,16 @@ function $Bool$not$(_b_0) {
   }
 }
 
-function $String$eq$(_a_0, _b_0) {
-  return $Cmp$is_eq$(($String$order$(_a_0, _b_0)));
-}
-
 function $Bool$and$(_a_0, _b_0) {
   if (!_a_0) {
     return false;
   } else {
     return _b_0;
   }
+}
+
+function $String$eq$(_a_0, _b_0) {
+  return $Cmp$is_eq$(($String$order$(_a_0, _b_0)));
 }
 
 function $Nat$is_le$(_a_0, _b_0) {
@@ -3756,7 +3736,6 @@ function $0m19(v) {
 }
 const $bend_emit = {
   "finite_number": run_lib((a0) => { const r = (run_loop($finite_number$((a0)))); (a0); return r; }, 1),
-  "key_in": run_lib((a0, a1) => { const r = (run_loop($key_in$((a0), (a1)))); (a0); (a1); return r; }, 2),
   "valid_json": run_lib((a0) => { const r = (run_loop($valid_json$((a0)))); (a0); return r; }, 1),
   "pick_raw": run_lib((a0, a1, a2) => { const r = $0m1(run_loop($pick_raw$((a0), $0m0(a1), $0m0(a2)))); (a0); $0m1(a1); $0m1(a2); return r; }, 3),
   "lookup": run_lib((a0, a1) => { const r = $0m1(run_loop($lookup$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
@@ -3869,114 +3848,113 @@ const $bend_emit = {
 };
 export default $bend_emit;
 const $bend_emit$0 = $bend_emit["finite_number"];
-const $bend_emit$1 = $bend_emit["key_in"];
-const $bend_emit$2 = $bend_emit["valid_json"];
-const $bend_emit$3 = $bend_emit["pick_raw"];
-const $bend_emit$4 = $bend_emit["lookup"];
-const $bend_emit$5 = $bend_emit["pick_bool"];
-const $bend_emit$6 = $bend_emit["is_rnil"];
-const $bend_emit$7 = $bend_emit["is_missing"];
-const $bend_emit$8 = $bend_emit["in_names"];
-const $bend_emit$9 = $bend_emit["none_present"];
-const $bend_emit$10 = $bend_emit["key_names"];
-const $bend_emit$11 = $bend_emit["no_extra"];
-const $bend_emit$12 = $bend_emit["drop_key"];
-const $bend_emit$13 = $bend_emit["is_str"];
-const $bend_emit$14 = $bend_emit["is_tag"];
-const $bend_emit$15 = $bend_emit["in_err"];
-const $bend_emit$16 = $bend_emit["str_len_ok"];
-const $bend_emit$17 = $bend_emit["num_ok"];
-const $bend_emit$18 = $bend_emit["int_le"];
-const $bend_emit$19 = $bend_emit["int_ok"];
-const $bend_emit$20 = $bend_emit["int_raw"];
-const $bend_emit$21 = $bend_emit["len_ok"];
-const $bend_emit$22 = $bend_emit["str_len_in"];
-const $bend_emit$23 = $bend_emit["nat_in"];
-const $bend_emit$24 = $bend_emit["is_bool"];
-const $bend_emit$25 = $bend_emit["raw_list"];
-const $bend_emit$26 = $bend_emit["raw_len"];
-const $bend_emit$27 = $bend_emit["count_ok"];
-const $bend_emit$28 = $bend_emit["list_len_ok"];
-const $bend_emit$29 = $bend_emit["has_key"];
-const $bend_emit$30 = $bend_emit["key_once_at"];
-const $bend_emit$31 = $bend_emit["key_once"];
-const $bend_emit$32 = $bend_emit["key_err"];
-const $bend_emit$33 = $bend_emit["kind_eq"];
-const $bend_emit$34 = $bend_emit["kind_of"];
-const $bend_emit$35 = $bend_emit["has_kind"];
-const $bend_emit$36 = $bend_emit["apart"];
-const $bend_emit$37 = $bend_emit["disjoint"];
-const $bend_emit$38 = $bend_emit["alt_ok"];
-const $bend_emit$39 = $bend_emit["no_alt"];
-const $bend_emit$40 = $bend_emit["here"];
-const $bend_emit$41 = $bend_emit["under"];
-const $bend_emit$42 = $bend_emit["len_err"];
-const $bend_emit$43 = $bend_emit["later_l_path"];
-const $bend_emit$44 = $bend_emit["later_l"];
-const $bend_emit$45 = $bend_emit["later_i_path"];
-const $bend_emit$46 = $bend_emit["later_i"];
-const $bend_emit$47 = $bend_emit["later_f_path"];
-const $bend_emit$48 = $bend_emit["later_f"];
-const $bend_emit$49 = $bend_emit["first"];
-const $bend_emit$50 = $bend_emit["missing_or"];
-const $bend_emit$51 = $bend_emit["pick_err"];
-const $bend_emit$52 = $bend_emit["true_err"];
-const $bend_emit$53 = $bend_emit["enum_err"];
-const $bend_emit$54 = $bend_emit["dup_err"];
-const $bend_emit$55 = $bend_emit["extra_err"];
-const $bend_emit$56 = $bend_emit["tag_err"];
-const $bend_emit$57 = $bend_emit["count_err"];
-const $bend_emit$58 = $bend_emit["guard"];
-const $bend_emit$59 = $bend_emit["nat_in_defect"];
-const $bend_emit$60 = $bend_emit["int_defect"];
-const $bend_emit$61 = $bend_emit["int_in_defect"];
-const $bend_emit$62 = $bend_emit["bool_defect"];
-const $bend_emit$63 = $bend_emit["no_rule"];
-const $bend_emit$64 = $bend_emit["first_why"];
-const $bend_emit$65 = $bend_emit["step_eq"];
-const $bend_emit$66 = $bend_emit["path_eq"];
-const $bend_emit$67 = $bend_emit["rule_defect"];
-const $bend_emit$68 = $bend_emit["not_list"];
-const $bend_emit$69 = $bend_emit["not_object"];
-const $bend_emit$70 = $bend_emit["nat_defect"];
-const $bend_emit$71 = $bend_emit["str_defect"];
-const $bend_emit$72 = $bend_emit["pick_why"];
-const $bend_emit$73 = $bend_emit["true_defect"];
-const $bend_emit$74 = $bend_emit["enum_defect"];
-const $bend_emit$75 = $bend_emit["no_variant"];
-const $bend_emit$76 = $bend_emit["dup_defect"];
-const $bend_emit$77 = $bend_emit["at_end"];
-const $bend_emit$78 = $bend_emit["extra_defect"];
-const $bend_emit$79 = $bend_emit["tag_defect"];
-const $bend_emit$80 = $bend_emit["tag_key_defect"];
-const $bend_emit$81 = $bend_emit["check0"];
-const $bend_emit$82 = $bend_emit["conforms0"];
-const $bend_emit$83 = $bend_emit["is_chain"];
-const $bend_emit$84 = $bend_emit["is_object"];
-const $bend_emit$85 = $bend_emit["one_if_there"];
-const $bend_emit$86 = $bend_emit["count_present"];
-const $bend_emit$87 = $bend_emit["tuple_of"];
-const $bend_emit$88 = $bend_emit["at_raw"];
-const $bend_emit$89 = $bend_emit["count_unknown"];
-const $bend_emit$90 = $bend_emit["Meaning"];
-const $bend_emit$91 = $bend_emit["enc"];
-const $bend_emit$92 = $bend_emit["lcons"];
-const $bend_emit$93 = $bend_emit["both"];
-const $bend_emit$94 = $bend_emit["opt_some"];
-const $bend_emit$95 = $bend_emit["map_inl"];
-const $bend_emit$96 = $bend_emit["map_inr"];
-const $bend_emit$97 = $bend_emit["pick_m"];
-const $bend_emit$98 = $bend_emit["true_unit"];
-const $bend_emit$99 = $bend_emit["nullish"];
-const $bend_emit$100 = $bend_emit["dec"];
-const $bend_emit$101 = $bend_emit["opt_at"];
-const $bend_emit$102 = $bend_emit["nullable"];
-const $bend_emit$103 = $bend_emit["no_key"];
-const $bend_emit$104 = $bend_emit["fresh_f"];
-const $bend_emit$105 = $bend_emit["fresh_v"];
-const $bend_emit$106 = $bend_emit["is_keyed"];
-const $bend_emit$107 = $bend_emit["fresh_t"];
-const $bend_emit$108 = $bend_emit["wf"];
-const $bend_emit$109 = $bend_emit["names_ok"];
-const $bend_emit$110 = $bend_emit["bounds_ok"];
-export { $bend_emit$0 as finite_number, $bend_emit$1 as key_in, $bend_emit$2 as valid_json, $bend_emit$3 as pick_raw, $bend_emit$4 as lookup, $bend_emit$5 as pick_bool, $bend_emit$6 as is_rnil, $bend_emit$7 as is_missing, $bend_emit$8 as in_names, $bend_emit$9 as none_present, $bend_emit$10 as key_names, $bend_emit$11 as no_extra, $bend_emit$12 as drop_key, $bend_emit$13 as is_str, $bend_emit$14 as is_tag, $bend_emit$15 as in_err, $bend_emit$16 as str_len_ok, $bend_emit$17 as num_ok, $bend_emit$18 as int_le, $bend_emit$19 as int_ok, $bend_emit$20 as int_raw, $bend_emit$21 as len_ok, $bend_emit$22 as str_len_in, $bend_emit$23 as nat_in, $bend_emit$24 as is_bool, $bend_emit$25 as raw_list, $bend_emit$26 as raw_len, $bend_emit$27 as count_ok, $bend_emit$28 as list_len_ok, $bend_emit$29 as has_key, $bend_emit$30 as key_once_at, $bend_emit$31 as key_once, $bend_emit$32 as key_err, $bend_emit$33 as kind_eq, $bend_emit$34 as kind_of, $bend_emit$35 as has_kind, $bend_emit$36 as apart, $bend_emit$37 as disjoint, $bend_emit$38 as alt_ok, $bend_emit$39 as no_alt, $bend_emit$40 as here, $bend_emit$41 as under, $bend_emit$42 as len_err, $bend_emit$43 as later_l_path, $bend_emit$44 as later_l, $bend_emit$45 as later_i_path, $bend_emit$46 as later_i, $bend_emit$47 as later_f_path, $bend_emit$48 as later_f, $bend_emit$49 as first, $bend_emit$50 as missing_or, $bend_emit$51 as pick_err, $bend_emit$52 as true_err, $bend_emit$53 as enum_err, $bend_emit$54 as dup_err, $bend_emit$55 as extra_err, $bend_emit$56 as tag_err, $bend_emit$57 as count_err, $bend_emit$58 as guard, $bend_emit$59 as nat_in_defect, $bend_emit$60 as int_defect, $bend_emit$61 as int_in_defect, $bend_emit$62 as bool_defect, $bend_emit$63 as no_rule, $bend_emit$64 as first_why, $bend_emit$65 as step_eq, $bend_emit$66 as path_eq, $bend_emit$67 as rule_defect, $bend_emit$68 as not_list, $bend_emit$69 as not_object, $bend_emit$70 as nat_defect, $bend_emit$71 as str_defect, $bend_emit$72 as pick_why, $bend_emit$73 as true_defect, $bend_emit$74 as enum_defect, $bend_emit$75 as no_variant, $bend_emit$76 as dup_defect, $bend_emit$77 as at_end, $bend_emit$78 as extra_defect, $bend_emit$79 as tag_defect, $bend_emit$80 as tag_key_defect, $bend_emit$81 as check0, $bend_emit$82 as conforms0, $bend_emit$83 as is_chain, $bend_emit$84 as is_object, $bend_emit$85 as one_if_there, $bend_emit$86 as count_present, $bend_emit$87 as tuple_of, $bend_emit$88 as at_raw, $bend_emit$89 as count_unknown, $bend_emit$90 as Meaning, $bend_emit$91 as enc, $bend_emit$92 as lcons, $bend_emit$93 as both, $bend_emit$94 as opt_some, $bend_emit$95 as map_inl, $bend_emit$96 as map_inr, $bend_emit$97 as pick_m, $bend_emit$98 as true_unit, $bend_emit$99 as nullish, $bend_emit$100 as dec, $bend_emit$101 as opt_at, $bend_emit$102 as nullable, $bend_emit$103 as no_key, $bend_emit$104 as fresh_f, $bend_emit$105 as fresh_v, $bend_emit$106 as is_keyed, $bend_emit$107 as fresh_t, $bend_emit$108 as wf, $bend_emit$109 as names_ok, $bend_emit$110 as bounds_ok };
+const $bend_emit$1 = $bend_emit["valid_json"];
+const $bend_emit$2 = $bend_emit["pick_raw"];
+const $bend_emit$3 = $bend_emit["lookup"];
+const $bend_emit$4 = $bend_emit["pick_bool"];
+const $bend_emit$5 = $bend_emit["is_rnil"];
+const $bend_emit$6 = $bend_emit["is_missing"];
+const $bend_emit$7 = $bend_emit["in_names"];
+const $bend_emit$8 = $bend_emit["none_present"];
+const $bend_emit$9 = $bend_emit["key_names"];
+const $bend_emit$10 = $bend_emit["no_extra"];
+const $bend_emit$11 = $bend_emit["drop_key"];
+const $bend_emit$12 = $bend_emit["is_str"];
+const $bend_emit$13 = $bend_emit["is_tag"];
+const $bend_emit$14 = $bend_emit["in_err"];
+const $bend_emit$15 = $bend_emit["str_len_ok"];
+const $bend_emit$16 = $bend_emit["num_ok"];
+const $bend_emit$17 = $bend_emit["int_le"];
+const $bend_emit$18 = $bend_emit["int_ok"];
+const $bend_emit$19 = $bend_emit["int_raw"];
+const $bend_emit$20 = $bend_emit["len_ok"];
+const $bend_emit$21 = $bend_emit["str_len_in"];
+const $bend_emit$22 = $bend_emit["nat_in"];
+const $bend_emit$23 = $bend_emit["is_bool"];
+const $bend_emit$24 = $bend_emit["raw_list"];
+const $bend_emit$25 = $bend_emit["raw_len"];
+const $bend_emit$26 = $bend_emit["count_ok"];
+const $bend_emit$27 = $bend_emit["list_len_ok"];
+const $bend_emit$28 = $bend_emit["has_key"];
+const $bend_emit$29 = $bend_emit["key_once_at"];
+const $bend_emit$30 = $bend_emit["key_once"];
+const $bend_emit$31 = $bend_emit["key_err"];
+const $bend_emit$32 = $bend_emit["kind_eq"];
+const $bend_emit$33 = $bend_emit["kind_of"];
+const $bend_emit$34 = $bend_emit["has_kind"];
+const $bend_emit$35 = $bend_emit["apart"];
+const $bend_emit$36 = $bend_emit["disjoint"];
+const $bend_emit$37 = $bend_emit["alt_ok"];
+const $bend_emit$38 = $bend_emit["no_alt"];
+const $bend_emit$39 = $bend_emit["here"];
+const $bend_emit$40 = $bend_emit["under"];
+const $bend_emit$41 = $bend_emit["len_err"];
+const $bend_emit$42 = $bend_emit["later_l_path"];
+const $bend_emit$43 = $bend_emit["later_l"];
+const $bend_emit$44 = $bend_emit["later_i_path"];
+const $bend_emit$45 = $bend_emit["later_i"];
+const $bend_emit$46 = $bend_emit["later_f_path"];
+const $bend_emit$47 = $bend_emit["later_f"];
+const $bend_emit$48 = $bend_emit["first"];
+const $bend_emit$49 = $bend_emit["missing_or"];
+const $bend_emit$50 = $bend_emit["pick_err"];
+const $bend_emit$51 = $bend_emit["true_err"];
+const $bend_emit$52 = $bend_emit["enum_err"];
+const $bend_emit$53 = $bend_emit["dup_err"];
+const $bend_emit$54 = $bend_emit["extra_err"];
+const $bend_emit$55 = $bend_emit["tag_err"];
+const $bend_emit$56 = $bend_emit["count_err"];
+const $bend_emit$57 = $bend_emit["guard"];
+const $bend_emit$58 = $bend_emit["nat_in_defect"];
+const $bend_emit$59 = $bend_emit["int_defect"];
+const $bend_emit$60 = $bend_emit["int_in_defect"];
+const $bend_emit$61 = $bend_emit["bool_defect"];
+const $bend_emit$62 = $bend_emit["no_rule"];
+const $bend_emit$63 = $bend_emit["first_why"];
+const $bend_emit$64 = $bend_emit["step_eq"];
+const $bend_emit$65 = $bend_emit["path_eq"];
+const $bend_emit$66 = $bend_emit["rule_defect"];
+const $bend_emit$67 = $bend_emit["not_list"];
+const $bend_emit$68 = $bend_emit["not_object"];
+const $bend_emit$69 = $bend_emit["nat_defect"];
+const $bend_emit$70 = $bend_emit["str_defect"];
+const $bend_emit$71 = $bend_emit["pick_why"];
+const $bend_emit$72 = $bend_emit["true_defect"];
+const $bend_emit$73 = $bend_emit["enum_defect"];
+const $bend_emit$74 = $bend_emit["no_variant"];
+const $bend_emit$75 = $bend_emit["dup_defect"];
+const $bend_emit$76 = $bend_emit["at_end"];
+const $bend_emit$77 = $bend_emit["extra_defect"];
+const $bend_emit$78 = $bend_emit["tag_defect"];
+const $bend_emit$79 = $bend_emit["tag_key_defect"];
+const $bend_emit$80 = $bend_emit["check0"];
+const $bend_emit$81 = $bend_emit["conforms0"];
+const $bend_emit$82 = $bend_emit["is_chain"];
+const $bend_emit$83 = $bend_emit["is_object"];
+const $bend_emit$84 = $bend_emit["one_if_there"];
+const $bend_emit$85 = $bend_emit["count_present"];
+const $bend_emit$86 = $bend_emit["tuple_of"];
+const $bend_emit$87 = $bend_emit["at_raw"];
+const $bend_emit$88 = $bend_emit["count_unknown"];
+const $bend_emit$89 = $bend_emit["Meaning"];
+const $bend_emit$90 = $bend_emit["enc"];
+const $bend_emit$91 = $bend_emit["lcons"];
+const $bend_emit$92 = $bend_emit["both"];
+const $bend_emit$93 = $bend_emit["opt_some"];
+const $bend_emit$94 = $bend_emit["map_inl"];
+const $bend_emit$95 = $bend_emit["map_inr"];
+const $bend_emit$96 = $bend_emit["pick_m"];
+const $bend_emit$97 = $bend_emit["true_unit"];
+const $bend_emit$98 = $bend_emit["nullish"];
+const $bend_emit$99 = $bend_emit["dec"];
+const $bend_emit$100 = $bend_emit["opt_at"];
+const $bend_emit$101 = $bend_emit["nullable"];
+const $bend_emit$102 = $bend_emit["no_key"];
+const $bend_emit$103 = $bend_emit["fresh_f"];
+const $bend_emit$104 = $bend_emit["fresh_v"];
+const $bend_emit$105 = $bend_emit["is_keyed"];
+const $bend_emit$106 = $bend_emit["fresh_t"];
+const $bend_emit$107 = $bend_emit["wf"];
+const $bend_emit$108 = $bend_emit["names_ok"];
+const $bend_emit$109 = $bend_emit["bounds_ok"];
+export { $bend_emit$0 as finite_number, $bend_emit$1 as valid_json, $bend_emit$2 as pick_raw, $bend_emit$3 as lookup, $bend_emit$4 as pick_bool, $bend_emit$5 as is_rnil, $bend_emit$6 as is_missing, $bend_emit$7 as in_names, $bend_emit$8 as none_present, $bend_emit$9 as key_names, $bend_emit$10 as no_extra, $bend_emit$11 as drop_key, $bend_emit$12 as is_str, $bend_emit$13 as is_tag, $bend_emit$14 as in_err, $bend_emit$15 as str_len_ok, $bend_emit$16 as num_ok, $bend_emit$17 as int_le, $bend_emit$18 as int_ok, $bend_emit$19 as int_raw, $bend_emit$20 as len_ok, $bend_emit$21 as str_len_in, $bend_emit$22 as nat_in, $bend_emit$23 as is_bool, $bend_emit$24 as raw_list, $bend_emit$25 as raw_len, $bend_emit$26 as count_ok, $bend_emit$27 as list_len_ok, $bend_emit$28 as has_key, $bend_emit$29 as key_once_at, $bend_emit$30 as key_once, $bend_emit$31 as key_err, $bend_emit$32 as kind_eq, $bend_emit$33 as kind_of, $bend_emit$34 as has_kind, $bend_emit$35 as apart, $bend_emit$36 as disjoint, $bend_emit$37 as alt_ok, $bend_emit$38 as no_alt, $bend_emit$39 as here, $bend_emit$40 as under, $bend_emit$41 as len_err, $bend_emit$42 as later_l_path, $bend_emit$43 as later_l, $bend_emit$44 as later_i_path, $bend_emit$45 as later_i, $bend_emit$46 as later_f_path, $bend_emit$47 as later_f, $bend_emit$48 as first, $bend_emit$49 as missing_or, $bend_emit$50 as pick_err, $bend_emit$51 as true_err, $bend_emit$52 as enum_err, $bend_emit$53 as dup_err, $bend_emit$54 as extra_err, $bend_emit$55 as tag_err, $bend_emit$56 as count_err, $bend_emit$57 as guard, $bend_emit$58 as nat_in_defect, $bend_emit$59 as int_defect, $bend_emit$60 as int_in_defect, $bend_emit$61 as bool_defect, $bend_emit$62 as no_rule, $bend_emit$63 as first_why, $bend_emit$64 as step_eq, $bend_emit$65 as path_eq, $bend_emit$66 as rule_defect, $bend_emit$67 as not_list, $bend_emit$68 as not_object, $bend_emit$69 as nat_defect, $bend_emit$70 as str_defect, $bend_emit$71 as pick_why, $bend_emit$72 as true_defect, $bend_emit$73 as enum_defect, $bend_emit$74 as no_variant, $bend_emit$75 as dup_defect, $bend_emit$76 as at_end, $bend_emit$77 as extra_defect, $bend_emit$78 as tag_defect, $bend_emit$79 as tag_key_defect, $bend_emit$80 as check0, $bend_emit$81 as conforms0, $bend_emit$82 as is_chain, $bend_emit$83 as is_object, $bend_emit$84 as one_if_there, $bend_emit$85 as count_present, $bend_emit$86 as tuple_of, $bend_emit$87 as at_raw, $bend_emit$88 as count_unknown, $bend_emit$89 as Meaning, $bend_emit$90 as enc, $bend_emit$91 as lcons, $bend_emit$92 as both, $bend_emit$93 as opt_some, $bend_emit$94 as map_inl, $bend_emit$95 as map_inr, $bend_emit$96 as pick_m, $bend_emit$97 as true_unit, $bend_emit$98 as nullish, $bend_emit$99 as dec, $bend_emit$100 as opt_at, $bend_emit$101 as nullable, $bend_emit$102 as no_key, $bend_emit$103 as fresh_f, $bend_emit$104 as fresh_v, $bend_emit$105 as is_keyed, $bend_emit$106 as fresh_t, $bend_emit$107 as wf, $bend_emit$108 as names_ok, $bend_emit$109 as bounds_ok };

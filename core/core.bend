@@ -17,15 +17,15 @@ import Base
 #    - A plain object becomes a chain of RKey that ends in REnd.
 #    - All other values become RBad: a fraction, a number out of range, NaN,
 #      undefined, and an object that is not plain (for example a Date).
-#    The codec also counts elements and keys, and the nesting depth. An array
-#    or an object that goes past a limit becomes one RTooBig in its place.
-#    The core reports RTooBig as TooLarge at the path of that node. The codec
-#    applies a limit because the core cannot: a limit is about size, not shape.
+#    The codec also counts the nesting depth. An array or an object nested
+#    past its limit becomes one RTooBig in its place. The core reports RTooBig
+#    as TooLarge at the path of that node. The codec applies the limit because
+#    the core cannot: a limit is about size, not shape.
 #
 # 2. At each SJson position of the schema, the host replaces the Raw with
 #    RJson. RJson holds a Json value, which keeps any number as its binary64
-#    bits. A value that is not JSON stays RBad. If a limit was hit anywhere
-#    inside the position, the whole position becomes RTooBig.
+#    bits. A value that is not JSON stays RBad. If the depth limit was hit
+#    anywhere inside the position, the whole position becomes RTooBig.
 #
 # The codec never makes RMissing. A lookup of a key that is not there gives
 # RMissing.
@@ -173,17 +173,10 @@ def finite_number(bits: NumberBits) -> Bool:
     case NumberBits{+hi, lo}:
       Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))
 
-# Whether a name is already taken among the members that follow.
-def key_in(+key: String, members: List<&2, JMember>) -> Bool:
-  match members:
-    case Nil{}:
-      False{}
-    case JMember{other, val} <> rest:
-      Bool.or(String.eq(key, other), key_in(key, rest))
-
-# A value is valid when every number in it is finite and no object holds a name
-# twice. An object is a list of members, so a name's uniqueness is read off the
-# members themselves, not off any layout.
+# A value is valid when every number in it is finite. Whether a name repeats
+# in an object is not checked: RFC 8259 only says names should be unique, a
+# host's object cannot hold a name twice, and checking it would cost every
+# member a scan of the members after it.
 def valid_json(value: Json) -> Bool:
   match value:
     case JNull{}:
@@ -200,8 +193,8 @@ def valid_json(value: Json) -> Bool:
       Bool.and(valid_json(head), valid_json(JArray{tail}))
     case JObject{Nil{}}:
       True{}
-    case JObject{JMember{key, val} <> +tail}:
-      Bool.and(valid_json(val), Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail})))
+    case JObject{JMember{key, val} <> tail}:
+      Bool.and(valid_json(val), valid_json(JObject{tail}))
 
 # ---- reading a value ----
 

@@ -46,8 +46,8 @@ import ./core.bend as C
 #                   the constructor adds absence and nothing else.
 #
 #   json_valid_spec
-#                   valid_json is the independent specification: finite
-#                   numbers, and no object holds a name twice.
+#                   valid_json is the independent specification: every
+#                   number is finite.
 #   json_accept_exact
 #                   SJson accepts a valid RJson and nothing else.
 #   json_dec_preserves
@@ -357,18 +357,18 @@ law soptional_meaning:
   for +r: C.Raw
   {C.conforms(~rule, C.SOptional{i}, r, None{}) == Bool.or(C.is_missing(r), C.conforms(~rule, i, r, None{})) : Bool}
 
-# ---- a value too big to walk ----
+# ---- a value nested too deep to walk ----
 
-# The codec refuses to build a value past its budget and puts one RTooBig in
-# place of the list or object that ran past it (codec.ts); nothing else in the
-# core knows a size. So the claim about that node is local: it conforms to
+# The codec refuses to build a value past its depth limit and puts one RTooBig
+# in place of the list or object nested past it (codec.ts); nothing else in
+# the core knows a size. So the claim about that node is local: it conforms to
 # nothing, and the walk that reaches it reports it right there (the empty
 # path, for the value it was given) with TooLarge -- never the schema kind's
 # own reason, which would say the host sent the wrong shape when what it sent
 # was too much of the right one. A node further down is reported one step
 # along by check's own step machinery, which check_accurate covers, and the
-# codec's budget (that a value inside it converts unchanged) is a run-time
-# test, since the codec is TypeScript.
+# codec's depth limit (that a value inside it converts unchanged) is a
+# run-time test, since the codec is TypeScript.
 law too_large_reported:
   for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
   for +s: C.Schema
@@ -418,31 +418,21 @@ law encode_conforms:
 # ---- SJson: any JSON value ----
 #
 # SJson carries a JSON value whose shape the schema does not own. A value is
-# valid when every number in it is finite and no object holds a name twice.
-# The specification below is written a second way, so that a valid_json that is
-# always True, always False, or checks only the first member is not a model of
-# it: a number is finite when its binary64 magnitude (the high word without
-# its sign bit) lies below that of infinity, 0x7FF00000, and a name is unique
-# when it occurs in no later member. Written as a comparison, not as an
-# exponent field read by Nat.div: Nat.div walks its dividend one step at a
-# time, so a literal high word of this size cannot be checked in 5 s.
+# valid when every number in it is finite. The specification below is written
+# a second way, so that a valid_json that is always True, always False, or
+# checks only the first member is not a model of it: a number is finite when
+# its binary64 magnitude (the high word without its sign bit) lies below that
+# of infinity, 0x7FF00000. Written as a comparison, not as an exponent field
+# read by Nat.div: Nat.div walks its dividend one step at a time, so a literal
+# high word of this size cannot be checked in 5 s.
+#
+# A name repeated in an object is not refused. RFC 8259 says names should be
+# unique, not must; a host's object cannot hold a name twice, so only a Json
+# built by hand can; and refusing it costs every member a scan of the members
+# after it, which a sender controls.
 
 def below_infinity(hi: U32) -> Bool:
   Cmp.is_lt(U32.cmp(U32.and(hi, 2147483647), 2146435072))
-
-def one_if(b: Bool) -> Nat:
-  match b:
-    case True{}:
-      1n
-    case False{}:
-      0n
-
-def occurs(+k: String, ms: List<&2, C.JMember>) -> Nat:
-  match ms:
-    case Nil{}:
-      0n
-    case C.JMember{o, val} <> rest:
-      Nat.add(one_if(String.eq(k, o)), occurs(k, rest))
 
 def number_spec(bits: C.NumberBits) -> Bool:
   match bits:
@@ -465,8 +455,8 @@ def json_spec(v: C.Json) -> Bool:
       Bool.and(json_spec(head), json_spec(C.JArray{tail}))
     case C.JObject{Nil{}}:
       True{}
-    case C.JObject{C.JMember{key, val} <> +tail}:
-      Bool.and(json_spec(val), Bool.and(Nat.is_eq(occurs(key, tail), 0n), json_spec(C.JObject{tail})))
+    case C.JObject{C.JMember{key, val} <> tail}:
+      Bool.and(json_spec(val), json_spec(C.JObject{tail}))
 
 # Only an RJson holds a JSON value; every other raw value is not one.
 def raw_json_spec(r: C.Raw) -> Bool:

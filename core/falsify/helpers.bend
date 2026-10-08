@@ -252,20 +252,6 @@ def tagged_spec(+r: C.Raw) -> Bool:
 def below_infinity(hi: U32) -> Bool:
   Cmp.is_lt(U32.cmp(U32.and(hi, 2147483647), 2146435072))
 
-def one_if(b: Bool) -> Nat:
-  match b:
-    case True{}:
-      1n
-    case False{}:
-      0n
-
-def occurs(+k: String, ms: List<&2, C.JMember>) -> Nat:
-  match ms:
-    case Nil{}:
-      0n
-    case C.JMember{o, val} <> rest:
-      Nat.add(one_if(String.eq(k, o)), occurs(k, rest))
-
 def number_spec(bits: C.NumberBits) -> Bool:
   match bits:
     case C.NumberBits{+hi, lo}:
@@ -287,8 +273,8 @@ def json_spec(v: C.Json) -> Bool:
       Bool.and(json_spec(head), json_spec(C.JArray{tail}))
     case C.JObject{Nil{}}:
       True{}
-    case C.JObject{C.JMember{key, val} <> +tail}:
-      Bool.and(json_spec(val), Bool.and(Nat.is_eq(occurs(key, tail), 0n), json_spec(C.JObject{tail})))
+    case C.JObject{C.JMember{key, val} <> tail}:
+      Bool.and(json_spec(val), json_spec(C.JObject{tail}))
 
 # Exact copy of LAWS.raw_json_spec: only RJson contains a JSON value.
 def raw_json_spec(r: C.Raw) -> Bool:

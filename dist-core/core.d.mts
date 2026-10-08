@@ -19,7 +19,6 @@ export type JKind = { $: "KNum" } | { $: "KStr" } | { $: "KBool" } | { $: "KList
 export type Both<A, B> = { $: "Both"; "a": A; "b": B };
 
 export declare function finite_number(bits: NumberBits): boolean;
-export declare function key_in(key: string, members: BendList<JMember>): boolean;
 export declare function valid_json(value: Json): boolean;
 export declare function pick_raw(b: boolean, x: Raw, y: Raw): Raw;
 export declare function lookup(name: string, r: Raw): Raw;
@@ -121,7 +120,6 @@ export declare function wf(s: Schema): boolean;
 
 declare const core: {
   "finite_number"(bits: NumberBits): boolean;
-  "key_in"(key: string, members: BendList<JMember>): boolean;
   "valid_json"(value: Json): boolean;
   "pick_raw"(b: boolean, x: Raw, y: Raw): Raw;
   "lookup"(name: string, r: Raw): Raw;

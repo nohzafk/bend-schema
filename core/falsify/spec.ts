@@ -349,12 +349,13 @@ const jsonCases: [string, string, boolean][] = [
   ["array_later_bad", jarr([jnull, jbad]), false],
   ["object_value_bad", jobj([["a", jbad]]), false],
   ["object_later_bad", jobj([["a", jnull], ["b", jbad]]), false],
-  ["repeated", jobj([["a", jnull], ["a", jnull]]), false],
+  // a repeated name is JSON (RFC 8259: names should be unique, not must)
+  ["repeated", jobj([["a", jnull], ["a", jnull]]), true],
   ["distinct", jobj([["a", jnull], ["b", jnull]]), true],
-  ["later_repeated", jobj([["a", jnull], ["b", jnull], ["b", jnull]]), false],
+  ["later_repeated", jobj([["a", jnull], ["b", jnull], ["b", jnull]]), true],
   ["nested_valid", jarr([jobj([["a", jarr([jnull, jnum(0)])], ["b", jobj([])]])]), true],
   ["nested_bad", jobj([["a", jarr([jnull, jobj([["b", jnull], ["c", jbad]])])]]), false],
-  ["nested_repeated", jarr([jnull, jobj([["a", jnull], ["a", jarr([])]])]), false],
+  ["nested_repeated", jarr([jnull, jobj([["a", jnull], ["a", jarr([])]])]), true],
 ];
 for (const [name, v, valid] of jsonCases) if (!law || law === "json_valid_spec") {
   instances.push({ name: `json_valid_spec_${name}`, claim: `{C.valid_json(${v}) == H.json_spec(${v}) : Bool}` });
@@ -362,7 +363,8 @@ for (const [name, v, valid] of jsonCases) if (!law || law === "json_valid_spec")
 }
 
 // json_dec_preserves: all Raw constructors and exact payload equality, not
-// validity. Invalid numbers and duplicate names must be returned unchanged.
+// validity. Invalid numbers, and the repeated names valid_json does not
+// refuse, must be returned unchanged.
 const jsonDecCases: [string, R][] = [
   ["bad", BAD], ["too_big", BIG], ["missing", "C.RMissing{}"],
   ["number", N(3)], ["bool_true", TRUE], ["bool_false", FALSE],
@@ -403,7 +405,7 @@ const jsonEncCases: [string, string, boolean][] = [
   ["signaling_nan", jnum(0x7ff00000, 1), false],
   ["ordered_nested", jobj([["z", jarr([jnum(0x80000000, 1), jobj([["b", jnum(0x3ff00000, 7)], ["a", jnull]])])], ["a", jnum(0x7fefffff, 0xffffffff)]]), true],
   ["ordered_nested_reverse", jobj([["a", jnum(0x7fefffff, 0xffffffff)], ["z", jarr([jobj([["a", jnull], ["b", jnum(0x3ff00000, 7)]]), jnum(0x80000000, 1)])]]), true],
-  ["repeated_different_values", jobj([["a", jnull], ["a", "C.JBool{True{}}"]]), false],
+  ["repeated_different_values", jobj([["a", jnull], ["a", "C.JBool{True{}}"]]), true],
 ];
 for (const [name, v, valid] of jsonEncCases) if (!law || law === "json_enc_preserves") {
   const encoded = `C.enc(C.SJson{}, ${v})`;
