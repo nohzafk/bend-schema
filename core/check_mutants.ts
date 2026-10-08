@@ -28,6 +28,28 @@ import { type Mutant, runMutants } from "bend-falsify";
 const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
+  // Independent JSON paths: each counter is the approved law at v,
+  // and each proof must fail inside the JSON law, not a shared helper.
+  { law: "json_valid_spec", section: "json_valid_spec", with: ["number_spec: finite binary64 exponent"],
+    from: "      Bool.and(valid_json(head), valid_json(JArray{tail}))",
+    to: "      valid_json(head)",
+    at: { v: "C.JArray{[C.JNull{}, C.JNumber{C.NumberBits{2146435072, 0}}]}" },
+    why: "array validation skips its tail and accepts a later infinity", failsIn: "Laws.json_valid_spec" },
+  { law: "json_valid_spec", section: "json_valid_spec", with: ["number_spec: finite binary64 exponent"],
+    from: "      Bool.and(valid_json(val), Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail})))",
+    to: "      Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail}))",
+    at: { v: "C.JObject{[C.JMember{\"a\", C.JNumber{C.NumberBits{2146435072, 0}}}]}" },
+    why: "object validation skips its value and accepts infinity", failsIn: "Laws.json_valid_spec" },
+  { law: "json_valid_spec", section: "json_valid_spec", with: ["number_spec: finite binary64 exponent"],
+    from: "      Bool.and(valid_json(val), Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail})))",
+    to: "      Bool.and(valid_json(val), Bool.not(key_in(key, tail)))",
+    at: { v: "C.JObject{[C.JMember{\"a\", C.JNull{}}, C.JMember{\"b\", C.JNumber{C.NumberBits{2146435072, 0}}}]}" },
+    why: "object validation skips its tail and accepts a later infinity", failsIn: "Laws.json_valid_spec" },
+  { law: "json_valid_spec", section: "json_valid_spec", with: ["number_spec: finite binary64 exponent"],
+    from: "      Bool.and(valid_json(val), Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail})))",
+    to: "      Bool.and(valid_json(val), valid_json(JObject{tail}))",
+    at: { v: "C.JObject{[C.JMember{\"a\", C.JNull{}}, C.JMember{\"a\", C.JNull{}}]}" },
+    why: "object validation accepts repeated names", failsIn: "Laws.json_valid_spec" },
   // number_spec is a specification def, not a law block in LAWS.bend.
   // These counters expand its frozen comparison; the harness reports that
   // they are not tied to a law. The universal helper is checked in its own

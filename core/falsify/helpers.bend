@@ -201,3 +201,45 @@ def once_type(r: C.Raw) -> Bool:
 # chosen by, and a second one is unreachable.
 def tagged_spec(+r: C.Raw) -> Bool:
   pick_b(String.eq(str_or_empty(C.lookup("type", r)), "a"), Bool.and(once_type(r), case_a(r)), pick_b(String.eq(str_or_empty(C.lookup("type", r)), "b"), Bool.and(once_type(r), case_b(r)), False{}))
+
+# Independent approved JSON specification, kept literal for the falsifier.
+def below_infinity(hi: U32) -> Bool:
+  Cmp.is_lt(U32.cmp(U32.and(hi, 2147483647), 2146435072))
+
+def one_if(b: Bool) -> Nat:
+  match b:
+    case True{}:
+      1n
+    case False{}:
+      0n
+
+def occurs(+k: String, ms: List<&2, C.JMember>) -> Nat:
+  match ms:
+    case Nil{}:
+      0n
+    case C.JMember{o, val} <> rest:
+      Nat.add(one_if(String.eq(k, o)), occurs(k, rest))
+
+def number_spec(bits: C.NumberBits) -> Bool:
+  match bits:
+    case C.NumberBits{+hi, lo}:
+      below_infinity(hi)
+
+def json_spec(v: C.Json) -> Bool:
+  match v:
+    case C.JNull{}:
+      True{}
+    case C.JBool{b}:
+      True{}
+    case C.JNumber{bits}:
+      number_spec(bits)
+    case C.JString{text}:
+      True{}
+    case C.JArray{Nil{}}:
+      True{}
+    case C.JArray{head <> tail}:
+      Bool.and(json_spec(head), json_spec(C.JArray{tail}))
+    case C.JObject{Nil{}}:
+      True{}
+    case C.JObject{C.JMember{key, val} <> +tail}:
+      Bool.and(json_spec(val), Bool.and(Nat.is_eq(occurs(key, tail), 0n), json_spec(C.JObject{tail})))

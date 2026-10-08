@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -311,5 +311,30 @@ for (const hi of [0x7FF00000, 0xFFF00000, 0x7FF80000, 0x7FEFFFFF, 0x80000000, 0,
     name: `number_spec_${hi.toString(16)}_${lo}`,
     claim: `{C.finite_number(C.NumberBits{${hi}, ${lo}}) == Cmp.is_lt(U32.cmp(U32.and(${hi}, 2147483647), 2146435072)) : Bool}`,
   });
+
+// json_valid_spec: the frozen specification at nested valid and invalid values.
+const jnum = (hi: number, lo = 0) => `C.JNumber{C.NumberBits{${hi}, ${lo}}}`;
+const jarr = (vs: string[]) => `C.JArray{[${vs.join(", ")}]}`;
+const jobj = (ms: [string, string][]) => `C.JObject{[${ms.map(([k, v]) => `C.JMember{"${k}", ${v}}`).join(", ")}]}`;
+const jnull = "C.JNull{}", jbad = jnum(0x7ff00000);
+const jsonCases: [string, string, boolean][] = [
+  ["null", jnull, true], ["bool", "C.JBool{False{}}", true], ["string", 'C.JString{"x"}', true],
+  ["empty_array", jarr([]), true], ["empty_object", jobj([]), true],
+  ["finite", jnum(0x7fefffff, 0xffffffff), true], ["negative_zero", jnum(0x80000000), true],
+  ["infinity", jbad, false], ["negative_infinity", jnum(0xfff00000), false], ["nan", jnum(0x7ff80000, 1), false],
+  ["array_later_bad", jarr([jnull, jbad]), false],
+  ["object_value_bad", jobj([["a", jbad]]), false],
+  ["object_later_bad", jobj([["a", jnull], ["b", jbad]]), false],
+  ["repeated", jobj([["a", jnull], ["a", jnull]]), false],
+  ["distinct", jobj([["a", jnull], ["b", jnull]]), true],
+  ["later_repeated", jobj([["a", jnull], ["b", jnull], ["b", jnull]]), false],
+  ["nested_valid", jarr([jobj([["a", jarr([jnull, jnum(0)])], ["b", jobj([])]])]), true],
+  ["nested_bad", jobj([["a", jarr([jnull, jobj([["b", jnull], ["c", jbad]])])]]), false],
+  ["nested_repeated", jarr([jnull, jobj([["a", jnull], ["a", jarr([])]])]), false],
+];
+for (const [name, v, valid] of jsonCases) if (!law || law === "json_valid_spec") {
+  instances.push({ name: `json_valid_spec_${name}`, claim: `{C.valid_json(${v}) == H.json_spec(${v}) : Bool}` });
+  instances.push({ name: `json_valid_expected_${name}`, claim: `{H.json_spec(${v}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+}
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };

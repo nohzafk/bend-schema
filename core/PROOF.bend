@@ -4995,3 +4995,47 @@ def number_spec(+bits: C.NumberBits) -> {C.finite_number(bits) == Laws.number_sp
   match bits:
     case C.NumberBits{hi, lo}:
       number_hi(hi)
+
+# ---- json_valid_spec ----
+
+# Counting occurrences is zero exactly when the key is absent. The decision
+# is arbitrary; no equality or inequality assumption about names is needed.
+def json_occurs_step(+b: Bool, +n: Nat, +found: Bool, h: {Bool.not(found) == Nat.is_eq(n, 0n) : Bool}) -> {Bool.not(Bool.or(b, found)) == Nat.is_eq(Nat.add(Laws.one_if(b), n), 0n) : Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      h
+
+def json_key_absent(+ms: List<&2, C.JMember>, +k: String) -> {Bool.not(C.key_in(k, ms)) == Nat.is_eq(Laws.occurs(k, ms), 0n) : Bool}:
+  match ms:
+    case Nil{}:
+      {==}
+    case C.JMember{+other, val} <> +rest:
+      json_occurs_step(String.eq(k, other), Laws.occurs(k, rest), C.key_in(k, rest), json_key_absent(rest, k))
+
+# Every Json, including arbitrarily nested children, arbitrary names and all
+# binary64 bit patterns. No assumptions restrict the input.
+def Laws.json_valid_spec(v):
+  match v:
+    case C.JNull{}:
+      {==}
+    case C.JBool{b}:
+      {==}
+    case C.JNumber{bits}:
+      number_spec(bits)
+    case C.JString{text}:
+      {==}
+    case C.JArray{Nil{}}:
+      {==}
+    case C.JArray{+head <> +tail}:
+      %Laws.json_valid_spec(head) : {Bool.and(C.valid_json(head), C.valid_json(C.JArray{tail})) == Bool.and(_, Laws.json_spec(C.JArray{tail})) : Bool}
+      %Laws.json_valid_spec(C.JArray{tail}) : {Bool.and(C.valid_json(head), C.valid_json(C.JArray{tail})) == Bool.and(C.valid_json(head), _) : Bool}
+      {==}
+    case C.JObject{Nil{}}:
+      {==}
+    case C.JObject{C.JMember{+key, +val} <> +tail}:
+      %Laws.json_valid_spec(val) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(_, Bool.and(Nat.is_eq(Laws.occurs(key, tail), 0n), Laws.json_spec(C.JObject{tail}))) : Bool}
+      %json_key_absent(tail, key) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(C.valid_json(val), Bool.and(_, Laws.json_spec(C.JObject{tail}))) : Bool}
+      %Laws.json_valid_spec(C.JObject{tail}) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), _)) : Bool}
+      {==}
