@@ -321,6 +321,31 @@ describe("encode applies the same limits (W3.c)", () => {
     expect(o.encode(extra as never)).toEqual({ a: 1 });
   });
 
+  test("work is bounded by the limits, not by what shared references expand to", () => {
+    // n^3 nodes from three n-slot arrays: refused at the budget, fast.
+    for (const n of [200, 1000]) {
+      const v = Array(n).fill(Array(n).fill(Array(n).fill(0)));
+      const t = performance.now();
+      throwsSize(() => s.list(s.list(s.list(s.nat()))).encode(v), "too large");
+      expect(performance.now() - t).toBeLessThan(500);
+    }
+    // s.json() positions share the value's one budget
+    const t = performance.now();
+    throwsSize(() => s.list(s.json()).encode(Array(100).fill(zeros(BUDGET - 1)) as never), "the JSON value: too large");
+    expect(performance.now() - t).toBeLessThan(500);
+  });
+
+  test("a sparse array is refused by its length, not written as []", () => {
+    const t = performance.now();
+    throwsSize(() => s.list(s.nat()).encode(new Array(1e9)), "bend-schema: encode: the value: too large");
+    throwsSize(() => s.list(s.nat()).encode(new Array(BUDGET + 1)), "bend-schema: encode: the value: too large");
+    expect(performance.now() - t).toBeLessThan(500);
+  });
+
+  test("the size error names where it was hit", () => {
+    throwsSize(() => s.object({ a: s.list(s.nat()) }).encode({ a: zeros(BUDGET + 1) }), "bend-schema: encode: a: too large");
+  });
+
   test("a cycle at an s.json() position is not JSON on encode too", () => {
     const cyc: unknown[] = [];
     cyc.push(cyc);

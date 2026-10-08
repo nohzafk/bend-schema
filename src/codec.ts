@@ -144,9 +144,12 @@ function bitsNumber(bits: NumberBits): number {
 // Internal seam for the JSON branch of host input. Failures retain the same
 // boundary markers as toRaw, so index can attach them without accepting an
 // invalid Json value.
-export function toJsonRaw(v: unknown): Raw {
-  let left = BUDGET;
-  let depth = 0;
+// `shared`, when given, is a budget this conversion draws on and leaves
+// reduced, and `depth0` the level v sits at: encode passes both, so that one
+// value's s.json() positions share its budget and depth with the rest of it.
+export function toJsonRaw(v: unknown, shared?: { left: number }, depth0 = 0): Raw {
+  const budget = shared ?? { left: BUDGET };
+  let depth = depth0;
   const active = new WeakSet<object>();
   const build = (value: unknown): Json | Raw => {
     if (value === null) return { $: "JNull" };
@@ -158,8 +161,8 @@ export function toJsonRaw(v: unknown): Raw {
     if (typeof value === "string") return { $: "JString", value };
     if (Array.isArray(value)) {
       if (active.has(value)) return { $: "RBad" };
-      if (value.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      left -= value.length;
+      if (value.length > budget.left || depth >= DEPTH_MAX) return { $: "RTooBig" };
+      budget.left -= value.length;
       active.add(value);
       depth++;
       const items = Array.from(value, build);
@@ -177,8 +180,8 @@ export function toJsonRaw(v: unknown): Raw {
       if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       if (active.has(value)) return { $: "RBad" };
       const entries = Object.entries(value as object);
-      if (entries.length > KEYS_MAX || entries.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      left -= entries.length;
+      if (entries.length > KEYS_MAX || entries.length > budget.left || depth >= DEPTH_MAX) return { $: "RTooBig" };
+      budget.left -= entries.length;
       active.add(value);
       depth++;
       const values = entries.map(([key, child]) => [key, build(child)] as const);
