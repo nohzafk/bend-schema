@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { BUDGET, DEPTH_MAX, INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json, type PathPart, type Schema } from "./index.ts";
+import { DEPTH_MAX, INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json, type PathPart, type Schema } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -435,8 +435,7 @@ describe("union", () => {
     let deep: unknown = 0;
     for (let i = 0; i < 200; i++) deep = [deep];
     expect(x.check(deep)?.message).toBe("too large");
-    expect(x.check(new Array(BUDGET + 1).fill(0))?.message).toBe("too large");
-    expect(() => x.encode(new Array(BUDGET + 1).fill(0))).toThrow(/too large/);
+    expect(() => x.encode(deep as never)).toThrow(/too large/);
   });
 
   test("an s.json() inside an alternative still gets its JSON value", () => {
@@ -471,19 +470,11 @@ describe("union", () => {
   };
   const nest = (n: number): unknown => { let v: unknown = 0; for (let i = 0; i < n; i++) v = [v]; return v; };
 
-  test("a union adds no count and no depth: budget and depth, parse and encode", () => {
+  test("a union adds no depth: parse and encode", () => {
     const flat = s.list(s.union(s.nat(), s.str()));
-    const at = new Array(BUDGET).fill(0);
-    expect(flat.check(at)).toBeNull();
-    expect(flat.encode(at)).toEqual(at);
-    expect(flat.check([...at, 0])?.text()).toBe("the value: too large");
-    expect(() => flat.encode([...at, 0])).toThrow(/too large/);
-    // the budget is shared with what the alternative holds
-    const half = new Array(BUDGET / 2).fill(0);
-    const two = s.union(s.list(s.list(s.nat())), s.str());
-    expect(two.check([half])).toBeNull();
-    expect(two.check([half, half])?.message).toBe("too large");
-    expect(() => two.encode([half, half])).toThrow(/too large/);
+    const wide = new Array(100_000).fill(0);
+    expect(flat.check(wide)).toBeNull();
+    expect(flat.encode(wide)).toEqual(wide);
 
     const ok = nested(DEPTH_MAX);
     expect(ok.check(nest(DEPTH_MAX))).toBeNull();

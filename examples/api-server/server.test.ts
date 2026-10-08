@@ -2,7 +2,7 @@
 // server. `bun test` from the repo root globs this file.
 
 import { describe, expect, test } from "bun:test";
-import { BUDGET, type Infer } from "../../src/index.ts";
+import { DEPTH_MAX, type Infer } from "../../src/index.ts";
 import { handle, Order as OrderSchema } from "./server.ts";
 
 type Order = Infer<typeof OrderSchema>;
@@ -48,13 +48,13 @@ describe("POST /orders", () => {
     });
   });
 
-  test("a body past the size budget is a 400, not a stack overflow", async () => {
-    const items = Array.from({ length: BUDGET + 1 }, () => item(1));
-    const r = await postOrder(order({ items, totalQty: 1 })); // a legal total: the size is the first error
-    expect(r).toEqual({
-      status: 400,
-      body: { path: ["items"], message: "too large", proved: true, text: "order.items: too large" },
-    });
+  test("a body nested too deep is a 400, not a stack overflow", async () => {
+    // items as a list nested 300 levels deep: past the codec's depth limit
+    let items: unknown = [];
+    for (let i = 0; i < 300; i++) items = [items];
+    const r = await postOrder(order({ items: items as never, totalQty: 1 }));
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ path: ["items", 0], proved: true });
   });
 
   test("malformed JSON is a 400", async () => {

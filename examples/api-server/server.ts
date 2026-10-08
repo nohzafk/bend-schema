@@ -47,7 +47,7 @@ export async function handle(req: Request): Promise<Response> {
   }
 
   const r = Order.parse(body);
-  if (!r.ok) return reject(r.error); // a value past the codec's budget is TooLarge here
+  if (!r.ok) return reject(r.error); // a value nested past the codec's depth limit is TooLarge here
   return json(201, r.value);
 }
 

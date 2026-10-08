@@ -3,7 +3,7 @@
 // The contract is one-sided: every value `parse` accepts passes the JSON
 // Schema, never the other way round. Three things a JSON Schema cannot say are
 // left out, so the document is looser there and only there: `.refine()`
-// predicates, the size and depth limits (BUDGET, KEYS_MAX, DEPTH_MAX), and a
+// predicates, the depth limit (DEPTH_MAX), and a
 // key repeated in one object, which a parsed JSON object cannot hold anyway.
 // `parse` stays the authority; this document is for client authors and tools.
 //

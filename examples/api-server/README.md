@@ -82,17 +82,18 @@ nothing checks it.
 (Which error is reported *first* is a separate rule: depth first, in order. See
 `core/LAWS.bend`.)
 
-**2. A huge body gets a clean error, not a crash.** bend-schema sets a size
-limit, `BUDGET = 100000`, counted as list elements plus object keys at every
-level, and a depth limit of 128 levels (see "Limits" in the top-level README;
-time them with `bun src/measure_budget.ts`). The limits themselves are choices
-made in `src/codec.ts`, not theorems. But what happens past them is proved: the
-oversized list is replaced by one "too large" marker, and the law
-`too_large_reported` says `check` reports exactly that spot. So an order with
-100,001 line items gets:
+**2. A deep body gets a clean error, not a crash.** bend-schema sets a depth
+limit of 128 levels (see "Limits" in the top-level README). Width is not
+limited: a long list or a wide object is walked in a loop, in time linear in
+its size, and the body-size limit of the HTTP server bounds that (time it with
+`bun src/measure.ts`). The depth limit itself is a choice made in
+`src/codec.ts`, not a theorem. But what happens past it is proved: the
+container nested too deep is replaced by one "too large" marker, and the law
+`too_large_reported` says `check` reports exactly that spot. So an order whose
+`qty` is a list nested 130 levels deep gets:
 
 ```json
-400 {"path": ["items"], "message": "too large"}
+400 {"path": ["items", 0, "qty"], "message": "too large"}
 ```
 
 instead of `RangeError: Maximum call stack size exceeded`.

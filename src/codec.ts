@@ -8,13 +8,14 @@
 // Date or any other non-plain object) is RBad, for check to report where it
 // sits. Every rule about shapes is the proved core's (LAWS.bend).
 //
-// Size is the one thing it decides, because it is the one thing the core
-// cannot: how long a walk takes grows with the value, and how deep it nests
-// costs one native JS frame per level. So the codec counts what a walk would
-// cost -- see BUDGET and DEPTH_MAX -- and puts one RTooBig in place of the
-// array or object that runs past either, which the core reports as TooLarge at
-// that node's path. Nothing here is a rule about values: a size is
-// not a shape, and a host cannot choose the sizes it is sent.
+// Depth is the one thing it decides, because it is the one thing the core
+// cannot: nesting costs one native JS frame per level. So the codec counts the
+// level of each container -- see DEPTH_MAX -- and puts one RTooBig in place of
+// the array or object that nests too deep, which the core reports as TooLarge
+// at that node's path. Width is not limited: the core and this codec walk the
+// elements of a container in a loop, and the time grows with the input, which
+// the host's body-size limit bounds. Nothing here is a rule about values: a
+// size is not a shape, and a host cannot choose the sizes it is sent.
 
 import type { BendList, BendMaybe, Err, Int, Json, JMember, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
 
@@ -53,59 +54,25 @@ export function nat(name: string, v: number): number {
   return v;
 }
 
-// The most list elements and object keys one value may hold, counted over
-// every level of nesting and summed: `[[1,2],[3]]` is 2 + 3 = 5. Past it, a
-// node becomes RTooBig.
-//
-// The budget caps the time one message can cost. The stack does not bound the
-// total: the core walks a list or an object in a loop, and nesting is capped at
-// DEPTH_MAX. Cost is roughly linear in the count, except in objects, where each
-// key is looked up by a scan and a walk costs about keys^2; so the worst case
-// is many objects at KEYS_MAX keys, and costs about count x KEYS_MAX lookups.
-//
-// Measured with `bun src/measure_budget.ts` (bend 2.0.36, bend-emit 0.3.5, bun
-// 1.4.2, macOS 27.0 arm64, Apple M3 Max, one run each), at a count of about
-// 100,000 -- milliseconds:
-//
-//   shape                  count   check0  conforms0   enc   dec
-//   flat list             100000       28         23    16    22
-//   list of lists          99856       18         17    14    15
-//   list of objects        99994      102         95    15    55   (16 keys each)
-//   list of wide objects   99973     1212       1283    13   613   (256 keys each)
-//   mixed                  99856       16         16    14    15
-//   deep and wide         100000       17         18    12    17
-//
-// and through the public API, the same wide objects (parse / encode, ms):
-//
-//   s.json()                   379 / 425
-//   256-field schema          2011 / 1976
-//   256-field, .strict()      2464 / 2657
-//
-// So a message at the budget costs tens of milliseconds in the usual shapes and
-// at most a few seconds in the worst one. A typed schema costs more than
-// s.json() because each of its fields is looked up in each object; the sender
-// controls the keys, the developer the fields.
-
-export const BUDGET = 100_000;
-
-// The most keys one object may hold. A limit on time: the core finds each field
-// by scanning the object from the front, so walking one object costs about
-// keys^2 lookups -- about 65,000 at 256 keys, a couple of milliseconds. Under
-// the budget, the objects of one value cost at most about count x KEYS_MAX
-// lookups in all (see BUDGET). An object with more keys than this is RTooBig,
-// like a value past the budget; a set that large belongs in a list.
-export const KEYS_MAX = 256;
-
 // The deepest a list or object may nest: the outermost container is level 1.
 // The core and this codec walk the elements of a container in a loop, but go
-// one level down by a JavaScript call, so nesting is what still uses the stack.
+// one level down by a JavaScript call, so nesting is what uses the stack.
 // A container below this level is RTooBig. 128 is serde_json's default, a
 // little above the 100 of protobufjs and protobuf-es; a protocol message nests
 // a few dozen levels at most.
+//
+// Width costs time, not stack, and the time is linear in the input for a given
+// schema: the core finds each field by a scan of the object, so one object
+// costs fields x keys lookups, and the sender controls only the keys; an
+// s.json() position is one pass over its value. Measured with
+// `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2, Apple M3 Max,
+// one run each): one object of 1,000,000 keys checks in about 0.85 s against a
+// 16-field schema and 0.33 s through s.json(); a flat list of 1,000,000
+// numbers in 0.19 s. A limit on width would only restate the host's body-size
+// limit, so there is none.
 export const DEPTH_MAX = 128;
 
 export function toRaw(v: unknown): Raw {
-  let left = BUDGET;
   let depth = 0;
   const build = (v: unknown): Raw => {
     if (v === null) return { $: "RNull" };
@@ -113,10 +80,7 @@ export function toRaw(v: unknown): Raw {
     if (typeof v === "boolean") return { $: "RBool", b: v };
     if (typeof v === "string") return { $: "RStr", s: v };
     if (Array.isArray(v)) {
-      if (v.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      left -= v.length;
-      // Elements are built first to last, so the budget runs out where a
-      // reader would expect: at the first node past it, not at the start.
+      if (depth >= DEPTH_MAX) return { $: "RTooBig" };
       depth++;
       const heads = v.map(build);
       depth--;
@@ -130,8 +94,7 @@ export function toRaw(v: unknown): Raw {
       const proto = Object.getPrototypeOf(v);
       if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       const entries = Object.entries(v as object);
-      if (entries.length > KEYS_MAX || entries.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      left -= entries.length;
+      if (depth >= DEPTH_MAX) return { $: "RTooBig" };
       depth++;
       const vals = entries.map(([key, val]) => [key, build(val)] as const);
       depth--;
@@ -160,11 +123,9 @@ function bitsNumber(bits: NumberBits): number {
 // Internal seam for the JSON branch of host input. Failures retain the same
 // boundary markers as toRaw, so index can attach them without accepting an
 // invalid Json value.
-// `shared`, when given, is a budget this conversion draws on and leaves
-// reduced, and `depth0` the level v sits at: encode passes both, so that one
-// value's s.json() positions share its budget and depth with the rest of it.
-export function toJsonRaw(v: unknown, shared?: { left: number }, depth0 = 0): Raw {
-  const budget = shared ?? { left: BUDGET };
+// `depth0` is the level v sits at: encode passes it, so that one value's
+// s.json() positions share its depth with the rest of it.
+export function toJsonRaw(v: unknown, depth0 = 0): Raw {
   let depth = depth0;
   const active = new WeakSet<object>();
   const build = (value: unknown): Json | Raw => {
@@ -177,8 +138,7 @@ export function toJsonRaw(v: unknown, shared?: { left: number }, depth0 = 0): Ra
     if (typeof value === "string") return { $: "JString", value };
     if (Array.isArray(value)) {
       if (active.has(value)) return { $: "RBad" };
-      if (value.length > budget.left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      budget.left -= value.length;
+      if (depth >= DEPTH_MAX) return { $: "RTooBig" };
       active.add(value);
       depth++;
       const items = Array.from(value, build);
@@ -196,8 +156,7 @@ export function toJsonRaw(v: unknown, shared?: { left: number }, depth0 = 0): Ra
       if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       if (active.has(value)) return { $: "RBad" };
       const entries = Object.entries(value as object);
-      if (entries.length > KEYS_MAX || entries.length > budget.left || depth >= DEPTH_MAX) return { $: "RTooBig" };
-      budget.left -= entries.length;
+      if (depth >= DEPTH_MAX) return { $: "RTooBig" };
       active.add(value);
       depth++;
       const values = entries.map(([key, child]) => [key, build(child)] as const);

@@ -179,11 +179,15 @@ if (import.meta.main) {
   // Linear in the input for a fixed schema: the sender controls the keys, the
   // developer the fields, and each key costs about `fields` lookups.
   const f16 = record(16).schema;
-  console.log("\none object against 16 fields" + "\n" + "keys".padEnd(12) + "check0 ms".padStart(11) + "us/key".padStart(11));
+  console.log("\none object of n keys: check0 against 16 fields; s.json() parse / encode\n" + "keys".padEnd(12) + "16 fields".padStart(11) + "us/key".padStart(11) + "json parse".padStart(12) + "json encode".padStart(12));
   for (const k of [1_000, 10_000, 100_000, 1_000_000]) {
-    const r = toRaw(record(k).obj);
+    const obj = record(k).obj;
+    const r = toRaw(obj);
     const t = ms(() => check0(f16, r));
-    console.log(String(k).padEnd(12) + t.toFixed(0).padStart(11) + ((t / k) * 1000).toFixed(2).padStart(11));
+    let parsed: any;
+    const p = ms(() => (parsed = s.json().parse(obj)));
+    const e = ms(() => s.json().encode(parsed.value));
+    console.log(String(k).padEnd(12) + t.toFixed(0).padStart(11) + ((t / k) * 1000).toFixed(2).padStart(11) + p.toFixed(0).padStart(12) + e.toFixed(0).padStart(12));
   }
 
   // The worst case through the public API, which is what a host calls: a list

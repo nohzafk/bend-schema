@@ -33,7 +33,7 @@ describe("the JSON host codec", () => {
     expect(toJsonRaw(nullProto).$).toBe("RJson");
   });
 
-  test("the core refuses an object that holds a name twice, and a non-finite number", () => {
+  test("the core refuses a non-finite number, and takes a name held twice: a host object cannot hold one", () => {
     const num = { $: "JNumber" as const, value: { $: "NumberBits" as const, hi: 0, lo: 0 } };
     const member = (key: string) => ({ $: "JMember" as const, key, value: num });
     const list = (...xs: ReturnType<typeof member>[]): BendList<ReturnType<typeof member>> =>
@@ -41,15 +41,18 @@ describe("the JSON host codec", () => {
     const json: Schema = { $: "SJson" };
     const at = (members: BendList<ReturnType<typeof member>>): Raw => ({ $: "RJson", value: { $: "JObject", members } });
     expect(check(json, at(list(member("a"), member("b"))))).toEqual({ $: "None" });
-    expect(check(json, at(list(member("a"), member("b"), member("a")))).$).toBe("Some");
-    expect(conforms0(json, at(list(member("a"), member("a"))))).toBe(false);
+    // RFC 8259: names should be unique, not must; the check is linear in the
+    // members because it does not look for a repeat
+    expect(check(json, at(list(member("a"), member("b"), member("a"))))).toEqual({ $: "None" });
+    expect(conforms0(json, at(list(member("a"), member("a"))))).toBe(true);
     const nan: Raw = { $: "RJson", value: { $: "JNumber", value: { $: "NumberBits", hi: 0x7ff80000, lo: 0 } } };
     expect(check(json, nan).$).toBe("Some");
   });
 
-  test("preserves the codec size and non-JSON boundaries", () => {
-    expect(toJsonRaw(Array.from({ length: BUDGET + 1 }, () => null))).toEqual({ $: "RTooBig" });
-    expect(toJsonRaw(Object.fromEntries(Array.from({ length: KEYS_MAX + 1 }, (_, i) => [`k${i}`, null])))).toEqual({ $: "RTooBig" });
+  test("preserves the codec depth and non-JSON boundaries", () => {
+    let deep: unknown = [];
+    for (let i = 0; i < DEPTH_MAX; i++) deep = [deep];
+    expect(toJsonRaw(deep)).toEqual({ $: "RTooBig" });
     expect(toJsonRaw({ value: undefined })).toEqual({ $: "RBad" });
     expect(toJsonRaw(new Date())).toEqual({ $: "RBad" });
     const cyclic: { self?: unknown } = {};
@@ -61,18 +64,18 @@ describe("the JSON host codec", () => {
 // The codec and the proved check, at run time: what reaches the core, and what
 // comes back.
 //
-// The budget is the part of this file that is not just a test: nothing in the
-// proved core knows a size, so the codec's counting is what keeps a message's
-// cost bounded, and the gate has to fail if a value at the budget no longer
-// converts whole and walks. The shapes come from measure_budget.ts, so the
-// numbers in codec.ts and the gate cannot drift.
+// The size tests are the part of this file that is not just a test: nothing in
+// the proved core knows a size, and the codec limits only depth, so the gate
+// has to fail if a wide value no longer converts whole and walks in a loop.
+// The shapes come from measure.ts, so the numbers in codec.ts and the gate
+// cannot drift.
 
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.mjs";
 import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
-import { BUDGET, DEPTH_MAX, INT_MIN, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
+import { DEPTH_MAX, INT_MIN, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
 import { s } from "./index";
-import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
+import { SHAPES, unbudgeted as before, type Case } from "./measure";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit
 // leaves them undeclared in dist-core/core.d.mts: these are their run-time types.
@@ -88,9 +91,8 @@ const first = (s: Schema, v: unknown) => {
   return r.$ === "None" ? null : errText(r.value);
 };
 
-// What the budget counts, read back from a Raw: one per element, one per key,
-// over every level (RTooBig holds nothing). It also says whether the codec
-// gave up on a node.
+// The size of a Raw: one per element, one per key, over every level (RTooBig
+// holds nothing). It also says whether the codec gave up on a node.
 function measure(r: Raw): { count: number; tooBig: boolean } {
   let count = 0;
   let tooBig = false;
@@ -108,19 +110,6 @@ function measure(r: Raw): { count: number; tooBig: boolean } {
     }
   }
   return { count, tooBig };
-}
-
-// The largest scale a shape builds within the budget, and that case: a count is
-// what the budget counts, so "one past" is a count, not a scale.
-function atBudget(shape: (n: number) => Case): { scale: number; c: Case } {
-  let lo = 1;
-  let hi = BUDGET;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (shape(mid).count <= BUDGET) lo = mid;
-    else hi = mid - 1;
-  }
-  return { scale: lo, c: shape(lo) };
 }
 
 describe("the codec decides nothing about shapes", () => {
@@ -143,16 +132,17 @@ describe("the codec decides nothing about shapes", () => {
   });
 });
 
-describe("the budget", () => {
-  // Every shape but the flat object, which KEYS_MAX caps long before the
-  // budget; it has its own test below.
-  const BUDGETED = Object.entries(SHAPES).filter(([name]) => name !== "flat object");
-  test("a value at the budget converts whole and walks, for every measured shape", () => {
-    for (const [name, shape] of BUDGETED) {
-      const { c } = atBudget(shape);
+describe("width is not limited", () => {
+  // Every shape but the flat object, whose schema grows with it: n keys against
+  // n fields is n^2 lookups, and the developer, not the sender, sets n.
+  const WIDE = Object.entries(SHAPES).filter(([name]) => name !== "flat object");
+  const SCALE = 100_000;
+
+  test("a wide value converts whole and walks, for every measured shape", () => {
+    for (const [name, shape] of WIDE) {
+      const c = shape(SCALE);
       const r = toRaw(c.value);
-      // Nothing was given up on, and what the codec built is the count the
-      // budget counts: the codec's own number and the value's agree.
+      // Nothing was given up on, and what the codec built is the value's size.
       expect({ name, ...measure(r) }).toEqual({ name, count: c.count, tooBig: false });
       expect(conforms0(c.schema, r)).toBe(true);
       expect(check(c.schema, r)).toEqual({ $: "None" });
@@ -161,67 +151,24 @@ describe("the budget", () => {
     }
   });
 
-  test("a value past the budget still walks: nothing over the budget is built", () => {
-    for (const [name, shape] of BUDGETED) {
-      let n = atBudget(shape).scale + 1;
-      while (shape(n).count <= BUDGET) n += 1;
-      const c = shape(n);
-      const r = toRaw(c.value);
-      const m = measure(r);
-      // The codec gave up on a node, and what it did build is within the
-      // budget: that, not the input, is what the walks are bounded by.
-      expect({ name, over: m.count <= BUDGET, gaveUp: m.tooBig }).toEqual({ name, over: true, gaveUp: true });
-      // and the core reports it rather than crashing
-      const res = check(c.schema, r);
-      expect(res.$ === "None" ? "nothing" : res.value.why.$).toBe("TooLarge");
-    }
-  });
-
-  test("one past the budget is TooLarge at the node's path", () => {
-    const list: Schema = { $: "SList", elem: nat };
-    const lists: Schema = { $: "SList", elem: list };
-    const field: Schema = { $: "SField", name: "a", s: list, rest: end };
-    // the value itself, an element, the element of a list of lists, a field's
-    const zeros = (n: number) => Array.from({ length: n }, () => 0);
-    expect(first(list, zeros(BUDGET + 1))).toBe("the value: too large");
-    expect(first(list, [...zeros(BUDGET - 1), [0, 0, 0]])).toBe(`[${BUDGET - 1}]: too large`);
-    expect(first(lists, [zeros(BUDGET)])).toBe("[0]: too large");
-    const inField = check(field, toRaw({ a: zeros(BUDGET + 1) }));
-    expect(inField.$ === "None" ? "nothing" : errText(inField.value, "req")).toBe("req.a: too large");
-  });
-
-  test("the budget runs out at the first node past it, in reading order", () => {
-    const lists: Schema = { $: "SList", elem: { $: "SList", elem: nat } };
-    const half = Array.from({ length: BUDGET / 2 }, () => 0);
-    // [half, half] counts 2 + BUDGET: the second list is the one past it
-    expect(first(lists, [half, half])).toBe("[1]: too large");
-  });
-
-  test("an object past KEYS_MAX is TooLarge, and one at it walks fast", () => {
-    const at = SHAPES["flat object"](KEYS_MAX);
-    const r = toRaw(at.value);
+  test("an object of 100,000 keys walks, against a small schema and s.json()", () => {
+    const o: Record<string, number> = {};
+    for (let i = 0; i < SCALE; i++) o["k" + i] = i;
     const t = performance.now();
-    expect(conforms0(at.schema, r)).toBe(true);
-    expect(check(at.schema, r)).toEqual({ $: "None" });
-    expect(dec(at.schema, r).$).toBe("Some");
-    expect(performance.now() - t).toBeLessThan(1000);
-    const over = SHAPES["flat object"](KEYS_MAX + 1);
-    const res = check(over.schema, toRaw(over.value));
-    expect(res.$ === "None" ? "nothing" : errText(res.value)).toBe("the value: too large");
-    expect(first({ $: "SList", elem: nat }, [0, 0])).toBe(null);
+    expect(first({ $: "SField", name: "k0", s: nat, rest: end }, o)).toBe(null);
+    expect(issue(s.json().parse(o))).toBe("ok");
+    expect(issue(s.object({ k7: s.nat() }).strict().parse(o))).toContain("k0");
+    expect(performance.now() - t).toBeLessThan(2000);
   });
 
-  test("below the budget the conversion is the one it always was", () => {
+  test("the conversion is the one it always was, inside DEPTH_MAX", () => {
     let deep: unknown = 0;
     // 60 rounds of an object and a list: 120 levels, inside DEPTH_MAX
     for (let i = 0; i < DEPTH_MAX / 2 - 4; i++) deep = { a: [deep] };
     const values: unknown[] = [null, true, false, 0, 1.5, -1, 2 ** 48, 2 ** 48 - 1, "", "hi", [], {}, [[]], [[[[]]]], undefined, { a: { b: [1, "x", null] } }, deep];
     for (const v of values) expect(toRaw(v)).toEqual(before(v));
-    // And at the budget's own size, where the counting is doing the most work:
-    // the flat list is one element per count, so its at-budget value is the
-    // longest one a single call can build.
-    const at = Array.from({ length: BUDGET }, () => 1);
-    expect(measure(toRaw(at))).toEqual({ count: BUDGET, tooBig: false });
+    const at = Array.from({ length: SCALE }, () => 1);
+    expect(measure(toRaw(at))).toEqual({ count: SCALE, tooBig: false });
     // toEqual recurses down the chain, so the comparison is made on a prefix
     const some = at.slice(0, 3000);
     expect(toRaw(some)).toEqual(before(some));
@@ -276,15 +223,12 @@ describe("the depth limit", () => {
   });
 });
 
-describe("the budget over s.json() positions", () => {
-  test("two s.json() fields do not each get a fresh budget (W3.g)", () => {
-    const o = s.object({ l: s.list(s.nat()), a: s.json(), b: s.json() });
-    const big = [zeros(BUDGET - 2)]; // BUDGET - 1 counted: nested one level down
-    const r = o.parse({ l: zeros(BUDGET - 3000), a: big, b: big });
-    expect(r.ok).toBe(false);
-    expect(issue(r)).toBe("a: too large");
-    // alone, a value of that size fits
-    expect(issue(o.parse({ l: [], a: [zeros(BUDGET - 10)], b: [] }))).toBe("ok");
+describe("the depth limit over s.json() positions", () => {
+  test("an s.json() position counts its depth from the whole value, not from itself", () => {
+    const o = s.object({ a: s.json() });
+    // DEPTH_MAX - 1 levels inside the object: the whole value is DEPTH_MAX deep
+    expect(issue(o.parse({ a: nest(DEPTH_MAX - 1) }))).toBe("ok");
+    expect(issue(o.parse({ a: nest(DEPTH_MAX) }))).toBe("a: too large");
   });
 
   test("a cycle at an s.json() position is not JSON, not too large", () => {
@@ -294,15 +238,17 @@ describe("the budget over s.json() positions", () => {
     expect(issue(s.json().parse(cyc))).toBe("the value: must be a JSON value");
   });
 
-  test("a non-JSON leaf beside a size marker in one s.json() position is not JSON", () => {
-    // toRaw marks the inner array too large (the list took the budget), and
-    // the NaN makes the position not JSON: not-JSON is what parse reports.
-    const o = s.object({ l: s.list(s.nat()), a: s.json() });
-    expect(issue(o.parse({ l: zeros(BUDGET - 5), a: [zeros(10), NaN] }))).toBe("a: must be a JSON value");
+  test("a non-JSON leaf beside a depth marker in one s.json() position is not JSON", () => {
+    // toRaw, counting from the whole value, marks the inner nest too deep;
+    // toJsonRaw, counting from the position, does not, and the NaN makes the
+    // position not JSON: not-JSON is what parse reports.
+    const o = s.object({ a: s.json() });
+    expect(issue(o.parse({ a: [nest(DEPTH_MAX - 1), NaN] }))).toBe("a: must be a JSON value");
+    expect(issue(o.parse({ a: [nest(DEPTH_MAX - 1), 1] }))).toBe("a: too large");
   });
 });
 
-describe("encode applies the same limits (W3.c)", () => {
+describe("encode applies the same depth limit (W3.c)", () => {
   // What encode writes is checked as parse would check it; nothing is walked
   // one JavaScript call per element, and nesting is only as deep as the schema.
   const throwsSize = (f: () => unknown, msg: string) => {
@@ -311,43 +257,29 @@ describe("encode applies the same limits (W3.c)", () => {
     expect(err instanceof RangeError).toBe(false);
     expect(String(err)).toContain(msg);
   };
-  test("a value past the budget or DEPTH_MAX throws the size error, never RangeError", () => {
-    throwsSize(() => s.list(s.nat()).encode(zeros(BUDGET + 1)), "bend-schema: encode: the value: too large");
-    throwsSize(() => s.list(s.nat()).encode(zeros(1_000_000)), "bend-schema: encode: the value: too large");
+  test("a value past DEPTH_MAX throws the size error, never RangeError; a wide one writes", () => {
     throwsSize(() => nestSchema(DEPTH_MAX + 1).encode(nest(DEPTH_MAX + 1) as never), "too large");
     throwsSize(() => s.json().encode(nest(DEPTH_MAX + 1) as never), "bend-schema: encode: the value: too large");
-    throwsSize(() => s.json().encode(zeros(BUDGET + 1) as never), "bend-schema: encode: the value: too large");
-    // at the limits it writes
-    expect(() => s.list(s.nat()).encode(zeros(BUDGET))).not.toThrow();
+    // at the limit it writes, and width is no limit
     expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX) as never)).not.toThrow();
     expect(() => s.json().encode(nest(DEPTH_MAX) as never)).not.toThrow();
+    expect((s.list(s.nat()).encode(zeros(1_000_000)) as number[]).length).toBe(1_000_000);
+    expect((s.json().encode(zeros(1_000_000) as never) as unknown as unknown[]).length).toBe(1_000_000);
   });
 
-  test("what the schema does not write is not counted: encode accepts what parse accepts", () => {
+  test("what the schema does not write is not walked: encode accepts what parse accepts", () => {
     const o = s.object({ a: s.nat() });
-    const extra = { a: 1, deep: nest(DEPTH_MAX + 50), wide: zeros(BUDGET + 1) };
+    const extra = { a: 1, deep: nest(DEPTH_MAX + 50) };
     expect(issue(o.parse(extra))).toBe("ok");
     expect(o.encode(extra as never)).toEqual({ a: 1 });
   });
 
-  test("work is bounded by the limits, not by what shared references expand to", () => {
-    // n^3 nodes from three n-slot arrays: refused at the budget, fast.
-    for (const n of [200, 1000]) {
-      const v = Array(n).fill(Array(n).fill(Array(n).fill(0)));
-      const t = performance.now();
-      throwsSize(() => s.list(s.list(s.list(s.nat()))).encode(v), "too large");
-      expect(performance.now() - t).toBeLessThan(500);
-    }
-    // s.json() positions share the value's one budget
+  test("a sparse array is refused at its first hole, not written as []", () => {
     const t = performance.now();
-    throwsSize(() => s.list(s.json()).encode(Array(100).fill(zeros(BUDGET - 1)) as never), "bend-schema: encode: [0]: too large");
-    expect(performance.now() - t).toBeLessThan(500);
-  });
-
-  test("a sparse array is refused by its length, not written as []", () => {
-    const t = performance.now();
-    throwsSize(() => s.list(s.nat()).encode(new Array(1e9)), "bend-schema: encode: the value: too large");
-    throwsSize(() => s.list(s.nat()).encode(new Array(BUDGET + 1)), "bend-schema: encode: the value: too large");
+    let err: unknown;
+    try { s.list(s.nat()).encode(new Array(1e9)); } catch (e) { err = e; }
+    expect(err instanceof RangeError).toBe(false);
+    expect(err).toBeDefined();
     expect(performance.now() - t).toBeLessThan(500);
   });
 
@@ -358,28 +290,6 @@ describe("encode applies the same limits (W3.c)", () => {
     const out = s.list(s.tagged("t", { a: s.object({}) })).encode(Array(50000).fill(o) as never);
     expect((out as unknown[]).length).toBe(50000);
     expect(performance.now() - t).toBeLessThan(1000);
-  });
-
-  test("the tag key counts toward the budget", () => {
-    // each element writes one key, its tag: BUDGET/2 elements + BUDGET/2 keys
-    const tg = s.list(s.tagged("t", { a: s.object({}) }));
-    expect(() => tg.encode(Array(BUDGET / 2).fill({ t: "a" }) as never)).not.toThrow();
-    throwsSize(() => tg.encode(Array(BUDGET / 2 + 1).fill({ t: "a" }) as never), "too large");
-  });
-
-  test("an optional field left undefined is not counted", () => {
-    const o = s.list(s.object({ a: s.nat().optional() }));
-    expect(() => o.encode(Array(BUDGET).fill({}) as never)).not.toThrow();
-    throwsSize(() => o.encode(Array(BUDGET / 2 + 1).fill({ a: 1 }) as never), "too large");
-  });
-
-  test("an s.json() position shares the budget with its typed siblings, and is named", () => {
-    const tp = s.tuple(s.list(s.nat()), s.json());
-    // 2 (tuple) + 50000 + 49998 = 100000
-    expect(() => tp.encode([zeros(50000), zeros(49998)] as never)).not.toThrow();
-    expect(tp.parse([zeros(50000), zeros(49998)]).ok).toBe(true);
-    throwsSize(() => tp.encode([zeros(50000), zeros(49999)] as never), "bend-schema: encode: [1]: too large");
-    expect(tp.parse([zeros(50000), zeros(49999)]).ok).toBe(false);
   });
 
   test("depth through tagged and oneKey: 128 levels encode and parse, 129 do not", () => {
@@ -412,7 +322,7 @@ describe("encode applies the same limits (W3.c)", () => {
   });
 
   test("the size error names where it was hit", () => {
-    throwsSize(() => s.object({ a: s.list(s.nat()) }).encode({ a: zeros(BUDGET + 1) }), "bend-schema: encode: a: too large");
+    throwsSize(() => s.object({ a: nestSchema(DEPTH_MAX) }).encode({ a: nest(DEPTH_MAX) } as never), "bend-schema: encode: a" + "[0]".repeat(DEPTH_MAX - 1) + ": too large");
   });
 
   test("a cycle at an s.json() position is not JSON on encode too", () => {

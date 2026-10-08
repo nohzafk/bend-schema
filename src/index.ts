@@ -8,13 +8,13 @@
 
 import * as core from "../dist-core/core.mjs";
 import type { BendList, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
-import { BUDGET, DEPTH_MAX, INT_MIN, NAT_MAX, intNumber, intOf, toJsonRaw, toRaw, whyText } from "./codec";
+import { DEPTH_MAX, INT_MIN, NAT_MAX, intNumber, intOf, toJsonRaw, toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
 // bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, DEPTH_MAX, INT_MIN, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
+export { DEPTH_MAX, INT_MIN, NAT_MAX, nat, toRaw } from "./codec";
 export type { Raw } from "../dist-core/core.mjs";
 
 /** JSON values exposed by the builder are ordinary JavaScript values. */
@@ -132,7 +132,7 @@ export class Schema<T> {
   /** Write x as plain JSON-ready JS; parse reads it back. Throws when x breaks
    * a bound or a refinement, which its type cannot rule out. */
   encode(x: T): unknown {
-    const out = rawToJs(enc(this.node, toMeaning(this, x, { left: BUDGET, depth: 0, path: [] })));
+    const out = rawToJs(enc(this.node, toMeaning(this, x, { depth: 0, path: [] })));
     // An absent top-level value is legitimate for an Optional schema, and
     // JSON has no way to write it, so it stays undefined rather than throwing.
     if (out === undefined) return undefined;
@@ -347,11 +347,12 @@ function rawAtKey(raw: core.Raw, name: string): core.Raw {
   return { $: "RMissing" };
 }
 
-// toRaw owns the single whole-value budget and the depth limit. This pass only
-// replaces values at SJson positions, and a size marker from that first pass
+// toRaw owns the depth limit, counted from the whole value. This pass only
+// replaces values at SJson positions, and a depth marker from that first pass
 // anywhere inside one must not be hidden by toJsonRaw's own count, which starts
-// afresh: a JSON value carries no marker inside it, so the whole position is
-// too large. A value that is not JSON at all (a cycle, NaN) still says so.
+// at the position: a JSON value carries no marker inside it, so the whole
+// position is too large. A value that is not JSON at all (a cycle, NaN) still
+// says so.
 function rawFor(x: Schema<any>, v: any, raw: core.Raw): core.Raw {
   const k = x.kind;
   switch (k.k) {
@@ -431,7 +432,7 @@ function replaceRawKey(raw: core.Raw, name: string, value: core.Raw): core.Raw {
   return out;
 }
 
-// Whether a size marker sits anywhere in raw. A stack, not recursion: raw's
+// Whether a depth marker sits anywhere in raw. A stack, not recursion: raw's
 // depth is bounded by DEPTH_MAX, its width is not.
 function hasTooBig(raw: core.Raw): boolean {
   const todo: core.Raw[] = [raw];
@@ -502,22 +503,18 @@ function toJs(x: Schema<any>, m: M): unknown {
   }
 }
 
-// What encode is about to write, within the limits parse applies to it. Every
-// container the schema writes is counted before it is walked -- its length,
-// or the keys it will write -- against one budget for the whole value, and its
-// level against DEPTH_MAX; s.json() positions draw on the same budget. Only
-// what is written counts: a property the schema does not name is never seen.
-// So the work is bounded by the limits, however far shared references in the
-// input would expand, and a sparse array is refused by its length.
-type Limit = { left: number; depth: number; path: PathPart[] };
+// What encode is about to write, within the depth parse applies to it. Every
+// container the schema writes has its level checked against DEPTH_MAX before
+// it is walked; s.json() positions start at the level they sit at. Only what
+// is written is walked: a property the schema does not name is never seen.
+type Limit = { depth: number; path: PathPart[] };
 
 function tooLarge(lim: Limit): never {
   throw new Error(`bend-schema: encode: ${new Issue([...lim.path], "too large", true).text()}`);
 }
 
-function enter(lim: Limit, n: number): void {
-  if (n > lim.left || lim.depth >= DEPTH_MAX) tooLarge(lim);
-  lim.left -= n;
+function enter(lim: Limit): void {
+  if (lim.depth >= DEPTH_MAX) tooLarge(lim);
 }
 
 function at<R>(lim: Limit, step: PathPart, f: () => R): R {
@@ -530,8 +527,6 @@ function inside<R>(lim: Limit, f: () => R): R {
   try { return f(); } finally { lim.depth--; }
 }
 
-const written = (f: Schema<any>, x: unknown) => !(f.kind.k === "optional" && x === undefined);
-
 function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
   const k = x.kind;
   switch (k.k) {
@@ -540,25 +535,25 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v, lim);
     case "true": return unit;
-    case "json": return jsonFromRaw(toJsonRaw(v, lim, lim.depth), lim);
+    case "json": return jsonFromRaw(toJsonRaw(v, lim.depth), lim);
     case "nullable": return v === null ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v, lim) };
     case "optional": return v === undefined ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v, lim) };
     case "listLen": return toMeaning(k.inner, v, lim);
     case "list": {
       const xs = v as any[];
-      enter(lim, xs.length);
+      enter(lim);
       const heads = inside(lim, () => Array.from(xs, (h, i) => at(lim, i, () => toMeaning(k.elem, h, lim))));
       let out: M = { $: "Nil" };
       for (let i = heads.length - 1; i >= 0; i--) out = { $: "Con", head: heads[i], tail: out };
       return out;
     }
     case "tuple": {
-      enter(lim, k.items.length);
+      enter(lim);
       const ms = inside(lim, () => k.items.map((it, i) => at(lim, i, () => toMeaning(it, v[i], lim))));
       return ms.reduceRight((rest: M, m) => both(m, rest), unit);
     }
     case "object": {
-      enter(lim, k.fields.filter(([n, f]) => written(f, v[n])).length);
+      enter(lim);
       const ms = inside(lim, () => k.fields.map(([n, f]) => at(lim, n, () => toMeaning(f, v[n], lim))));
       return ms.reduceRight((rest: M, m) => both(m, rest), unit);
     }
@@ -567,7 +562,7 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
       const i = k.cases.findIndex(([n]) => n in v);
       if (i < 0) throw new Error("bend-schema: encode: no case key present");
       const [n, c] = k.cases[i]!;
-      enter(lim, 1);
+      enter(lim);
       return inj(i, inside(lim, () => at(lim, n, () => toMeaning(c, v[n], lim))));
     }
     case "tagged": {
@@ -576,13 +571,12 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
       // The tag key is written beside the case's own fields, in the same
       // object. The case is an object schema that reads only the fields it
       // names, and wf refuses one naming the tag key, so it is given v itself:
-      // copying v's other properties would cost work no limit counts.
-      enter(lim, 1);
+      // copying v's other properties would be work for nothing.
       return inj(i, toMeaning(k.cases[i]![1], v, lim));
     }
     case "union": {
-      // The alternative that takes the value's kind; no depth and no count of
-      // its own, so the limits and the path are those of the position.
+      // The alternative that takes the value's kind; no depth of its own, so
+      // the level and the path are those of the position.
       const jk = kindOfJs(v);
       const i = pickAlt(k.alts, jk);
       if (i < 0) {
