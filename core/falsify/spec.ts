@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -303,5 +303,13 @@ d3Cases.forEach(([nm, s, r, ok], i) => instances.push(...(!law || law === "unnam
   name: `unnamed_key_law_${i}_${nm}`,
   claim: `{C.conforms(~H.no_rule, ${s}, ${r}, None{}) == C.conforms(~H.no_rule, ${s}, ${d3Named}, None{}) : Bool}`,
 }] : [])] : [])));
+
+// The number clause of json_valid_spec, with the approved comparison
+// specification expanded so that the falsifier imports no open laws.
+for (const hi of [0x7FF00000, 0xFFF00000, 0x7FF80000, 0x7FEFFFFF, 0x80000000, 0, 0xFFFFFFFF])
+  for (const lo of [0, 1]) if (!law || law === "number_spec") instances.push({
+    name: `number_spec_${hi.toString(16)}_${lo}`,
+    claim: `{C.finite_number(C.NumberBits{${hi}, ${lo}}) == Cmp.is_lt(U32.cmp(U32.and(${hi}, 2147483647), 2146435072)) : Bool}`,
+  });
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };

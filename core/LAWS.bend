@@ -397,12 +397,14 @@ law encode_conforms:
 # valid when every number in it is finite and no object holds a name twice.
 # The specification below is written a second way, so that a valid_json that is
 # always True, always False, or checks only the first member is not a model of
-# it: a number is finite when its binary64 exponent field (bits 20 through 30
-# of the high word) is not all ones, and a name is unique when it occurs in no
-# later member.
+# it: a number is finite when its binary64 magnitude (the high word without
+# its sign bit) lies below that of infinity, 0x7FF00000, and a name is unique
+# when it occurs in no later member. Written as a comparison, not as an
+# exponent field read by Nat.div: Nat.div walks its dividend one step at a
+# time, so a literal high word of this size cannot be checked in 5 s.
 
-def exp_field(hi: U32) -> Nat:
-  Nat.mod(Nat.div(U32.to_nat(hi), 1048576n), 2048n)
+def below_infinity(hi: U32) -> Bool:
+  Cmp.is_lt(U32.cmp(U32.and(hi, 2147483647), 2146435072))
 
 def one_if(b: Bool) -> Nat:
   match b:
@@ -421,7 +423,7 @@ def occurs(+k: String, ms: List<&2, C.JMember>) -> Nat:
 def number_spec(bits: C.NumberBits) -> Bool:
   match bits:
     case C.NumberBits{+hi, lo}:
-      Bool.not(Nat.is_eq(exp_field(hi), 2047n))
+      below_infinity(hi)
 
 def json_spec(v: C.Json) -> Bool:
   match v:
