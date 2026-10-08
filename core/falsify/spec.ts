@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves|json_accept_exact.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves|json_accept_exact|json_enc_preserves.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -364,6 +364,29 @@ for (const rule of ["no_rule", "r_any"]) for (const [name, r, valid] of jsonAcce
   instances.push({ name: `json_accept_exact_${rule}_${name}`, claim: `{C.conforms(~H.${rule}, C.SJson{}, ${r}, None{}) == H.raw_json_spec(${r}) : Bool}` });
   instances.push({ name: `json_accept_expected_${rule}_${name}`, claim: `{C.conforms(~H.${rule}, C.SJson{}, ${r}, None{}) == ${valid ? "True{}" : "False{}"} : Bool}` });
   instances.push({ name: `json_accept_spec_expected_${rule}_${name}`, claim: `{H.raw_json_spec(${r}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+}
+
+// json_enc_preserves: both approved equations, plus explicit payload and
+// validity expectations. Encoding never repairs invalid payloads.
+const jsonEncCases: [string, string, boolean][] = [
+  ...jsonCases,
+  ["bool_true", "C.JBool{True{}}", true],
+  ["positive_zero", jnum(0), true],
+  ["empty_string", 'C.JString{""}', true],
+  ["unicode_string", 'C.JString{"日本"}', true],
+  ["negative_finite", jnum(0xffefffff, 0xffffffff), true],
+  ["negative_nan", jnum(0xfff80000, 0xffffffff), false],
+  ["signaling_nan", jnum(0x7ff00000, 1), false],
+  ["ordered_nested", jobj([["z", jarr([jnum(0x80000000, 1), jobj([["b", jnum(0x3ff00000, 7)], ["a", jnull]])])], ["a", jnum(0x7fefffff, 0xffffffff)]]), true],
+  ["ordered_nested_reverse", jobj([["a", jnum(0x7fefffff, 0xffffffff)], ["z", jarr([jobj([["a", jnull], ["b", jnum(0x3ff00000, 7)]]), jnum(0x80000000, 1)])]]), true],
+  ["repeated_different_values", jobj([["a", jnull], ["a", "C.JBool{True{}}"]]), false],
+];
+for (const [name, v, valid] of jsonEncCases) if (!law || law === "json_enc_preserves") {
+  const encoded = `C.enc(C.SJson{}, ${v})`;
+  instances.push({ name: `json_enc_payload_${name}`, claim: `{${encoded} == C.RJson{${v}} : C.Raw}` });
+  instances.push({ name: `json_enc_validation_${name}`, claim: `{C.conforms(~C.no_rule, C.SJson{}, ${encoded}, None{}) == H.json_spec(${v}) : Bool}` });
+  instances.push({ name: `json_enc_expected_${name}`, claim: `{C.conforms(~C.no_rule, C.SJson{}, ${encoded}, None{}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+  instances.push({ name: `json_enc_spec_expected_${name}`, claim: `{H.json_spec(${v}) == ${valid ? "True{}" : "False{}"} : Bool}` });
 }
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };

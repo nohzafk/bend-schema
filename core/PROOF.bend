@@ -5101,3 +5101,10 @@ def Laws.json_dec_preserves(r):
       {==}
     case C.RJson{value}:
       {==}
+
+# ---- json_enc_preserves ----
+
+# Every Json, without validity assumptions: encoding wraps the entire payload
+# unchanged, and validation agrees with the independent specification.
+def Laws.json_enc_preserves(v):
+  ({==}, Laws.json_valid_spec(v))

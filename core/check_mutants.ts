@@ -28,6 +28,21 @@ import { type Mutant, runMutants } from "bend-falsify";
 const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
+  // at binds the approved payload conjunct of this two-equation law. The
+  // installed falsifier reads only the first conjunct; the literal selector
+  // separately checks both equations. Every encoder mutant loses a payload.
+  ...[
+    { to: "      RBad{}", v: 'C.JArray{[C.JObject{[C.JMember{"z", C.JNumber{C.NumberBits{2147483648, 1}}}]}]}', why: "JSON encoder drops a nested payload" },
+    { to: "      RJson{JNull{}}", v: 'C.JObject{[C.JMember{"z", C.JArray{[C.JNull{}]}}, C.JMember{"a", C.JNumber{C.NumberBits{1072693248, 7}}}]}', why: "JSON encoder replaces an ordered payload with null" },
+    { to: "      RBool{True{}}", v: "C.JNull{}", why: "JSON encoder uses the wrong Raw wrapper" },
+    { to: "      +v = value\n      RJson{Bool.pick(Json, valid_json(v), v, JNull{})}", v: "C.JNumber{C.NumberBits{2146959360, 1}}", why: "JSON encoder repairs a NaN payload to null" },
+    { to: "      +v = value\n      RJson{Bool.pick(Json, valid_json(v), v, JNull{})}", v: 'C.JObject{[C.JMember{"a", C.JNull{}}, C.JMember{"a", C.JBool{True{}}}]}', why: "JSON encoder repairs repeated names to null" },
+  ].map(({ to, v, why }): Mutant => ({
+    law: "json_enc_preserves", section: "json_enc_preserves",
+    with: ["number_spec: finite binary64 exponent", "json_valid_spec"],
+    from: "      RJson{value}", to, at: { v }, why,
+    failsIn: "Laws.json_enc_preserves",
+  })),
   // Acceptance counters bind both approved law parameters. Validation stays
   // unchanged; each proof failure must name the acceptance law itself.
   ...[
