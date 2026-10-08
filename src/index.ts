@@ -7,7 +7,7 @@
 // errors say `proved: false`.
 
 import * as core from "../dist-core/core.mjs";
-import type { BendList, BendMap, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
+import type { BendList, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
 import { toJsonRaw, toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
@@ -340,11 +340,7 @@ function jsonToJs(value: CoreJson): Json {
     }
     case "JObject": {
       const out: Record<string, Json> = {};
-      const visit = (tree: BendMap<CoreJson>): void => {
-        if (tree.$ === "MLeaf") put(out, tree.key, jsonToJs(tree.val));
-        else if (tree.$ === "MNode") { visit(tree.lo); visit(tree.hi); }
-      };
-      visit(value.values);
+      for (let xs = value.members; xs.$ === "Con"; xs = xs.tail) put(out, xs.head.key, jsonToJs(xs.head.value));
       return out;
     }
   }

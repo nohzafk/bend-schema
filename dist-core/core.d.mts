@@ -7,7 +7,8 @@ export type BendEither<A, B> = { $: "Inl"; value: A } | { $: "Inr"; value: B };
 export type BendUnit = { $: "Unit" };
 
 export type NumberBits = { $: "NumberBits"; "hi": number; "lo": number };
-export type Json = { $: "JNull" } | { $: "JBool"; "value": boolean } | { $: "JNumber"; "value": NumberBits } | { $: "JString"; "value": string } | { $: "JArray"; "values": BendList<Json> } | { $: "JObject"; "values": BendMap<Json> };
+export type Json = { $: "JNull" } | { $: "JBool"; "value": boolean } | { $: "JNumber"; "value": NumberBits } | { $: "JString"; "value": string } | { $: "JArray"; "values": BendList<Json> } | { $: "JObject"; "members": BendList<JMember> };
+export type JMember = { $: "JMember"; "key": string; "value": Json };
 export type Raw = { $: "RNum"; "n": bigint } | { $: "RBool"; "b": boolean } | { $: "RNull" } | { $: "RStr"; "s": string } | { $: "RBad" } | { $: "RTooBig" } | { $: "RMissing" } | { $: "RNil" } | { $: "RCons"; "head": Raw; "tail": Raw } | { $: "REnd" } | { $: "RKey"; "key": string; "val": Raw; "rest": Raw } | { $: "RJson"; "value": Json };
 export type Schema = { $: "SNat" } | { $: "SNatIn"; "lo": bigint; "hi": bigint } | { $: "SStr" } | { $: "SStrLen"; "lo": bigint; "hi": bigint; "s": Schema } | { $: "SOpt"; "inner": Schema } | { $: "SList"; "elem": Schema } | { $: "SField"; "name": string; "s": Schema; "rest": Schema } | { $: "SEnd" } | { $: "SRule"; "s": Schema; "tag": bigint } | { $: "SStrict"; "s": Schema } | { $: "STagged"; "key": string; "name": string; "s": Schema; "rest": Schema } | { $: "STagEnd"; "key": string } | { $: "SBool" } | { $: "STrue" } | { $: "SEnum"; "names": BendList<string> } | { $: "SVariant"; "name": string; "s": Schema; "rest": Schema } | { $: "SVEnd" } | { $: "STuple"; "s": Schema; "rest": Schema } | { $: "STEnd" } | { $: "SOptional"; "inner": Schema } | { $: "SListLen"; "lo": bigint; "hi": bigint; "s": Schema } | { $: "SJson" };
 export type Step = { $: "AtIndex"; "i": bigint } | { $: "AtField"; "skip": bigint; "name": string } | { $: "BoundAt"; "i": bigint; "key": string } | { $: "AtKey"; "key": string };
@@ -16,6 +17,7 @@ export type Err = { $: "Err"; "path": BendList<Step>; "why": Why };
 export type Both<A, B> = { $: "Both"; "a": A; "b": B };
 
 export declare function finite_number(bits: NumberBits): boolean;
+export declare function key_in(key: string, members: BendList<JMember>): boolean;
 export declare function valid_json(value: Json): boolean;
 export declare function pick_raw(b: boolean, x: Raw, y: Raw): Raw;
 export declare function lookup(name: string, r: Raw): Raw;
@@ -105,6 +107,7 @@ export declare function wf(s: Schema): boolean;
 
 declare const core: {
   "finite_number"(bits: NumberBits): boolean;
+  "key_in"(key: string, members: BendList<JMember>): boolean;
   "valid_json"(value: Json): boolean;
   "pick_raw"(b: boolean, x: Raw, y: Raw): Raw;
   "lookup"(name: string, r: Raw): Raw;

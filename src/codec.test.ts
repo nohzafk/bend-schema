@@ -21,16 +21,30 @@ describe("the JSON host codec", () => {
 
   test("builds empty and nested JSON containers, including __proto__ safely", () => {
     expect(toJsonRaw([])).toEqual({ $: "RJson", value: { $: "JArray", values: { $: "Nil" } } });
-    expect(toJsonRaw({})).toEqual({ $: "RJson", value: { $: "JObject", values: { $: "MTip" } } });
+    expect(toJsonRaw({})).toEqual({ $: "RJson", value: { $: "JObject", members: { $: "Nil" } } });
     const proto = JSON.parse('{"__proto__":{"safe":true}}') as unknown;
     const raw = toJsonRaw(proto);
     expect(raw.$).toBe("RJson");
     const json = jsonValue(raw);
     expect(json?.$).toBe("JObject");
-    if (json?.$ === "JObject") expect(json.values).toEqual({ $: "MLeaf", key: "__proto__", val: { $: "JObject", values: { $: "MLeaf", key: "safe", val: { $: "JBool", value: true } } } });
+    if (json?.$ === "JObject") expect(json.members).toEqual({ $: "Con", head: { $: "JMember", key: "__proto__", value: { $: "JObject", members: { $: "Con", head: { $: "JMember", key: "safe", value: { $: "JBool", value: true } }, tail: { $: "Nil" } } } }, tail: { $: "Nil" } });
     const nullProto = Object.create(null) as Record<string, unknown>;
     nullProto.x = [null, "s"];
     expect(toJsonRaw(nullProto).$).toBe("RJson");
+  });
+
+  test("the core refuses an object that holds a name twice, and a non-finite number", () => {
+    const num = { $: "JNumber" as const, value: { $: "NumberBits" as const, hi: 0, lo: 0 } };
+    const member = (key: string) => ({ $: "JMember" as const, key, value: num });
+    const list = (...xs: ReturnType<typeof member>[]): BendList<ReturnType<typeof member>> =>
+      xs.reduceRight<BendList<ReturnType<typeof member>>>((tail, head) => ({ $: "Con", head, tail }), { $: "Nil" });
+    const json: Schema = { $: "SJson" };
+    const at = (members: BendList<ReturnType<typeof member>>): Raw => ({ $: "RJson", value: { $: "JObject", members } });
+    expect(check(json, at(list(member("a"), member("b"))))).toEqual({ $: "None" });
+    expect(check(json, at(list(member("a"), member("b"), member("a")))).$).toBe("Some");
+    expect(conforms0(json, at(list(member("a"), member("a"))))).toBe(false);
+    const nan: Raw = { $: "RJson", value: { $: "JNumber", value: { $: "NumberBits", hi: 0x7ff80000, lo: 0 } } };
+    expect(check(json, nan).$).toBe("Some");
   });
 
   test("preserves the codec size and non-JSON boundaries", () => {

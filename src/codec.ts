@@ -15,7 +15,7 @@
 // TooLarge at that node's path. Nothing here is a rule about values: a size is
 // not a shape, and a host cannot choose the sizes it is sent.
 
-import type { BendList, BendMap, BendMaybe, Err, Json, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
+import type { BendList, BendMaybe, Err, Json, JMember, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
 
 // The largest Nat the runtime holds: bend's own Nat.add(Nat.mul(65535,
 // 4294967295 + 1), 4294967295). A number past it is not a Nat at all, so it
@@ -159,14 +159,12 @@ export function toJsonRaw(v: unknown): Raw {
       active.delete(value);
       const bad = values.find(([, child]) => child.$ === "RTooBig" || child.$ === "RBad");
       if (bad) return bad[1].$ === "RTooBig" ? bad[1] : { $: "RBad" };
-      const leaves: BendMap<Json>[] = values.map(([key, child]) => ({ $: "MLeaf", key, val: child as Json }));
-      const mapTree = (lo: number, hi: number): BendMap<Json> => {
-        if (lo >= hi) return { $: "MTip" };
-        if (hi - lo === 1) return leaves[lo];
-        const mid = lo + Math.floor((hi - lo) / 2);
-        return { $: "MNode", pos: BigInt(mid), lo: mapTree(lo, mid), hi: mapTree(mid, hi) };
-      };
-      return { $: "JObject", values: mapTree(0, leaves.length) };
+      let members: BendList<JMember> = { $: "Nil" };
+      for (let i = values.length - 1; i >= 0; i--) {
+        const [key, child] = values[i]!;
+        members = { $: "Con", head: { $: "JMember", key, value: child as Json }, tail: members };
+      }
+      return { $: "JObject", members };
     }
     return { $: "RBad" };
   };

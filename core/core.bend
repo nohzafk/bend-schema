@@ -41,7 +41,10 @@ type Json is Data:
   JNumber{value: NumberBits}
   JString{value: String}
   JArray{values: List<&2, Json>}
-  JObject{values: Map<&2, Json>}
+  JObject{members: List<&2, JMember>}
+
+type JMember is Data:
+  JMember{key: String, value: Json}
 
 type Raw is Data:
   RNum{n: Nat}
@@ -127,7 +130,17 @@ def finite_number(bits: NumberBits) -> Bool:
     case NumberBits{+hi, lo}:
       Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))
 
-# Every number in the JSON tree is finite.
+# Whether a name is already taken among the members that follow.
+def key_in(+key: String, members: List<&2, JMember>) -> Bool:
+  match members:
+    case Nil{}:
+      False{}
+    case JMember{other, val} <> rest:
+      Bool.or(String.eq(key, other), key_in(key, rest))
+
+# A value is valid when every number in it is finite and no object holds a name
+# twice. An object is a list of members, so a name's uniqueness is read off the
+# members themselves, not off any layout.
 def valid_json(value: Json) -> Bool:
   match value:
     case JNull{}:
@@ -142,12 +155,10 @@ def valid_json(value: Json) -> Bool:
       True{}
     case JArray{head <> tail}:
       Bool.and(valid_json(head), valid_json(JArray{tail}))
-    case JObject{MTip{}}:
+    case JObject{Nil{}}:
       True{}
-    case JObject{MLeaf{key, val}}:
-      valid_json(val)
-    case JObject{MNode{pos, lo, hi}}:
-      Bool.and(valid_json(JObject{lo}), valid_json(JObject{hi}))
+    case JObject{JMember{key, val} <> +tail}:
+      Bool.and(valid_json(val), Bool.and(Bool.not(key_in(key, tail)), valid_json(JObject{tail})))
 
 # ---- reading a value ----
 
