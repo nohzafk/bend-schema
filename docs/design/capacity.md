@@ -92,7 +92,7 @@ with the square of the shared prefix.
 
 bend-emit replaces the pair with a native comparison by code point
 (`src/intrinsics.ts`). It replaces the pair only when the function text is
-identical to the output of bend 2.0.35. Otherwise it keeps the original.
+identical to the output of the pinned bend version. Otherwise it keeps the original.
 
 ### Why the core and the proofs did not change
 
@@ -123,8 +123,8 @@ of the stack.
 Once the stack stopped limiting the total, the time became the limit. So
 the numbers come from measured time.
 
-The command is `bun src/measure_budget.ts`. The conditions: bend 2.0.35,
-bend-emit 0.3.4, bun 1.4.2, macOS arm64, Apple M3 Max. Each shape ran once. The
+The command is `bun src/measure_budget.ts`. The conditions: bend 2.0.36,
+bend-emit 0.3.5, bun 1.4.2, macOS arm64, Apple M3 Max. Each shape ran once. The
 count was about 100,000.
 
 Worst case through the public API, for a list of objects with 256 keys each
@@ -132,9 +132,9 @@ Worst case through the public API, for a list of objects with 256 keys each
 
 | Schema | parse | encode |
 |---|---|---|
-| `s.json()` | 0.32 s | 0.38 s |
-| list of an object of 256 fields | 1.8 s | 2.0 s |
-| the same, `.strict()` | 2.6 s | 2.8 s |
+| `s.json()` | 0.38 s | 0.43 s |
+| list of an object of 256 fields | 2.0 s | 2.0 s |
+| the same, `.strict()` | 2.5 s | 2.7 s |
 
 Other shapes at the limit take well under a second. A flat list of 100,000
 numbers takes about 30 ms to check.
@@ -220,8 +220,8 @@ limit counts that copy.
   Three controls reduce the risk. The bend version is pinned. The native
   `String.cmp` applies only to identical text. bend-emit reports a function
   that it cannot rewrite.
-- **The worst-case time depends on the schema.** A sender can force about 0.3 s
-  with `s.json()`. A typed schema with 256 fields can take about 2.6 s. The
+- **The worst-case time depends on the schema.** A sender can force about 0.4 s
+  with `s.json()`. A typed schema with 256 fields can take about 2.5 s. The
   README states this.
 - **The times come from one machine.** Each number is one run. On another
   machine, trust only the order of magnitude. Run `bun src/measure_budget.ts`

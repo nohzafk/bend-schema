@@ -63,23 +63,23 @@ export function nat(name: string, v: number): number {
 // key is looked up by a scan and a walk costs about keys^2; so the worst case
 // is many objects at KEYS_MAX keys, and costs about count x KEYS_MAX lookups.
 //
-// Measured with `bun src/measure_budget.ts` (bend 2.0.35, bend-emit 0.3.4, bun
+// Measured with `bun src/measure_budget.ts` (bend 2.0.36, bend-emit 0.3.5, bun
 // 1.4.2, macOS 27.0 arm64, Apple M3 Max, one run each), at a count of about
 // 100,000 -- milliseconds:
 //
 //   shape                  count   check0  conforms0   enc   dec
-//   flat list             100000       29         27    15    25
-//   list of lists          99856       16         16    14    15
-//   list of objects        99994      100         96    15    60   (16 keys each)
-//   list of wide objects   99973     1173       1211    13   518   (256 keys each)
-//   mixed                  99856       14         14    12    14
-//   deep and wide         100000       18         18    11    20
+//   flat list             100000       28         23    16    22
+//   list of lists          99856       18         17    14    15
+//   list of objects        99994      102         95    15    55   (16 keys each)
+//   list of wide objects   99973     1212       1283    13   613   (256 keys each)
+//   mixed                  99856       16         16    14    15
+//   deep and wide         100000       17         18    12    17
 //
 // and through the public API, the same wide objects (parse / encode, ms):
 //
-//   s.json()                   316 / 382
-//   256-field schema          1784 / 2024
-//   256-field, .strict()      2608 / 2784
+//   s.json()                   379 / 425
+//   256-field schema          2011 / 1976
+//   256-field, .strict()      2464 / 2657
 //
 // So a message at the budget costs tens of milliseconds in the usual shapes and
 // at most a few seconds in the worst one. A typed schema costs more than

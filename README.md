@@ -354,15 +354,15 @@ Depth bounds the stack: each level is one JavaScript call.
 
 Why the limits are what they are: [docs/design/capacity.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/capacity.md).
 
-Worst case, measured with `bun src/measure_budget.ts` (bend 2.0.35, bend-emit
-0.3.4, bun 1.4.2, macOS arm64, Apple M3 Max): a list of objects of 256 keys at
+Worst case, measured with `bun src/measure_budget.ts` (bend 2.0.36, bend-emit
+0.3.5, bun 1.4.2, macOS arm64, Apple M3 Max): a list of objects of 256 keys at
 the size limit (99,973 counted), `parse` / `encode`:
 
 | Schema | parse | encode |
 |---|---|---|
-| `s.json()` | 0.32 s | 0.38 s |
-| list of an object of 256 fields | 1.8 s | 2.0 s |
-| the same, `.strict()` | 2.6 s | 2.8 s |
+| `s.json()` | 0.38 s | 0.43 s |
+| list of an object of 256 fields | 2.0 s | 2.0 s |
+| the same, `.strict()` | 2.5 s | 2.7 s |
 
 A typed schema with many fields costs more than `s.json()`, because each field
 is looked up in each object; the sender controls the number of keys, you

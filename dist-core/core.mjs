@@ -6,7 +6,6 @@ class $C$Tuple$fst$snd { constructor(a0, a1) { this.$ = "Tuple"; this.fst = a0; 
 class $C$Some$value { constructor(a0) { this.$ = "Some"; this.value = a0; } }
 class $C$None { constructor() { this.$ = "None"; } }
 const $N$None = new $C$None();
-class $C$$JMP$f$x { constructor(a0, a1) { this.$ = "$JMP"; this.f = a0; this.x = a1; } }
 class $C$JArray$values { constructor(a0) { this.$ = "JArray"; this.values = a0; } }
 class $C$JObject$members { constructor(a0) { this.$ = "JObject"; this.members = a0; } }
 class $C$RMissing { constructor() { this.$ = "RMissing"; } }
@@ -177,7 +176,7 @@ function f32_from_bits(u) {
 }
 
 function f32_read(s) {
-  const re = /^\s*[+-]?((\d+\.?\d*|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
+  const re = /^[\t\n\v\f\r ]*[+-]?((\d+\.?\d*|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
   const v = f32_round(s.replace(/inf\w*/i, "Infinity"));
   return re.test(s) ? new $C$Some$value(v) : $N$None;
 }
@@ -236,7 +235,7 @@ function array_rmw(a, i, f) {
 // ===
 
 function run_tail(f, x) {
-  return new $C$$JMP$f$x(f.j?.f === f ? f.j : f, [x]);
+  return {$: "$JMP", f: f.j?.f === f ? f.j : f, x};
 }
 
 function run_clo(j) {
@@ -248,7 +247,7 @@ function run_clo(j) {
 
 function run_loop(r) {
   while (r !== null && typeof r === "object" && r.$ === "$JMP") {
-    r = r.f(...r.x);
+    r = r.f(r.x);
   }
   return r;
 }
@@ -263,11 +262,14 @@ function run_lib(f, n) {
 
 const $0eff = Object.create(null);
 
-function io_eff(k, run, need) {
+function io_eff(k, run) {
+  if (arguments.length > 2) {
+    throw new Error("bend: " + k + " takes no need: an effect that waits parks itself");
+  }
   if (k in $0eff) {
     throw new Error("bend: two effects register " + k);
   }
-  $0eff[k] = { run, need };
+  $0eff[k] = run;
 }
 // Program
 // =======
