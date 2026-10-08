@@ -487,6 +487,25 @@ const MUTANTS: Mutant[] = [
     to: "      Some{missing_or(x, NotNat{})}", nth: 1,
     at: { rule: "C.no_rule", s: "C.SInt{}", r: "C.RStr{\"x\"}", prev: "None{}", path: "Nil{}", why: "C.NotInt{}" },
     why: "defect replays a value that is not an integer as not a number", failsIn: "acc" },
+  // SIntIn's copies of the lines above: the same mutation at the second
+  // occurrence, which the SInt rows leave unread.
+  { law: "check_exact", section: EXACT,
+    from: "      here(missing_or(x, NotInt{}))", to: "      None{}", nth: 2,
+    at: { rule: "C.no_rule", s: "C.SIntIn{C.INeg{2n}, C.IPos{2n}}", r: "C.RBad{}", prev: "None{}" },
+    why: "a value that is not an integer passes check at SIntIn, though it does not conform (the SIntIn arm, the second of the two lines)", failsIn: "exact" },
+  { law: "check_accurate", section: "what check reports is there", with: [EXACT],
+    from: "      Some{missing_or(x, NotInt{})}",
+    to: "      Some{missing_or(x, NotNat{})}", nth: 2,
+    at: { rule: "C.no_rule", s: "C.SIntIn{C.INeg{2n}, C.IPos{2n}}", r: "C.RStr{\"x\"}", prev: "None{}", path: "Nil{}", why: "C.NotInt{}" },
+    why: "defect replays a value that is not an integer as not a number at SIntIn (int_in_defect's line, the second of the two)", failsIn: "acc" },
+  { law: "check_accurate", section: "what check reports is there", with: [EXACT],
+    from: "      guard(Bool.not(int_ok(lo, hi, IPos{n})), Some{IntNotIn{lo, hi}})", to: "      guard(Bool.not(int_ok(lo, hi, IPos{n})), Some{NotInt{}})",
+    at: { rule: "C.no_rule", s: "C.SIntIn{C.INeg{2n}, C.INeg{0n}}", r: "C.RNum{3n}", prev: "None{}", path: "Nil{}", why: "C.IntNotIn{C.INeg{2n}, C.INeg{0n}}" },
+    why: "defect replays an out-of-bounds non-negative as the wrong reason", failsIn: "acc_int_in_num" },
+  { law: "encode_conforms", section: "what is written is accepted", with: ["every listed name is accepted"],
+    from: "      int_ok(lo, hi, i)", to: "      True{}",
+    at: { s: "C.SIntIn{C.INeg{2n}, C.INeg{0n}}", x: "C.INeg{5n}" },
+    why: "bounds_ok drops SIntIn's bound, so a value outside it passes the premise and is written, and check refuses it", failsIn: "ec" },
 ];
 
 runMutants(import.meta.dir, MUTANTS);

@@ -279,6 +279,7 @@ describe("int", () => {
     }
     expect(Resp.encode({ code: -32700, message: "Parse error" })).toEqual({ code: -32700, message: "Parse error" });
     for (const v of [1.5, NaN, INT_MIN - 1, NAT_MAX + 1]) expect(() => s.int().encode(v)).toThrow();
+    expect(() => s.int().encode("5" as never)).toThrow("encode: a string is not a whole number");
     expect(() => Code.encode(5)).toThrow("must be from -32768 to -32000");
   });
 

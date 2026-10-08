@@ -197,7 +197,7 @@ function bound(n: number): number {
 // cannot rule out, like a bound broken, so encode refuses it.
 function intMeaning(v: number): core.Int {
   const i = typeof v === "number" ? intOf(v) : null;
-  if (i === null) throw new Error(`bend-schema: encode: ${String(v)} is not a whole number from ${INT_MIN} to ${NAT_MAX}`);
+  if (i === null) throw new Error(`bend-schema: encode: ${typeof v === "number" ? String(v) : `a ${v === null ? "null" : typeof v}`} is not a whole number from ${INT_MIN} to ${NAT_MAX}`);
   return i;
 }
 
