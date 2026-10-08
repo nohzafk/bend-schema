@@ -5039,3 +5039,34 @@ def Laws.json_valid_spec(v):
       %json_key_absent(tail, key) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(C.valid_json(val), Bool.and(_, Laws.json_spec(C.JObject{tail}))) : Bool}
       %Laws.json_valid_spec(C.JObject{tail}) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), _)) : Bool}
       {==}
+
+# ---- json_dec_preserves ----
+
+# Every Raw, without validity assumptions: the RJson payload is returned
+# unchanged, including invalid values; every other constructor returns None.
+def Laws.json_dec_preserves(r):
+  match r:
+    case C.RNum{n}:
+      {==}
+    case C.RBool{b}:
+      {==}
+    case C.RNull{}:
+      {==}
+    case C.RStr{s}:
+      {==}
+    case C.RBad{}:
+      {==}
+    case C.RTooBig{}:
+      {==}
+    case C.RMissing{}:
+      {==}
+    case C.RNil{}:
+      {==}
+    case C.RCons{head, tail}:
+      {==}
+    case C.REnd{}:
+      {==}
+    case C.RKey{key, val, rest}:
+      {==}
+    case C.RJson{value}:
+      {==}

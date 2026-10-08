@@ -28,6 +28,36 @@ import { type Mutant, runMutants } from "bend-falsify";
 const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
+  // Decoder preservation is independent of validation. Every counter is the
+  // approved law at r, and failure must be in that law's own universal proof.
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}", to: "      None{}",
+    at: { r: "C.RJson{C.JArray{[C.JObject{[C.JMember{\"z\", C.JNumber{C.NumberBits{2147483648, 1}}}]}]}}" },
+    why: "JSON decoder drops a nonempty nested payload", failsIn: "Laws.json_dec_preserves" },
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}", to: "      Some{JNull{}}",
+    at: { r: "C.RJson{C.JObject{[C.JMember{\"z\", C.JArray{[C.JNull{}]}}, C.JMember{\"a\", C.JNumber{C.NumberBits{1072693248, 7}}}]}}" },
+    why: "JSON decoder replaces a nested ordered payload with null", failsIn: "Laws.json_dec_preserves" },
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}",
+    to: "      +v = value\n      pick_m(Maybe<&2, Json>, valid_json(v), Some{v}, None{})",
+    at: { r: "C.RJson{C.JNumber{C.NumberBits{2146959360, 1}}}" },
+    why: "JSON decoder rechecks validity and discards a NaN payload", failsIn: "Laws.json_dec_preserves" },
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}",
+    to: "      +v = value\n      pick_m(Maybe<&2, Json>, valid_json(v), Some{v}, None{})",
+    at: { r: "C.RJson{C.JObject{[C.JMember{\"a\", C.JNull{}}, C.JMember{\"a\", C.JBool{True{}}}]}}" },
+    why: "JSON decoder rechecks validity and discards repeated names", failsIn: "Laws.json_dec_preserves" },
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}",
+    to: "      Some{value}\n    case SJson{} RTooBig{}:\n      Some{JNull{}}",
+    at: { r: "C.RTooBig{}" },
+    why: "JSON decoder treats a size marker as JSON null", failsIn: "Laws.json_dec_preserves" },
+  { law: "json_dec_preserves", section: "json_dec_preserves",
+    from: "      Some{value}",
+    to: "      Some{value}\n    case SJson{} RBool{b}:\n      Some{JBool{b}}",
+    at: { r: "C.RBool{True{}}" },
+    why: "JSON decoder admits a non-RJson scalar", failsIn: "Laws.json_dec_preserves" },
   // Independent JSON paths: each counter is the approved law at v,
   // and each proof must fail inside the JSON law, not a shared helper.
   { law: "json_valid_spec", section: "json_valid_spec", with: ["number_spec: finite binary64 exponent"],

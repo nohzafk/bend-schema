@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -335,6 +335,23 @@ const jsonCases: [string, string, boolean][] = [
 for (const [name, v, valid] of jsonCases) if (!law || law === "json_valid_spec") {
   instances.push({ name: `json_valid_spec_${name}`, claim: `{C.valid_json(${v}) == H.json_spec(${v}) : Bool}` });
   instances.push({ name: `json_valid_expected_${name}`, claim: `{H.json_spec(${v}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+}
+
+// json_dec_preserves: all Raw constructors and exact payload equality, not
+// validity. Invalid numbers and duplicate names must be returned unchanged.
+const jsonDecCases: [string, R][] = [
+  ["bad", BAD], ["too_big", BIG], ["missing", "C.RMissing{}"],
+  ["number", N(3)], ["bool_true", TRUE], ["bool_false", FALSE],
+  ["null", NUL], ["string", STR], ["nil", list([])],
+  ["cons", list([N(1)])], ["end", obj([])], ["key", obj([["a", N(1)]])],
+  ...jsonCases.map(([name, v]): [string, R] => [`json_${name}`, `C.RJson{${v}}`]),
+  ["ordered_nested", `C.RJson{${jobj([["z", jarr([jnum(0x80000000, 1), jobj([["b", jnum(0x3ff00000, 7)], ["a", jnull]])])], ["a", jnum(0x7fefffff, 0xffffffff)]])}}`],
+  ["ordered_nested_reverse", `C.RJson{${jobj([["a", jnum(0x7fefffff, 0xffffffff)], ["z", jarr([jobj([["a", jnull], ["b", jnum(0x3ff00000, 7)]]), jnum(0x80000000, 1)])]])}}`],
+];
+for (const [name, r] of jsonDecCases) if (!law || law === "json_dec_preserves") {
+  instances.push({ name: `json_dec_preserves_${name}`, claim: `{C.dec(C.SJson{}, ${r}) == H.raw_json_value(${r}) : Maybe<&2, C.Json>}` });
+  const expected = r.startsWith("C.RJson{") ? `Some{${r.slice(8, -1)}}` : "None{}";
+  instances.push({ name: `json_dec_expected_${name}`, claim: `{H.raw_json_value(${r}) == ${expected} : Maybe<&2, C.Json>}` });
 }
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };
