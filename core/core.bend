@@ -2,35 +2,65 @@ import Base
 
 # bend-schema: a schema, and one check for every schema, proved once.
 #
-# The host turns any JSON value into a Raw with one universal codec that knows
-# no schema: numbers that are whole and within the runtime's Nat become RNum,
-# negative whole numbers within the same bound become RNeg, every other number, boolean or unsupported value becomes RBad. A list or an
-# object past the codec's budget becomes one RTooBig, in its place: the codec
-# counts elements and keys so that these walks never receive a value the
-# runtime cannot carry, and a size becomes an error (TooLarge, at the node's
-# path) rather than a crash. Lists and objects are chains built into Raw
-# (RNil/RCons, REnd/RKey), so that every walk here is structural. RMissing is
-# never produced by the codec: it is what looking up an absent key gives.
+# Source, laws, proofs and the TypeScript package (npm: bend-schema):
+# https://github.com/nohzafk/bend-schema
 #
-# A Schema says what a valid value is (`conforms`), and `check` finds the
-# first thing wrong, with the path to it: depth first, lists in element order,
-# objects in the schema's field order; an element of a bounded list is read
-# whole before its bound, and an SListLen's element count is read before any
-# element. Keys the schema does not name are ignored; a key it names must be
-# present, and two constructors say what may be there instead: SOpt is a value
-# that may be null, SOptional a field that may be absent (the host writes no
-# key at all, so it is well-formed only as a field's own schema).
+# THE INPUT (Raw)
 #
-# Both walk the schema and the value together, in one self-recursive def: a
-# step into a field or an optional shrinks the schema, a step along a list
-# keeps it and shrinks the value (the checker reads the arguments left to
-# right until one shrinks). A project's rules arrive as one template
-# parameter, `~rule: Nat -> Raw -> Maybe<Err>`: at an SRule the value must
-# conform to the rule's schema first, then the rule decides (the tag picks
-# the rule; the rule's error path is relative to the value it was given).
-# Template defs cannot cross the bundler, so the host calls the closed forms
-# below (check0, conforms0). `prev` is carried but no case reads it today; a
-# stateful combinator would.
+# The host makes a Raw from a JSON value in two steps.
+#
+# 1. One universal codec makes the Raw. It knows no schema.
+#    - A whole number from 0 to 2^48-1 becomes RNum.
+#    - A whole number from -(2^48-1) to -1 becomes RNeg.
+#    - A boolean becomes RBool, null becomes RNull, a string becomes RStr.
+#    - An array becomes a chain of RCons that ends in RNil.
+#    - A plain object becomes a chain of RKey that ends in REnd.
+#    - All other values become RBad: a fraction, a number out of range, NaN,
+#      undefined, and an object that is not plain (for example a Date).
+#    The codec also counts elements and keys, and the nesting depth. An array
+#    or an object that goes past a limit becomes one RTooBig in its place.
+#    The core reports RTooBig as TooLarge at the path of that node. The codec
+#    applies a limit because the core cannot: a limit is about size, not shape.
+#
+# 2. At each SJson position of the schema, the host replaces the Raw with
+#    RJson. RJson holds a Json value, which keeps any number as its binary64
+#    bits. A value that is not JSON stays RBad. If a limit was hit anywhere
+#    inside the position, the whole position becomes RTooBig.
+#
+# The codec never makes RMissing. A lookup of a key that is not there gives
+# RMissing.
+#
+# THE CHECK
+#
+# A Schema tells what a valid value is (`conforms`). `check` finds the first
+# error and gives its path. The order is:
+#   - depth first;
+#   - list elements in order;
+#   - object fields in the order of the schema;
+#   - for a bounded string, the inner value first and then the bound;
+#   - for an SListLen, the element count first and then the elements.
+#
+# The check ignores keys that the schema does not name. A key that the schema
+# names must be there. Two constructors allow less:
+#   - SOpt: the value may be null.
+#   - SOptional: the field may be absent. The host then writes no key. SOptional
+#     is well-formed only as the schema of a field.
+#
+# `conforms` and `check` each walk the schema and the value together, in one
+# self-recursive def. A step into a field or an optional makes the schema
+# smaller. A step along a list keeps the schema and makes the value smaller.
+# The termination checker reads the arguments from left to right until one
+# gets smaller.
+#
+# RULES
+#
+# A project gives its rules as one template parameter,
+# `~rule: Nat -> Raw -> Maybe<Err>`. At an SRule, the value must first conform
+# to the schema of the rule. Then the rule decides. The tag selects the rule.
+# The error path of a rule is relative to the value that the rule gets.
+# A template def cannot go through the bundler, so the host calls the closed
+# forms below (check0, conforms0). The check carries `prev`, but no case reads
+# it now. A combinator with state can use it.
 
 type NumberBits is Data:
   NumberBits{hi: U32, lo: U32}
