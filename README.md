@@ -68,8 +68,8 @@ same thing:
 { "path": ["params", 1, "n"], "message": "must be a whole number from 0 to 281474976710655", "proved": true }
 ```
 
-- `path` lists object keys (strings) and list indices (whole numbers), outer
-  first. An empty path means the value itself.
+- `path` lists object keys (strings) and list indices (whole numbers from 0
+  to 2^53-1), outer first. An empty path means the value itself.
 - The field names and their types are stable: a change to them is a major
   version. **The `message` text is not stable.** It is written for people, so
   do not branch on it.

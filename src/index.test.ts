@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json } from "./index.ts";
+import { INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json, type PathPart, type Schema } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -320,11 +320,29 @@ describe("the wire form of an Issue", () => {
     expect(top.path).toEqual([]);
   });
 
+  test("every kind of path part round-trips: tagged, oneKey, strict, int, s.json()", () => {
+    const cases: [Schema<any>, unknown, PathPart[]][] = [
+      [s.tagged("t", { a: s.object({ x: s.nat() }) }), { t: "a", x: "no" }, ["x"]],
+      [s.oneKey({ a: s.list(s.str()) }), { a: ["ok", 1] }, ["a", 1]],
+      [s.object({ x: s.nat() }).strict(), { x: 1, y: 2 }, ["y"]],
+      [s.list(s.int()), [1, -2, 0.5], [2]],
+    ];
+    // Too deep inside an s.json() position: TooLarge, with a path into it.
+    let deep: unknown = 0;
+    for (let i = 0; i < 200; i++) deep = [deep];
+    const j = s.object({ j: s.json() }).check({ j: [1, deep] })!;
+    expect(j.path[0]).toBe("j");
+    for (const [schema, input, path] of cases) expect(schema.check(input)!.path).toEqual(path);
+    for (const e of [...cases.map(([schema, input]) => schema.check(input)!), j]) {
+      expect(issueSchema.parse(wire(e))).toEqual({ ok: true, value: e.toJSON() });
+    }
+  });
+
   test("issueSchema refuses what toJSON never writes, and ignores a later field", () => {
     const ok = { path: ["a", 0], message: "m", proved: true };
     expect(issueSchema.check(ok)).toBeNull();
     expect(issueSchema.parse({ ...ok, code: 7 })).toEqual({ ok: true, value: ok });
-    for (const p of [[-1], [1.5], [null], [true], [["a"]], [{ k: 1 }]]) {
+    for (const p of [[-1], [1.5], [2 ** 53], [null], [true], [["a"]], [{ k: 1 }]]) {
       expect(issueSchema.check({ ...ok, path: p })?.message).toBe("each path part must be a string or a whole number");
     }
     expect(issueSchema.check({ path: [], message: "m" })?.path).toEqual(["proved"]);
