@@ -45,6 +45,18 @@ import ./core.bend as C
 #                   every other value exactly as the inner schema accepts it:
 #                   the constructor adds absence and nothing else.
 #
+#   json_valid_spec
+#                   valid_json is the independent specification: finite
+#                   numbers, and no object holds a name twice.
+#   json_accept_exact
+#                   SJson accepts a valid RJson and nothing else.
+#   json_dec_preserves
+#                   dec reads an RJson as the value it holds, unchanged, and
+#                   anything else as nothing.
+#   json_enc_preserves
+#                   enc wraps a JSON value unchanged; the result conforms
+#                   exactly when the value is valid.
+#
 # bounds_meaning died with SBounds: the bounded list is billing's rule now,
 # and its meaning is billing's law.
 #
@@ -377,3 +389,96 @@ law encode_conforms:
   for hn: {C.names_ok(s, x) == True{} : Bool}
   for hb: {C.bounds_ok(s, x) == True{} : Bool}
   {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}
+
+
+# ---- SJson: any JSON value ----
+#
+# SJson carries a JSON value whose shape the schema does not own. A value is
+# valid when every number in it is finite and no object holds a name twice.
+# The specification below is written a second way, so that a valid_json that is
+# always True, always False, or checks only the first member is not a model of
+# it: a number is finite when its binary64 exponent field (bits 20 through 30
+# of the high word) is not all ones, and a name is unique when it occurs in no
+# later member.
+
+def exp_field(hi: U32) -> Nat:
+  Nat.mod(Nat.div(U32.to_nat(hi), 1048576n), 2048n)
+
+def one_if(b: Bool) -> Nat:
+  match b:
+    case True{}:
+      1n
+    case False{}:
+      0n
+
+def occurs(+k: String, ms: List<&2, C.JMember>) -> Nat:
+  match ms:
+    case Nil{}:
+      0n
+    case C.JMember{o, val} <> rest:
+      Nat.add(one_if(String.eq(k, o)), occurs(k, rest))
+
+def number_spec(bits: C.NumberBits) -> Bool:
+  match bits:
+    case C.NumberBits{+hi, lo}:
+      Bool.not(Nat.is_eq(exp_field(hi), 2047n))
+
+def json_spec(v: C.Json) -> Bool:
+  match v:
+    case C.JNull{}:
+      True{}
+    case C.JBool{b}:
+      True{}
+    case C.JNumber{bits}:
+      number_spec(bits)
+    case C.JString{text}:
+      True{}
+    case C.JArray{Nil{}}:
+      True{}
+    case C.JArray{head <> tail}:
+      Bool.and(json_spec(head), json_spec(C.JArray{tail}))
+    case C.JObject{Nil{}}:
+      True{}
+    case C.JObject{C.JMember{key, val} <> +tail}:
+      Bool.and(json_spec(val), Bool.and(Nat.is_eq(occurs(key, tail), 0n), json_spec(C.JObject{tail})))
+
+# Only an RJson holds a JSON value; every other raw value is not one.
+def raw_json_spec(r: C.Raw) -> Bool:
+  match r:
+    case C.RJson{v}:
+      json_spec(v)
+    case _:
+      False{}
+
+def raw_json_value(r: C.Raw) -> Maybe<&2, C.Json>:
+  match r:
+    case C.RJson{v}:
+      Some{v}
+    case _:
+      None{}
+
+# valid_json is the specification above, for every value.
+law json_valid_spec:
+  for +v: C.Json
+  {C.valid_json(v) == json_spec(v) : Bool}
+
+# SJson accepts a valid JSON value and nothing else: not a number the codec
+# could not hold, not a size marker, not a missing value.
+law json_accept_exact:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +r: C.Raw
+  {C.conforms(~rule, C.SJson{}, r, None{}) == raw_json_spec(r) : Bool}
+
+# Reading an RJson returns the value it holds, unchanged, and reading anything
+# else returns nothing. Like SNatIn's, dec does not recheck the value: the
+# bound is check's.
+law json_dec_preserves:
+  for +r: C.Raw
+  {C.dec(C.SJson{}, r) == raw_json_value(r) : Maybe<&2, C.Json>}
+
+# Writing a JSON value wraps it unchanged, and the result is accepted exactly
+# when the value is valid: an invalid one, which only a host can build, is
+# written as it is and refused by check on the way back.
+law json_enc_preserves:
+  for +v: C.Json
+  {C.enc(C.SJson{}, v) == C.RJson{v} : C.Raw} & {C.conforms(~C.no_rule, C.SJson{}, C.enc(C.SJson{}, v), None{}) == json_spec(v) : Bool}
