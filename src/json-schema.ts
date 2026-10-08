@@ -40,6 +40,9 @@ function both(a: JsonSchema, b: JsonSchema): JsonSchema {
   return Object.keys(b).some((k) => k in a) ? { allOf: [a, b] } : { ...a, ...b };
 }
 
+// The schema no value passes.
+const NOTHING: JsonSchema = { not: {} };
+
 function body(x: Schema<any>): JsonSchema {
   const k = x.kind;
   switch (k.k) {
@@ -66,8 +69,9 @@ function body(x: Schema<any>): JsonSchema {
       : { type: "array", prefixItems: k.items.map(body), items: false, minItems: k.items.length };
     case "object": return objectBody(k.fields, true, []);
     case "strict": return strictBody(k.obj);
-    case "oneKey": return { oneOf: k.cases.map(([n, c]) => oneKeyCase(n, c, k.cases.map(([m]) => m))) };
-    case "tagged": return { oneOf: k.cases.map(([n, c]) => taggedCase(k.key, n, c)) };
+    // With no case, parse accepts nothing, and oneOf may not be empty.
+    case "oneKey": return k.cases.length === 0 ? NOTHING : { oneOf: k.cases.map(([n, c]) => oneKeyCase(n, c, k.cases.map(([m]) => m))) };
+    case "tagged": return k.cases.length === 0 ? NOTHING : { oneOf: k.cases.map(([n, c]) => taggedCase(k.key, n, c)) };
   }
 }
 

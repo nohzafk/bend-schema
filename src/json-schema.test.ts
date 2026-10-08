@@ -200,6 +200,24 @@ describe("toJsonSchema", () => {
     expect(() => toJsonSchema(s.str().nullable().nullable())).toThrow(/ill-formed/);
   });
 
+  test("a union with no case accepts nothing, and is still a valid document", () => {
+    for (const x of [s.oneKey({}), s.tagged("t", {}), s.object({ u: s.oneKey({}).optional() })]) {
+      expect(() => ajv.compile(toJsonSchema(x))).not.toThrow();
+      for (const v of [null, {}, { t: "a" }, 1]) expect(passes(x, v)).toBe(x.parse(v).ok);
+    }
+    expect(passes(s.oneKey({}), {})).toBe(false);
+    expect(passes(s.object({ u: s.oneKey({}).optional() }), {})).toBe(true);
+  });
+
+  test(".len counts code points on both sides, a lone surrogate as one", () => {
+    const one = s.str().len(1, 1);
+    for (const v of ["😀", "\ud800", "\udc00", "😀\ud800", "ab", ""]) expect(passes(one, v)).toBe(one.parse(v).ok);
+    expect(passes(one, "😀")).toBe(true);
+    expect(passes(one, "\ud800")).toBe(true);
+    const e = s.enum(["a", "😀😀"] as const);
+    expect(passes(s.object({ x: e }), { x: "😀😀" })).toBe(true);
+  });
+
   test("what JSON Schema cannot say is left out: refine and the size limits", () => {
     const even = s.nat().refine((n) => n % 2 === 0, "must be even");
     expect(passes(even, 3)).toBe(true);
