@@ -284,17 +284,47 @@ describe("the budget over s.json() positions", () => {
     expect(issue(s.object({ a: s.json() }).parse({ a: cyc }))).toBe("a: must be a JSON value");
     expect(issue(s.json().parse(cyc))).toBe("the value: must be a JSON value");
   });
+
+  test("a non-JSON leaf beside a size marker in one s.json() position is not JSON", () => {
+    // toRaw marks the inner array too large (the list took the budget), and
+    // the NaN makes the position not JSON: not-JSON is what parse reports.
+    const o = s.object({ l: s.list(s.nat()), a: s.json() });
+    expect(issue(o.parse({ l: zeros(BUDGET - 5), a: [zeros(10), NaN] }))).toBe("a: must be a JSON value");
+  });
 });
 
 describe("encode applies the same limits (W3.c)", () => {
+  // What encode writes is checked as parse would check it; nothing is walked
+  // one JavaScript call per element, and nesting is only as deep as the schema.
+  const throwsSize = (f: () => unknown, msg: string) => {
+    let err: unknown;
+    try { f(); } catch (e) { err = e; }
+    expect(err instanceof RangeError).toBe(false);
+    expect(String(err)).toContain(msg);
+  };
   test("a value past the budget or DEPTH_MAX throws the size error, never RangeError", () => {
-    const msg = "bend-schema: encode: the value is too large";
-    expect(() => s.list(s.nat()).encode(zeros(BUDGET + 1))).toThrow(msg);
-    expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX + 1) as never)).toThrow(msg);
-    expect(() => s.json().encode(nest(DEPTH_MAX + 1) as never)).toThrow(msg);
+    throwsSize(() => s.list(s.nat()).encode(zeros(BUDGET + 1)), "bend-schema: encode: the value: too large");
+    throwsSize(() => s.list(s.nat()).encode(zeros(1_000_000)), "bend-schema: encode: the value: too large");
+    throwsSize(() => nestSchema(DEPTH_MAX + 1).encode(nest(DEPTH_MAX + 1) as never), "too large");
+    throwsSize(() => s.json().encode(nest(DEPTH_MAX + 1) as never), "bend-schema: encode: the JSON value: too large");
+    throwsSize(() => s.json().encode(zeros(BUDGET + 1) as never), "bend-schema: encode: the JSON value: too large");
     // at the limits it writes
     expect(() => s.list(s.nat()).encode(zeros(BUDGET))).not.toThrow();
     expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX) as never)).not.toThrow();
+    expect(() => s.json().encode(nest(DEPTH_MAX) as never)).not.toThrow();
+  });
+
+  test("what the schema does not write is not counted: encode accepts what parse accepts", () => {
+    const o = s.object({ a: s.nat() });
+    const extra = { a: 1, deep: nest(DEPTH_MAX + 50), wide: zeros(BUDGET + 1) };
+    expect(issue(o.parse(extra))).toBe("ok");
+    expect(o.encode(extra as never)).toEqual({ a: 1 });
+  });
+
+  test("a cycle at an s.json() position is not JSON on encode too", () => {
+    const cyc: unknown[] = [];
+    cyc.push(cyc);
+    throwsSize(() => s.json().encode(cyc as never), "bend-schema: encode: the JSON value: must be a JSON value");
   });
 });
 

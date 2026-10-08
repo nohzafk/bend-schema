@@ -49,9 +49,8 @@ describe("POST /orders", () => {
   });
 
   test("a body past the size budget is a 400, not a stack overflow", async () => {
-    const items = Array.from({ length: 5000 }, () => item(1));
-    expect(items.length).toBeGreaterThan(BUDGET); // BUDGET is 3072
-    const r = await postOrder(order({ items, totalQty: 5000 }));
+    const items = Array.from({ length: BUDGET + 1 }, () => item(1));
+    const r = await postOrder(order({ items, totalQty: 1 })); // a legal total: the size is the first error
     expect(r).toEqual({
       status: 400,
       body: { path: ["items"], message: "too large", proved: true, text: "order.items: too large" },

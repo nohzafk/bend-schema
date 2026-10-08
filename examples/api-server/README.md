@@ -82,13 +82,14 @@ nothing checks it.
 (Which error is reported *first* is a separate rule: depth first, in order. See
 `core/LAWS.bend`.)
 
-**2. A huge body gets a clean error, not a crash.** The server sets a size limit,
-`BUDGET = 3072`, counted as list elements plus object keys at every level
-(re-measure it with `bun src/measure_budget.ts`). The limit itself is a choice
-made in this file, not a theorem. But what happens past it is proved: the
+**2. A huge body gets a clean error, not a crash.** bend-schema sets a size
+limit, `BUDGET = 100000`, counted as list elements plus object keys at every
+level, and a depth limit of 128 levels (see "Limits" in the top-level README;
+time them with `bun src/measure_budget.ts`). The limits themselves are choices
+made in `src/codec.ts`, not theorems. But what happens past them is proved: the
 oversized list is replaced by one "too large" marker, and the law
 `too_large_reported` says `check` reports exactly that spot. So an order with
-5000 line items gets:
+100,001 line items gets:
 
 ```json
 400 {"path": ["items"], "message": "too large"}

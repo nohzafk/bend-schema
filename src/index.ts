@@ -120,9 +120,6 @@ export class Schema<T> {
   /** Write x as plain JSON-ready JS; parse reads it back. Throws when x breaks
    * a bound or a refinement, which its type cannot rule out. */
   encode(x: T): unknown {
-    // The size and depth limits come first, as parse applies them: the
-    // conversion and enc below walk x one JavaScript call per level of nesting.
-    if (hasTooBig(toRaw(x))) throw new Error("bend-schema: encode: the value is too large");
     const out = rawToJs(enc(this.node, toMeaning(this, x)));
     // An absent top-level value is legitimate for an Optional schema, and
     // JSON has no way to write it, so it stays undefined rather than throwing.
@@ -424,7 +421,9 @@ function toMeaning(x: Schema<any>, v: any): M {
 
 function jsonFromRaw(raw: core.Raw): CoreJson {
   if (raw.$ === "RJson") return raw.value;
-  throw new Error(`bend-schema: encode: JSON value cannot be encoded (${raw.$})`);
+  // The same two reasons parse gives for an s.json() position.
+  const why = raw.$ === "RTooBig" ? "too large" : "must be a JSON value";
+  throw new Error(`bend-schema: encode: the JSON value: ${why}`);
 }
 
 const inj = (i: number, m: M): M => (i === 0 ? { $: "Inl", value: m } : { $: "Inr", value: inj(i - 1, m) });
