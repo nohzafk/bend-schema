@@ -4889,3 +4889,109 @@ def Laws.soptional_meaning(rule, i, r):
       {==}
     case C.RKey{k_, v_, o_}:
       {==}
+
+
+# ---- number_spec: finite binary64 exponent ----
+#
+# AND can only lower an unsigned word. Its comparison with the mask is
+# therefore LT or EQ, so not-equal and less-than agree. Low fraction bits
+# can affect equality with infinity, but not whether the magnitude is below
+# it: each low threshold bit is zero. Both inductions walk word structure,
+# never the numeric value of a high word.
+
+def number_cmp_step(b: Bool, m: Bool, +c: Cmp, h: {Bool.not(Cmp.is_eq(c)) == Cmp.is_lt(c) : Bool}) -> {Bool.not(Cmp.is_eq(Word.cmp.fin(Bool.and(b, m), m, c))) == Cmp.is_lt(Word.cmp.fin(Bool.and(b, m), m, c)) : Bool}:
+  match b m c:
+    case False{} False{} LT{}:
+      {==}
+    case False{} False{} EQ{}:
+      {==}
+    case False{} False{} GT{}:
+      h
+    case False{} True{} LT{}:
+      {==}
+    case False{} True{} EQ{}:
+      {==}
+    case False{} True{} GT{}:
+      h
+    case True{} False{} LT{}:
+      {==}
+    case True{} False{} EQ{}:
+      {==}
+    case True{} False{} GT{}:
+      h
+    case True{} True{} LT{}:
+      {==}
+    case True{} True{} EQ{}:
+      {==}
+    case True{} True{} GT{}:
+      h
+
+def number_mask_lt(+n: Nat, +w: Word(n), +m: Word(n)) -> {Bool.not(Cmp.is_eq(Word.cmp(n, Word.and(n, w, m), m))) == Cmp.is_lt(Word.cmp(n, Word.and(n, w, m), m)) : Bool}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match w m:
+        case WCon{b, +t} WCon{+mb, +mt}:
+          number_cmp_step(b, mb, Word.cmp(p, Word.and(p, t, mt), mt), number_mask_lt(p, t, mt))
+
+# Pad a high mask with low bits. The exponent mask pads with False; the
+# magnitude mask pads with True, keeping the fraction while dropping sign.
+def number_pad(+low: Nat, +width: Nat, +bit: Bool, m: Word(width)) -> Word(Nat.add(low, width)):
+  match low:
+    case 0n:
+      m
+    case 1n+p:
+      WCon{bit, number_pad(p, width, bit, m)}
+
+def number_low_lt(b: Bool, +c: Cmp) -> {Cmp.is_lt(Word.cmp.fin(b, False{}, c)) == Cmp.is_lt(c) : Bool}:
+  match b c:
+    case False{} LT{}:
+      {==}
+    case False{} EQ{}:
+      {==}
+    case False{} GT{}:
+      {==}
+    case True{} LT{}:
+      {==}
+    case True{} EQ{}:
+      {==}
+    case True{} GT{}:
+      {==}
+
+def number_zero_fin(c: Cmp) -> {Word.cmp.fin(False{}, False{}, c) == c : Cmp}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+def number_fraction_step(+a: Cmp, +c: Cmp, b: Bool, h: {Bool.not(Cmp.is_eq(a)) == Cmp.is_lt(c) : Bool}) -> {Bool.not(Cmp.is_eq(Word.cmp.fin(False{}, False{}, a))) == Cmp.is_lt(Word.cmp.fin(b, False{}, c)) : Bool}:
+  %Equal.sym(Cmp, Word.cmp.fin(False{}, False{}, a), a, number_zero_fin(a)) : {Bool.not(Cmp.is_eq(_)) == Cmp.is_lt(Word.cmp.fin(b, False{}, c)) : Bool}
+  %Equal.sym(Bool, Cmp.is_lt(Word.cmp.fin(b, False{}, c)), Cmp.is_lt(c), number_low_lt(b, c)) : {Bool.not(Cmp.is_eq(a)) == _ : Bool}
+  h
+
+def number_fraction(+low: Nat, +width: Nat, +w: Word(Nat.add(low, width)), +m: Word(width)) -> {Bool.not(Cmp.is_eq(Word.cmp(Nat.add(low, width), Word.and(Nat.add(low, width), w, number_pad(low, width, False{}, m)), number_pad(low, width, False{}, m)))) == Cmp.is_lt(Word.cmp(Nat.add(low, width), Word.and(Nat.add(low, width), w, number_pad(low, width, True{}, m)), number_pad(low, width, False{}, m))) : Bool}:
+  match low:
+    case 0n:
+      number_mask_lt(width, w, m)
+    case 1n+p:
+      match w:
+        case WCon{False{}, +t}:
+          number_fraction_step(Word.cmp(Nat.add(p, width), Word.and(Nat.add(p, width), t, number_pad(p, width, False{}, m)), number_pad(p, width, False{}, m)), Word.cmp(Nat.add(p, width), Word.and(Nat.add(p, width), t, number_pad(p, width, True{}, m)), number_pad(p, width, False{}, m)), False{}, number_fraction(p, width, t, m))
+        case WCon{True{}, +t}:
+          number_fraction_step(Word.cmp(Nat.add(p, width), Word.and(Nat.add(p, width), t, number_pad(p, width, False{}, m)), number_pad(p, width, False{}, m)), Word.cmp(Nat.add(p, width), Word.and(Nat.add(p, width), t, number_pad(p, width, True{}, m)), number_pad(p, width, False{}, m)), True{}, number_fraction(p, width, t, m))
+
+def number_hi(+hi: U32) -> {Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072)) == Laws.below_infinity(hi) : Bool}:
+  match hi:
+    case U32{w}:
+      number_fraction(20n, 12n, w, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{True{}, WCon{False{}, WNil{}}}}}}}}}}}}})
+
+# For every high and low word, without assumptions: finite_number agrees
+# with the frozen specification. The low word is irrelevant to both sides.
+def number_spec(+bits: C.NumberBits) -> {C.finite_number(bits) == Laws.number_spec(bits) : Bool}:
+  match bits:
+    case C.NumberBits{hi, lo}:
+      number_hi(hi)

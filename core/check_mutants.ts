@@ -28,6 +28,25 @@ import { type Mutant, runMutants } from "bend-falsify";
 const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
+  // number_spec is a specification def, not a law block in LAWS.bend.
+  // These counters expand its frozen comparison; the harness reports that
+  // they are not tied to a law. The universal helper is checked in its own
+  // section, and each mutation must fail in number_spec itself.
+  { law: "number_spec", section: "number_spec: finite binary64 exponent",
+    from: "      Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))",
+    to: "      True{}",
+    counter: "{C.finite_number(C.NumberBits{2146435072, 0}) == Cmp.is_lt(U32.cmp(U32.and(2146435072, 2147483647), 2146435072)) : Bool}",
+    why: "finite_number always accepts, including positive infinity", failsIn: "number_spec" },
+  { law: "number_spec", section: "number_spec: finite binary64 exponent",
+    from: "      Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))",
+    to: "      Bool.not(U32.is_eq(U32.and(hi, 2145386496), 2145386496))",
+    counter: "{C.finite_number(C.NumberBits{2145386496, 0}) == Cmp.is_lt(U32.cmp(U32.and(2145386496, 2147483647), 2146435072)) : Bool}",
+    why: "finite_number tests one fewer exponent bit, refusing a finite exponent of 0x7FE", failsIn: "number_spec" },
+  { law: "number_spec", section: "number_spec: finite binary64 exponent",
+    from: "      Bool.not(U32.is_eq(U32.and(hi, 2146435072), 2146435072))",
+    to: "      Bool.not(U32.is_eq(U32.and(hi, 2147483648), 2147483648))",
+    counter: "{C.finite_number(C.NumberBits{2147483648, 0}) == Cmp.is_lt(U32.cmp(U32.and(2147483648, 2147483647), 2146435072)) : Bool}",
+    why: "finite_number tests the sign bit, refusing negative zero", failsIn: "number_spec" },
   { law: "tagged_meaning", section: "a tagged case reads the object without its tag",
     from: "      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, drop_key(k, x), None{})), conforms(~rule, rest, x, None{}))",
     to: "      pick_bool(is_tag(k, n, x), Bool.and(key_once(k, x), conforms(~rule, cs, x, None{})), conforms(~rule, rest, x, None{}))",
