@@ -1,7 +1,7 @@
 # Capacity: how bend-schema bounds the cost of checking one value
 
-This note explains why the limits of bend-schema have their values. It also
-explains what each limit protects.
+This note explains the one limit bend-schema has, why the other two were
+removed, and what the checker's time depends on.
 
 For the numbers only, read [Limits in the README](../../README.md#limits).
 
@@ -9,7 +9,7 @@ For the numbers only, read [Limits in the README](../../README.md#limits).
 
 A host cannot choose the size of the values it receives. A sender can send a
 very long list, a very wide object, or a very deep nesting. Each one can cost
-the checker too much time or too much stack.
+the checker time or stack.
 
 bend-schema has two parts:
 
@@ -29,78 +29,55 @@ checks it.
 
 ## The cost model
 
-Three limits exist. Each one bounds a different cost.
+| Cost | What drives it | How it is bounded |
+|---|---|---|
+| stack | levels of nesting | `DEPTH_MAX` = 128, in the codec |
+| time | elements, keys, and schema fields | nothing in bend-schema; linear in the input, so the host's body-size limit |
 
-| Limit | Value | Bounds | Cost it protects |
-|---|---|---|---|
-| Budget (`BUDGET`) | 100,000 | array elements plus object keys, all levels summed | time |
-| Keys per object (`KEYS_MAX`) | 256 | keys in one object | time |
-| Depth (`DEPTH_MAX`) | 128 | levels of nesting | stack |
-
-Strings are not counted.
-
-### Size and keys bound time
-
-The checker walks a list or an object in a loop. Length costs no stack.
-The time grows with the count of elements and keys.
-
-The time is about linear in the count, with one exception. The core finds each
-field of an object by a scan from the front. One object with `k` keys costs
-about `k * k` lookups. At 256 keys this is about 65,000 lookups. It takes
-a few milliseconds.
-
-So the worst case is many objects with `KEYS_MAX` keys each. The total cost is
-about `count * KEYS_MAX` lookups. The budget caps `count`. The key limit
-caps the other factor.
+Strings are not inspected.
 
 ### Depth bounds stack
 
 The checker goes from one level to the next level with a JavaScript call. Each
-level of nesting uses one frame. Nesting is the only thing that still uses the
-stack. The depth limit caps it.
+level of nesting uses one frame. Nesting is the only thing that uses the stack:
+the checker walks the elements of a list and the members of an object in a loop.
+The depth limit caps it.
 
-## Why the old limit came from the stack
+### Width costs time, linearly
 
-An earlier version of the generated code used one frame for each list element
-and each object member. The code went down the list tail by recursion.
+For a fixed schema, the time is linear in the size of the value. Three facts
+give this:
 
-The old budget was about half of the depth where a deep value overflowed the
-stack. So the stack, not the time, set the budget. Some inputs also threw
-`RangeError` instead of returning an error. These inputs were a long list in
-`encode`, two keys with a long shared prefix, and a value nested too deep.
+1. A list is walked once, one element at a time.
+2. The core finds each schema field by one scan of the object's keys
+   (`lookup`, `key_once`, `extra_err` in `core/core.bend`). One object costs
+   about `fields × keys` lookups. The sender controls `keys`; the developer
+   controls `fields`. So for a given schema, the cost per key is a constant.
+3. An `s.json()` value is checked in one pass (`valid_json`): every number
+   must be finite, and nothing else is looked for.
 
-Two changes in bend-emit 0.3.4 removed width from the stack.
+Measured with `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2,
+macOS arm64, Apple M3 Max, one run each):
 
-### The loop rewrite (the "hole" rule)
+| keys in one object | check against 16 fields | `s.json()` parse |
+|---|---|---|
+| 1,000 | 4 ms | 9 ms |
+| 10,000 | 30 ms | 8 ms |
+| 100,000 | 79 ms | 35 ms |
+| 1,000,000 | 847 ms | 325 ms |
 
-bend-emit rewrites a function into a loop with one general rule. In a `return`,
-look at the self-call that is last in evaluation order. This call is the
-"hole". The rule changes it into the next step of the loop:
+Ten times the keys cost about ten times the time. A flat list of 1,000,000
+numbers checks in 0.19 s.
 
-- Work that must run before the hole runs first, in the original order.
-- Work that must run after the hole goes into a closure frame on the heap.
+A schema with many fields costs more per key: a list of 256-key objects against
+256 fields takes 1.7 s per 100,000 counted elements and keys (2.3 s with
+`.strict()`). The developer chose those fields, so this is not a cost the sender
+can impose.
 
-The rule does not know any name from bend-schema. It covers every recursive
-function of the core. The code is in bend-emit `src/loops.ts`.
-
-### Native `String.cmp`
-
-The Bend `String.cmp` calls `String.cmp.fin`, and `String.cmp.fin` calls
-`String.cmp`. The loop pass finds only self-calls, so it does not rewrite this
-pair. The pair also cuts a new tail string for each character. The time grows
-with the square of the shared prefix.
-
-bend-emit replaces the pair with a native comparison by code point
-(`src/intrinsics.ts`). It replaces the pair only when the function text is
-identical to the output of the pinned bend version. Otherwise it keeps the original.
-
-### Why the core and the proofs did not change
-
-The proofs in `core/PROOF.bend` unfold these recursive definitions in many
-places. A change to the core would need a new proof of each place. It
-would also need a proof that the fuel is enough, and a new design for the
-dependent types `enc` and `dec`. The generated code gives the same result with
-no change to the core. The laws and proofs stay as they are.
+Something linear in the input is bounded by the input. An HTTP server limits the
+body it accepts, and that limit bounds the checker's time the same way it bounds
+`JSON.parse`. A limit inside bend-schema would restate it, and refuse values
+that are not costly.
 
 ## Depth 128
 
@@ -118,150 +95,114 @@ The basis for 128:
 The depth limit is a policy choice with a large margin. It is not at the edge
 of the stack.
 
-## Budget 100,000 and `KEYS_MAX` 256
-
-Once the stack stopped limiting the total, the time became the limit. So
-the numbers come from measured time.
-
-The command is `bun src/measure_budget.ts`. The conditions: bend 2.0.36,
-bend-emit 0.3.5, bun 1.4.2, macOS arm64, Apple M3 Max. Each shape ran once. The
-count was about 100,000.
-
-Worst case through the public API, for a list of objects with 256 keys each
-(99,973 counted):
-
-| Schema | parse | encode |
-|---|---|---|
-| `s.json()` | 0.38 s | 0.43 s |
-| list of an object of 256 fields | 2.0 s | 2.0 s |
-| the same, `.strict()` | 2.5 s | 2.7 s |
-
-Other shapes at the limit take well under a second. A flat list of 100,000
-numbers takes about 30 ms to check.
-
-A typed schema costs more than `s.json()`. This is because the checker looks up
-each field in each object. The sender controls the number of keys. The
-developer controls the number of fields.
-
-`KEYS_MAX` is 256 because of the `keys * keys` lookup cost. An object with more
-keys is `RTooBig`. A set that large belongs in a list.
-
 ## The `s.json()` position
 
 An `s.json()` field accepts any JSON value. The checker converts it with
-`toJsonRaw`, and the conversion has its own count.
+`toJsonRaw`, which counts depth from the position, not from the whole value.
 
-Two facts shape the design:
-
-1. A valid JSON value carries no failure marker inside it. If a `RTooBig` node
-   sat inside a JSON value, the value would not be a valid JSON value. See
-   [json-values.md](./json-values.md).
-2. The first conversion (`toRaw`) already counted the whole message. The second
-   conversion starts with a new count. Without a rule, each `s.json()` field
-   would get a fresh budget, and a message of 3 times the budget would pass.
-
-The rule: if a size marker occurs anywhere inside an `s.json()` position, the
-whole position gets `TooLarge`, at the `s.json()` position's path. The function
-`rawFor` in [`src/index.ts`](../../src/index.ts) does this. It uses `hasTooBig`,
-which walks with an explicit stack. This is because nothing bounds the width of
-`raw`.
+A valid JSON value carries no failure marker inside it. If a `RTooBig` node sat
+inside a JSON value, the value would not be a valid JSON value. See
+[json-values.md](./json-values.md). So the rule is: if the first conversion
+(`toRaw`, which counts depth from the whole value) put a depth marker anywhere
+inside an `s.json()` position, the whole position gets `TooLarge`, at the
+position's path. The function `rawFor` in [`src/index.ts`](../../src/index.ts)
+does this. It uses `hasTooBig`, which walks with an explicit stack, because
+nothing bounds the width of `raw`.
 
 A value that is not JSON at all (a cycle, `NaN`) still reports that it is not
 JSON.
 
-The error points at the field, not at the inner node. A typed schema reports
-the exact path.
-
 ## How `encode` is bounded
 
-`encode` walks a host value and writes it. The walk must be bounded by the same
-limits as `parse`. Otherwise `encode` would do more work than `parse` allows.
+`encode` walks a host value and writes it. The walk checks the same depth limit
+as `parse`: `toMeaning` in [`src/index.ts`](../../src/index.ts) checks the level
+of every container the schema writes against `DEPTH_MAX` before it walks it,
+and an `s.json()` position starts at the level it sits at. Past the limit,
+`encode` throws an error with the path and the text "too large".
 
-`encode` counts the positions it writes before it walks them. The function
-`toMeaning` in [`src/index.ts`](../../src/index.ts) works as follows:
+Only what the schema writes is walked. A property that the schema does not name
+is never read. So `encode` accepts every value `parse` accepts.
 
-- The whole value uses one budget. It starts at `BUDGET`.
-- Before the walk goes into a container, `enter` takes the container's length
-  from the budget. For an object, the count is the number of keys the schema
-  writes. An optional field with value `undefined` is not written, so it is not
-  counted.
-- `enter` also checks the level against `DEPTH_MAX`.
-- An `s.json()` position takes its count from the same budget and starts at the
-  current depth.
-- When a limit is passed, `encode` throws an error with the path and the text
-  "too large".
-- A property that the schema does not name is never read.
+`encode` has no width bound. Its input is the host's own value, not a sender's,
+so a shared reference that expands under the schema costs the host what the
+host built. A sparse array (`new Array(1e9)`) fails at its first hole, because
+`undefined` is not a value of any schema.
 
-Two designs were rejected:
+## Why there was a size budget, and why it is gone
 
-| Design | Reason for rejection |
-|---|---|
-| Count the whole input before the walk | It counts properties that the schema does not write. `encode` then refuses values that `parse` accepts. |
-| Check only the output | The walk has no bound. A shared reference expands under the schema, so a small input can take seconds or use all the memory. A sparse `new Array(1e9)` was written as `[]`. |
+Earlier versions had two more limits: a budget of 100,000 array elements plus
+object keys over the whole value, and 256 keys per object.
 
-Counting what is written gives both properties. The work is bounded by the
-limits, and the accepted set is the same as for `parse`. A sparse array is
-refused by its length.
+The budget came from the stack. An earlier version of the generated code used
+one frame for each list element and each object member, and the budget was
+about half of the depth where a value overflowed the stack. bend-emit 0.3.4
+rewrote every self-recursive function into a loop (the "hole" rule in its
+`src/loops.ts`), and replaced the Bend `String.cmp` pair with a native
+comparison. After that, width cost no stack, and the budget was kept as a bound
+on time.
 
-In the `tagged` case, the case schema reads the original value directly. The
-code does not copy the properties that the schema does not write, because no
-limit counts that copy.
+Two facts then showed that it bounded the wrong thing:
+
+1. The time was measured to be linear in the input for a fixed schema (the
+   table above). The earlier "`keys × keys`" cost came from measuring a 256-key
+   object against a 256-field schema, where `fields = keys`. The budget capped
+   something the body-size limit already caps, and refused a list of 100,001
+   numbers that checks in 30 ms.
+2. `s.json()` was in fact quadratic, and the key limit was what hid it. The
+   core's `valid_json` refused an object that held a name twice, by checking
+   each member against every member after it: `keys²/2` string compares, with
+   `keys` chosen by the sender. One object of 16,000 keys took 2.3 s; 100,000
+   keys took about 100 s. A key limit of 256 bounded this to a few
+   milliseconds per object — but the design note gave a different reason for
+   the limit, and a limit that protects a cost nobody has named is a limit
+   nobody can review.
+
+The second fact was resolved in the core, not the codec. `valid_json` no longer
+looks for a repeated name:
+
+- RFC 8259 says the names in an object *should* be unique, not *must*. An
+  object with a repeated name is JSON. `JSON.parse` accepts it.
+- A JavaScript object cannot hold a name twice, so no value from a sender can
+  have one. Only a `Json` built by hand in Bend can, and `encode` writes it as
+  it is.
+- The law `json_valid_spec` and its proof shrank: the specification `json_spec`
+  lost its `occurs` clause, and the proof lost two lemmas. Every other `json_*`
+  law treats `valid_json` as opaque and did not change.
+
+A linear uniqueness check inside the core was considered and rejected. It would
+need sorted keys or a tree, and a proof that the result agrees with the
+`occurs`-based specification. That proof needs a total order on `String` with
+its lemmas (antisymmetry, transitivity, agreement with `String.eq`), which no
+Bend library provides. Weeks of proof for a case the host never produces.
+
+With `s.json()` linear and the typed check linear, nothing bounded by the two
+limits is left. Both were removed, together with the `BUDGET` and `KEYS_MAX`
+exports.
 
 ## Accepted risks
 
 - **The generated-code rewrite is not proved.** The loop rewrite and the native
-  `String.cmp` are outside the proved core. The proof does not show an error in
-  them. Tests cover them:
-  - the bend-emit tests and the bend-schema tests;
-  - a random comparison of the output of old and new generated code;
-  - a comparison of the native `String.cmp` with the original Bend output on
-    random pairs.
-
-  Three controls reduce the risk. The bend version is pinned. The native
-  `String.cmp` applies only to identical text. bend-emit reports a function
-  that it cannot rewrite.
-- **The worst-case time depends on the schema.** A sender can force about 0.4 s
-  with `s.json()`. A typed schema with 256 fields can take about 2.5 s. The
-  README states this.
+  `String.cmp` are outside the proved core. Tests cover them: the bend-emit
+  tests and the bend-schema tests, a random comparison of the output of old and
+  new generated code, and a comparison of the native `String.cmp` with the
+  original Bend output on random pairs. The bend version is pinned, and
+  bend-emit reports a function that it cannot rewrite.
+- **The checker's time is the host's responsibility.** A host that accepts a
+  body of any size will spend time linear in it. This is the contract of every
+  parser, and the README states it.
 - **The times come from one machine.** Each number is one run. On another
-  machine, trust only the order of magnitude. Run `bun src/measure_budget.ts`
-  again.
-
-## Future direction
-
-This section describes an idea. It is not planned work. No date or promise
-goes with it.
-
-The core could use an explicit work stack. The checker would keep a list of
-tasks in place of recursion. Then neither depth nor width would use the call
-stack, and the proof could be made inside Bend. A Bend parser of JSON already
-uses this shape and generates loops.
-
-A change of this size has open proof obligations:
-
-- The to-do list grows when a container opens. So the length of a list cannot
-  be the decreasing measure. The proof needs a separate fuel count or a measure of remaining
-  work. It must show that valid input does not run out of fuel. A large
-  constant is not a proof.
-- The new checker must return the same first error and path as a reference
-  specification, or it must succeed on the same values. Define the
-  specification without the old checker.
-- Each state change must keep the invariants of the tasks and the path.
-- A run-time resource limit must have a meaning that is separate from
-  termination in the proof.
-- Other helpers still recurse. These include `toRaw`, the decode and encode
-  conversions, and the path construction. All of them need analysis.
-
-Today these are only obligations. They are not approved laws.
+  machine, trust only the order of magnitude. Run `bun src/measure.ts` again.
+- **A hand-built `Json` with a repeated name is not refused.** Only Bend code
+  can build one; the host cannot.
 
 ## Alternatives rejected
 
 | Alternative | Reason |
 |---|---|
-| Explicit work stack in the core now | It needs a new proof of each place that unfolds the recursion, a fuel proof, and a frame design for `enc` and `dec`. |
-| Raise only the `BUDGET` constant | The width recursion still used one frame per element. A deep value would overflow. |
-| bend-emit knows the bend-schema helper names | A generator must not depend on the names in one core. The general rule covers every recursive function. |
+| Keep a key limit at `s.json()` positions only | It protected the quadratic `valid_json`; with that gone, it protects nothing. |
+| Linear uniqueness check in the core | Needs a `String` order theory and its proof; weeks, for a value the host cannot produce. |
+| Keep the budget as a bound on time | Time is linear in the input; the body-size limit already bounds it, and the budget refused cheap values. |
+| Budget as a `parse` option | No limit exists to make optional. A per-field bound is `.len(lo, hi)`. |
 | No depth limit | Depth still uses stack. A deep hostile value throws `RangeError`. |
-| Budget as a `parse` option | It adds an API option. No user needs a different limit now. |
-| Report the inner path for a `s.json()` overflow | A valid JSON value cannot carry a marker. See [json-values.md](./json-values.md). |
-| A new budget for each `s.json()` field | A message of 3 times the budget would pass. |
+| Explicit work stack in the core | It needs a new proof of each place that unfolds the recursion, a fuel proof, and a frame design for `enc` and `dec`. Depth is a policy choice with margin, not a problem. |
+| Report the inner path for a `s.json()` depth overflow | A valid JSON value cannot carry a marker. See [json-values.md](./json-values.md). |

@@ -98,9 +98,11 @@ Because of this, the checker has one rule for `SJson`: accept `RJson{v}` when
 
 - **Arrays** are ordered. `JArray` holds a list, and the order of elements is
   kept.
-- **Objects** are dictionaries with unique keys. `JObject` holds a list of
-  `JMember{key, value}`. `valid_json` is false for an object in which one key
-  occurs in two members.
+- **Objects** are lists of members. `JObject` holds a list of
+  `JMember{key, value}`. `valid_json` does not look for a key that occurs in
+  two members: RFC 8259 says names should be unique, not must, and the check
+  would cost each member a scan of the members after it. See
+  [capacity.md](./capacity.md).
 - **Member order is kept.** The host reads the members in the order that
   `Object.entries` gives. The core keeps them in a list in that order.
   `jsonToJs` writes them back in the same order. The laws `json_dec_preserves`
@@ -112,7 +114,8 @@ Because of this, the checker has one rule for `SJson`: accept `RJson{v}` when
 
 A JavaScript object cannot have the same own key twice. So a duplicate key can
 come only from a host that builds a `Json` by hand. `encode` writes such a value
-as it is. The re-check then refuses it with `NotJson`.
+as it is, and the JavaScript object that results keeps the last value for the
+key.
 
 The host reads an object into a plain object with `Object.defineProperty`, so a
 key named `__proto__` becomes an ordinary own property. It does not change the
@@ -124,8 +127,8 @@ instance) as not JSON.
 The core has four `json_*` laws in `core/LAWS.bend`. Each law has a proof:
 
 - `json_valid_spec`: `valid_json` agrees, for every `Json`, with a second
-  definition written in a different way. That definition says a number is finite
-  and a key occurs in no later member.
+  definition written in a different way. That definition says every number is
+  finite.
 - `json_accept_exact`: `SJson` accepts a valid `RJson` and nothing else. It
   refuses every other raw value, including a missing value and a size marker.
 - `json_dec_preserves`: `dec` reads an `RJson` as the value it holds, without

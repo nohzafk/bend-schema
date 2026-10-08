@@ -193,9 +193,9 @@ const doc = toJsonSchema(s.object({ id: s.nat(), name: s.str().optional() }));
 
 - **Never stricter than `parse`.** Every value `parse` accepts passes the
   document. Three things JSON Schema cannot state are left out, and there the
-  document is looser: `.refine()` predicates, the size and depth limits, and
-  a key repeated within one object. `parse` stays the authority.
-- **Exact elsewhere.** Without `.refine()` and inside the limits, a JSON value
+  document is looser: `.refine()` predicates, the depth limit, and a key
+  repeated within one object. `parse` stays the authority.
+- **Exact elsewhere.** Without `.refine()` and inside the depth limit, a JSON value
   passes the document exactly when `parse` accepts it. The tests check this
   against ajv on random schemas and values; it is tested, not proved.
 - **Mapping.** `nat`, `int` and `.in()` are bounded `integer`s; `.len()` is
@@ -319,9 +319,8 @@ The laws in `core/LAWS.bend` hold for every schema, every rule and every value:
 - **Round trip:** decoding an encoded value gives back the same value.
 - **Encoding conforms:** what the encoder writes passes the check whenever each
   enum value is one of its names and each bound holds of the value.
-- **Any JSON value:** `s.json()` accepts exactly the valid JSON values (finite
-  numbers, unique object keys), and decoding and encoding keep the value
-  unchanged.
+- **Any JSON value:** `s.json()` accepts exactly the valid JSON values (every
+  number finite), and decoding and encoding keep the value unchanged.
 - **Union:** `s.union` accepts exactly what one alternative accepts, never two
   at once, and reports the error of the alternative whose JSON kind the value
   has.
@@ -338,36 +337,35 @@ field, read and written as data, never as the prototype.
 
 ## Limits
 
-- **Size:** a value may contain at most 100,000 array elements plus object
-  keys, counted over the whole value and all nesting levels. A larger value is
-  rejected with a `TooLarge` error at the point where it goes over.
-- **Width:** an object may have at most 256 keys.
 - **Depth:** containers may nest at most 128 levels; the outermost array or
-  object is level 1. A container on level 129 is `TooLarge`.
-- Strings are not counted.
+  object is level 1. A container on level 129 is `TooLarge` at its path.
+- **Width is not limited.** A list of any length and an object of any number of
+  keys are checked; strings are not inspected for size.
 
-What bounds each: size and width bound time. The checker walks lists and
-objects in a loop, so length costs no stack, but an object's keys are looked up
-by a scan, so the cost is linear in the count except for objects, where it is
-quadratic in the object's keys. The worst case is many objects of 256 keys.
-Depth bounds the stack: each level is one JavaScript call.
+Depth bounds the stack: each level of nesting is one JavaScript call. Width
+costs only time, and the time is linear in the input for a given schema: the
+checker walks lists and objects in a loop, finds each schema field by one scan
+of the object (so an object costs `fields × keys` lookups, and the sender
+controls only the keys), and checks an `s.json()` value in one pass. The
+HTTP server's body-size limit is what bounds the input, as it does for any
+parser.
 
-Why the limits are what they are: [docs/design/capacity.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/capacity.md).
+Why: [docs/design/capacity.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/capacity.md).
 
-Worst case, measured with `bun src/measure_budget.ts` (bend 2.0.36, bend-emit
-0.3.5, bun 1.4.2, macOS arm64, Apple M3 Max): a list of objects of 256 keys at
-the size limit (99,973 counted), `parse` / `encode`:
+Measured with `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2,
+macOS arm64, Apple M3 Max, one run each):
 
-| Schema | parse | encode |
+| Value | Schema | parse |
 |---|---|---|
-| `s.json()` | 0.38 s | 0.43 s |
-| list of an object of 256 fields | 2.0 s | 2.0 s |
-| the same, `.strict()` | 2.5 s | 2.7 s |
+| flat list of 1,000,000 numbers | `s.list(s.nat())` | 0.19 s |
+| one object of 1,000,000 keys | 16 fields | 0.85 s |
+| one object of 1,000,000 keys | `s.json()` | 0.33 s |
+| 390 objects of 256 keys (100,000 counted) | `s.json()` | 0.04 s |
+| the same | 256 fields | 1.7 s |
+| the same | 256 fields, `.strict()` | 2.3 s |
 
 A typed schema with many fields costs more than `s.json()`, because each field
-is looked up in each object; the sender controls the number of keys, you
-control the number of fields. Other shapes at the limit take well under a
-second (a flat list of 100,000 numbers: about 30 ms to check).
+is looked up in each object; you control the number of fields.
 
 ## Development
 
