@@ -100,6 +100,7 @@ if (!r.ok) return { jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: 
 | `s.tagged(key, {...})` | union chosen by a tag key |
 | `s.oneKey({...})` | object with exactly one of the keys |
 | `s.union(a, b, ...)` | one of the alternatives, which take different JSON kinds |
+| `s.json()` | any JSON value, passed through unchanged |
 | `.optional()` | the object key may be absent |
 | `.nullable()` | the value may be `null` |
 | `.refine(fn, message)` | a custom check (not proved) |
@@ -107,6 +108,9 @@ if (!r.ok) return { jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: 
 See **[docs/schemas.md](https://github.com/nohzafk/bend-schema/blob/main/docs/schemas.md)**
 for how to write schemas:
 objects, unions, custom rules, error messages and encoding.
+
+For why `s.json()` stores and checks a value the way it does, see
+[docs/design/json-values.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/json-values.md).
 
 ## Optional Effect v4 adapter
 
@@ -197,8 +201,8 @@ const doc = toJsonSchema(s.object({ id: s.nat(), name: s.str().optional() }));
 - **Mapping.** `nat`, `int` and `.in()` are bounded `integer`s; `.len()` is
   `minLength`/`maxLength` (both count code points) or `minItems`/`maxItems`;
   a tuple is `prefixItems` with no further items; `.strict()` is
-  `additionalProperties: false`; `tagged` and `oneKey` are `oneOf`; `union` is `anyOf`; `s.json()`
-  is `{}`.
+  `additionalProperties: false`; `tagged` and `oneKey` are `oneOf`; `union`
+  is `anyOf`; `s.json()` is `{}`.
 - **ajv and `__proto__`.** ajv 8 skips a `properties` entry named
   `__proto__`, so it does not check a field of that name. The document itself
   names it.
@@ -315,16 +319,22 @@ The laws in `core/LAWS.bend` hold for every schema, every rule and every value:
 - **Round trip:** decoding an encoded value gives back the same value.
 - **Encoding conforms:** what the encoder writes passes the check whenever each
   enum value is one of its names and each bound holds of the value.
+- **Any JSON value:** `s.json()` accepts exactly the valid JSON values (finite
+  numbers, unique object keys), and decoding and encoding keep the value
+  unchanged.
+- **Union:** `s.union` accepts exactly what one alternative accepts, never two
+  at once, and reports the error of the alternative whose JSON kind the value
+  has.
 - Each combinator (enum, tuple, variant, tagged union, strict, bounds) has a
   law that states what it accepts.
 
 Not proved: the TypeScript builder, the conversion between JS values and the
 core, and `.refine()` predicates. These are covered by tests.
 
-Two things the TypeScript layer does not carry, because they are not Bend values
-and the core never sees them: a non-plain object (a `Date`, `Map` or class
-instance) is refused as not being JSON, and an object key named `__proto__` is
-the JavaScript prototype, not a field.
+Two JavaScript details are handled in the TypeScript layer, because the core
+never sees them: a non-plain object (a `Date`, `Map` or class instance) is
+refused as not being JSON, and an object key named `__proto__` is an ordinary
+field, read and written as data, never as the prototype.
 
 ## Limits
 
@@ -341,6 +351,8 @@ objects in a loop, so length costs no stack, but an object's keys are looked up
 by a scan, so the cost is linear in the count except for objects, where it is
 quadratic in the object's keys. The worst case is many objects of 256 keys.
 Depth bounds the stack: each level is one JavaScript call.
+
+Why the limits are what they are: [docs/design/capacity.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/capacity.md).
 
 Worst case, measured with `bun src/measure_budget.ts` (bend 2.0.35, bend-emit
 0.3.4, bun 1.4.2, macOS arm64, Apple M3 Max): a list of objects of 256 keys at
