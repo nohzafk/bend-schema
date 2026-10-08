@@ -267,11 +267,34 @@ the JavaScript prototype, not a field.
 
 ## Limits
 
-- **Size:** a value may contain at most 3072 array elements plus object keys
-  in total, counted across all nesting levels. A larger value is rejected with
-  a `TooLarge` error at the point where it goes over. This keeps the checker
-  within the stack.
+- **Size:** a value may contain at most 100,000 array elements plus object
+  keys, counted over the whole value and all nesting levels. A larger value is
+  rejected with a `TooLarge` error at the point where it goes over.
 - **Width:** an object may have at most 256 keys.
+- **Depth:** containers may nest at most 128 levels; the outermost array or
+  object is level 1. A container on level 129 is `TooLarge`.
+- Strings are not counted.
+
+What bounds each: size and width bound time. The checker walks lists and
+objects in a loop, so length costs no stack, but an object's keys are looked up
+by a scan, so the cost is linear in the count except for objects, where it is
+quadratic in the object's keys. The worst case is many objects of 256 keys.
+Depth bounds the stack: each level is one JavaScript call.
+
+Worst case, measured with `bun src/measure_budget.ts` (bend 2.0.35, bend-emit
+0.3.4, bun 1.4.2, macOS arm64, Apple M3 Max): a list of objects of 256 keys at
+the size limit (99,973 counted), `parse` / `encode`:
+
+| Schema | parse | encode |
+|---|---|---|
+| `s.json()` | 0.32 s | 0.38 s |
+| list of an object of 256 fields | 1.8 s | 2.0 s |
+| the same, `.strict()` | 2.6 s | 2.8 s |
+
+A typed schema with many fields costs more than `s.json()`, because each field
+is looked up in each object; the sender controls the number of keys, you
+control the number of fields. Other shapes at the limit take well under a
+second (a flat list of 100,000 numbers: about 30 ms to check).
 
 ## Development
 

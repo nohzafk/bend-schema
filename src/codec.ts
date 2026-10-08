@@ -8,11 +8,11 @@
 // sits. Every rule about shapes is the proved core's (LAWS.bend).
 //
 // Size is the one thing it decides, because it is the one thing the core
-// cannot: the compiled JS walks a list or an object with one native JS frame
-// per element or key, so a long value throws RangeError. So the codec counts
-// what such a walk would cost -- see BUDGET -- and puts one RTooBig in place of
-// the array or object that runs past the budget, which the core reports as
-// TooLarge at that node's path. Nothing here is a rule about values: a size is
+// cannot: how long a walk takes grows with the value, and how deep it nests
+// costs one native JS frame per level. So the codec counts what a walk would
+// cost -- see BUDGET and DEPTH_MAX -- and puts one RTooBig in place of the
+// array or object that runs past either, which the core reports as TooLarge at
+// that node's path. Nothing here is a rule about values: a size is
 // not a shape, and a host cannot choose the sizes it is sent.
 
 import type { BendList, BendMaybe, Err, Json, JMember, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
@@ -41,50 +41,69 @@ export function nat(name: string, v: number): number {
 // every level of nesting and summed: `[[1,2],[3]]` is 2 + 3 = 5. Past it, a
 // node becomes RTooBig.
 //
-// Measured, not guessed (with bend 2.0.35 on a macOS arm64 Mac, each shape in
-// its own process). Each shape below is the largest count where toRaw, check0,
-// conforms0, enc and dec all return in bun, and what the next step throws:
+// The budget caps the time one message can cost. The stack does not bound the
+// total: the core walks a list or an object in a loop, and nesting is capped at
+// DEPTH_MAX. Cost is roughly linear in the count, except in objects, where each
+// key is looked up by a scan and a walk costs about keys^2; so the worst case
+// is many objects at KEYS_MAX keys, and costs about count x KEYS_MAX lookups.
 //
-//   flat list       30000   check0: RangeError
-//   nested object    6257   check0: RangeError
-//   nested list      6257   check0: RangeError
-//   list of lists   29929   survived the largest count tried
-//   list of objects 29929   survived the largest count tried
-//   mixed           15224   survived the largest count tried
-//   flat object      6656   check0: RangeError (25 probes, 903 s)
+// Measured with `bun src/measure_budget.ts` (bend 2.0.35, bend-emit 0.3.4, bun
+// 1.4.2, macOS 27.0 arm64, Apple M3 Max, one run each), at a count of about
+// 100,000 -- milliseconds:
 //
-// The binding shapes are the nested object and the nested list, both at 6257,
-// and a value at the budget keeps about 2.0x of margin under them. (On bend
-// 2.0.27 the nested object reached about 10,600 and a flat object bound first,
-// at 6144, which is why KEYS_MAX exists; the budget was set to half of that,
-// 3072, and is kept.) One budget covers lists, objects and nesting alike, and
-// what makes it enough is the invariant: toRaw never builds a value whose count
-// is past it, so the walk that follows is bounded by it.
+//   shape                  count   check0  conforms0   enc   dec
+//   flat list             100000       29         27    15    25
+//   list of lists          99856       16         16    14    15
+//   list of objects        99994      100         96    15    60   (16 keys each)
+//   list of wide objects   99973     1173       1211    13   518   (256 keys each)
+//   mixed                  99856       14         14    12    14
+//   deep and wide         100000       18         18    11    20
+//
+// and through the public API, the same wide objects (parse / encode, ms):
+//
+//   s.json()                   316 / 382
+//   256-field schema          1784 / 2024
+//   256-field, .strict()      2608 / 2784
+//
+// So a message at the budget costs tens of milliseconds in the usual shapes and
+// at most a few seconds in the worst one. A typed schema costs more than
+// s.json() because each of its fields is looked up in each object; the sender
+// controls the keys, the developer the fields.
 
-export const BUDGET = 3072;
+export const BUDGET = 100_000;
 
-// The most keys one object may hold. A second limit, on time rather than
-// stack: the core finds each field by scanning the object from the front, so
-// walking an object costs about keys^2 lookups. At 3072 keys that was about
-// 8 s for each of check0, conforms0 and dec -- a small request that holds a
-// server for seconds. At 256 keys it is about 65,000 lookups. An object with
-// more keys than this is RTooBig, like a value past the budget; a set that
-// large belongs in a list.
+// The most keys one object may hold. A limit on time: the core finds each field
+// by scanning the object from the front, so walking one object costs about
+// keys^2 lookups -- about 65,000 at 256 keys, a couple of milliseconds. Under
+// the budget, the objects of one value cost at most about count x KEYS_MAX
+// lookups in all (see BUDGET). An object with more keys than this is RTooBig,
+// like a value past the budget; a set that large belongs in a list.
 export const KEYS_MAX = 256;
+
+// The deepest a list or object may nest: the outermost container is level 1.
+// The core and this codec walk the elements of a container in a loop, but go
+// one level down by a JavaScript call, so nesting is what still uses the stack.
+// A container below this level is RTooBig. 128 is serde_json's default, a
+// little above the 100 of protobufjs and protobuf-es; a protocol message nests
+// a few dozen levels at most.
+export const DEPTH_MAX = 128;
 
 export function toRaw(v: unknown): Raw {
   let left = BUDGET;
+  let depth = 0;
   const build = (v: unknown): Raw => {
     if (v === null) return { $: "RNull" };
     if (typeof v === "number") return natFit(v) ? { $: "RNum", n: BigInt(v) } : { $: "RBad" };
     if (typeof v === "boolean") return { $: "RBool", b: v };
     if (typeof v === "string") return { $: "RStr", s: v };
     if (Array.isArray(v)) {
-      if (v.length > left) return { $: "RTooBig" };
+      if (v.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
       left -= v.length;
       // Elements are built first to last, so the budget runs out where a
       // reader would expect: at the first node past it, not at the start.
+      depth++;
       const heads = v.map(build);
+      depth--;
       return heads.reduceRight<Raw>((tail, head) => ({ $: "RCons", head, tail }), { $: "RNil" });
     }
     if (typeof v === "object") {
@@ -95,9 +114,11 @@ export function toRaw(v: unknown): Raw {
       const proto = Object.getPrototypeOf(v);
       if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       const entries = Object.entries(v as object);
-      if (entries.length > KEYS_MAX || entries.length > left) return { $: "RTooBig" };
+      if (entries.length > KEYS_MAX || entries.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
       left -= entries.length;
+      depth++;
       const vals = entries.map(([key, val]) => [key, build(val)] as const);
+      depth--;
       return vals.reduceRight<Raw>((rest, [key, val]) => ({ $: "RKey", key, val, rest }), { $: "REnd" });
     }
     return { $: "RBad" };
@@ -125,6 +146,7 @@ function bitsNumber(bits: NumberBits): number {
 // invalid Json value.
 export function toJsonRaw(v: unknown): Raw {
   let left = BUDGET;
+  let depth = 0;
   const active = new WeakSet<object>();
   const build = (value: unknown): Json | Raw => {
     if (value === null) return { $: "JNull" };
@@ -135,10 +157,13 @@ export function toJsonRaw(v: unknown): Raw {
     }
     if (typeof value === "string") return { $: "JString", value };
     if (Array.isArray(value)) {
-      if (value.length > left || active.has(value)) return value.length > left ? { $: "RTooBig" } : { $: "RBad" };
+      if (active.has(value)) return { $: "RBad" };
+      if (value.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
       left -= value.length;
       active.add(value);
+      depth++;
       const items = Array.from(value, build);
+      depth--;
       active.delete(value);
       if (items.some((item) => item.$ === "RBad" || item.$ === "RTooBig")) {
         return items.find((item) => item.$ === "RTooBig") ?? { $: "RBad" };
@@ -152,10 +177,12 @@ export function toJsonRaw(v: unknown): Raw {
       if (proto !== Object.prototype && proto !== null) return { $: "RBad" };
       if (active.has(value)) return { $: "RBad" };
       const entries = Object.entries(value as object);
-      if (entries.length > KEYS_MAX || entries.length > left) return { $: "RTooBig" };
+      if (entries.length > KEYS_MAX || entries.length > left || depth >= DEPTH_MAX) return { $: "RTooBig" };
       left -= entries.length;
       active.add(value);
+      depth++;
       const values = entries.map(([key, child]) => [key, build(child)] as const);
+      depth--;
       active.delete(value);
       const bad = values.find(([, child]) => child.$ === "RTooBig" || child.$ === "RBad");
       if (bad) return bad[1].$ === "RTooBig" ? bad[1] : { $: "RBad" };

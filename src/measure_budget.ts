@@ -1,41 +1,24 @@
-// How large a value the walks survive, measured rather than guessed.
+// What one message costs in time, measured rather than guessed.
 //
-// The compiled JS of check0, conforms0, enc and dec costs one native JS frame
-// per list element, per object key and per level of nesting, so a long value
-// throws RangeError. The budget the codec enforces (BUDGET in codec.ts) is half
-// the largest total this reports, where the total is what the codec counts:
-// list elements plus object keys, summed over the whole value.
+// BUDGET in codec.ts caps the time one message can cost: the core walks a list
+// or an object in a loop, nesting is capped at DEPTH_MAX, so the stack bounds
+// nothing, and what is left to bound is how long check0, conforms0, enc and dec
+// take. This runs every shape at the budget and prints how long each call took.
 //
-//   bun measure_budget.ts
+//   bun src/measure_budget.ts
 //
-// This measures the backend, so it converts values with the codec's walk and
-// none of its counting (unbudgeted, below): through the codec itself every
-// value past the budget would come back as one RTooBig, and the walks' own
-// limit could never be reached. The codec's budget is a policy about that
-// limit, and this is what the limit is.
+// The shapes are exported for codec.test.ts, which holds the codec against them
+// (a value at the budget converts whole and every walk returns), so the number
+// in codec.ts, the table in the README and the gate are one set of shapes. The
+// timing is not run by the tests.
 //
-// Per shape, the largest scale where all five calls return, and what the next
-// step throws. A shape that survives the cap says nothing about the budget:
-// the budget is half the smallest of these, and the smallest is the shape with
-// the most nesting per counted element.
-//
-// codec.test.ts imports the shapes from here and holds the budget against
-// them, so the number in codec.ts, the table in the README and the gate cannot
-// drift apart: they are one set of shapes and one measurement.
-//
-// The search is per shape, on the shape's own scale, and a shape reports the
-// count it actually built. The cap keeps a shape that is nowhere near the
-// limit (a list of short objects, say) from being searched to millions: what
-// such a shape survives is not the budget's business.
-//
-// A full run takes a few minutes, and the flat object is nearly all of it: a
-// walk over an object costs one lookup per field and each lookup scans from
-// the front, so probing near its edge costs half a minute per probe. The
-// per-shape probe count and time go to stderr, the table to stdout.
+// Each time is one run, in milliseconds, from the converted value to the
+// walk's return. toRaw is the codec's own conversion, with its counting.
 
 import * as kernel from "../dist-core/core.mjs";
 import { check0, conforms0, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
-import { BUDGET } from "./codec";
+import { BUDGET, DEPTH_MAX, KEYS_MAX, toRaw } from "./codec";
+import { s } from "./index";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit
 // leaves them undeclared in dist-core/core.d.mts: these are their run-time types.
@@ -44,7 +27,6 @@ const { enc, dec } = kernel as unknown as {
   dec: (s: Schema, r: unknown) => BendMaybe<unknown>;
 };
 
-const CAP = 30_000; // past every shape's edge; the smallest edge is what counts
 const nat: Schema = { $: "SNat" };
 const end: Schema = { $: "SEnd" };
 
@@ -70,8 +52,22 @@ function record(n: number) {
 
 export type Case = { schema: Schema; value: unknown; meaning: unknown; count: number };
 
-// Each shape takes one scale -- its own unit: elements, rows, depth -- and
-// reports the count the codec would make of it.
+// rows of `width` keys each, `rows` as many as n counts allow (a row counts
+// width + 1: its key count and itself as an element).
+function objects(n: number, width: number): Case {
+  const cols = Math.max(1, Math.min(width, n - 1));
+  const rows = Math.max(1, Math.floor(n / (cols + 1)));
+  const one = record(cols);
+  return {
+    schema: { $: "SList", elem: one.schema },
+    value: Array.from({ length: rows }, () => ({ ...one.obj })),
+    meaning: bList(Array.from({ length: rows }, () => one.meaning)),
+    count: rows * (cols + 1),
+  };
+}
+
+// Each shape takes one scale -- its own unit: elements, rows -- and reports the
+// count the codec would make of it.
 export const SHAPES: Record<string, (n: number) => Case> = {
   "flat list": (n) => ({
     schema: { $: "SList", elem: nat },
@@ -93,49 +89,35 @@ export const SHAPES: Record<string, (n: number) => Case> = {
       count: rows * (cols + 1),
     };
   },
-  "list of objects": (n) => {
-    const rows = Math.max(1, Math.round(Math.sqrt(n)));
-    const cols = Math.max(1, Math.floor(n / rows) - 1);
-    const one = record(cols);
-    return {
-      schema: { $: "SList", elem: one.schema },
-      value: Array.from({ length: rows }, () => ({ ...one.obj })),
-      meaning: bList(Array.from({ length: rows }, () => one.meaning)),
-      count: rows * (cols + 1),
-    };
-  },
+  // objects of 16 keys: a typical record
+  "list of objects": (n) => objects(n, 16),
+  // objects of KEYS_MAX keys, against a schema of KEYS_MAX fields: the worst
+  // case a typed schema has
+  "list of wide objects": (n) => objects(n, KEYS_MAX),
   mixed: (n) => {
     const rows = Math.max(1, Math.round(Math.sqrt(n)));
-    const cols = Math.max(1, Math.floor(n / (2 * rows)));
+    const cols = Math.max(1, Math.floor(n / rows) - 2);
     const inner: Schema = { $: "SList", elem: nat };
     return {
       schema: { $: "SList", elem: { $: "SField", name: "a", s: inner, rest: end } },
       value: Array.from({ length: rows }, () => ({ a: Array.from({ length: cols }, () => 0) })),
       meaning: bList(Array.from({ length: rows }, () => ({ $: "Both", a: bList(Array.from({ length: cols }, () => 0n)), b: { $: "Unit" } }))),
-      count: 2 * rows + rows * cols,
+      count: rows * (cols + 2),
     };
   },
-  "nested object": (n) => {
-    let schema: Schema = nat;
-    let value: unknown = 0;
-    let meaning: unknown = 0n;
-    for (let i = 0; i < n; i++) {
-      schema = { $: "SField", name: "a", s: schema, rest: end };
-      value = { a: value };
-      meaning = { $: "Both", a: meaning, b: { $: "Unit" } };
-    }
-    return { schema, value, meaning, count: n };
-  },
-  "nested list": (n) => {
-    let schema: Schema = nat;
-    let value: unknown = 0;
-    let meaning: unknown = 0n;
-    for (let i = 0; i < n; i++) {
+  // DEPTH_MAX levels of lists, one element each down to the last level, which
+  // is wide: the deepest value, with the most breadth at the bottom.
+  "deep and wide": (n) => {
+    const m = Math.max(1, n - (DEPTH_MAX - 1));
+    let schema: Schema = { $: "SList", elem: nat };
+    let value: unknown = Array.from({ length: m }, () => 0);
+    let meaning: unknown = bList(Array.from({ length: m }, () => 0n));
+    for (let i = 1; i < DEPTH_MAX; i++) {
       schema = { $: "SList", elem: schema };
       value = [value];
       meaning = bList([meaning]);
     }
-    return { schema, value, meaning, count: n };
+    return { schema, value, meaning, count: m + DEPTH_MAX - 1 };
   },
 };
 
@@ -153,62 +135,67 @@ export function unbudgeted(v: unknown): Raw {
   return { $: "RBad" };
 }
 
-// Which of the five throws, and with what. null when all of them return.
-function walk(c: Case): string | null {
-  let r: Raw;
-  try {
-    r = unbudgeted(c.value);
-  } catch (e) {
-    return `converting: ${e instanceof RangeError ? "RangeError" : String(e)}`;
-  }
-  const calls: [string, () => unknown][] = [
-    ["check0", () => check0(c.schema, r)],
-    ["conforms0", () => conforms0(c.schema, r)],
-    ["enc", () => enc(c.schema, c.meaning as never)],
-    ["dec", () => dec(c.schema, r)],
-  ];
-  for (const [name, f] of calls) {
-    try {
-      f();
-    } catch (e) {
-      return `${name}: ${e instanceof RangeError ? "RangeError" : String(e)}`;
-    }
-  }
-  return null;
+const ms = (f: () => unknown): number => {
+  const t = performance.now();
+  f();
+  return performance.now() - t;
+};
+
+// The five calls on a case, each in milliseconds.
+function time(c: Case): Record<string, number> {
+  let r: Raw = { $: "RNil" };
+  const out: Record<string, number> = {};
+  out.toRaw = ms(() => (r = toRaw(c.value)));
+  out.check0 = ms(() => check0(c.schema, r));
+  out.conforms0 = ms(() => conforms0(c.schema, r));
+  out.enc = ms(() => enc(c.schema, c.meaning));
+  out.dec = ms(() => dec(c.schema, r));
+  return out;
 }
 
-// The largest scale where all five return, and the count it built.
-function edge(name: string, shape: (n: number) => Case): { count: number; over: string } {
-  const t0 = Date.now();
-  let probes = 0;
-  const ok = (n: number) => {
-    probes += 1;
-    return walk(shape(n)) === null;
-  };
+// The scale that comes closest to the budget without passing it.
+function atBudget(shape: (n: number) => Case): Case {
   let lo = 1;
-  let hi = 2;
-  while (hi <= CAP && ok(hi)) {
-    lo = hi;
-    hi *= 2;
+  let hi = BUDGET;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (shape(mid).count <= BUDGET) lo = mid;
+    else hi = mid - 1;
   }
-  if (hi <= CAP) {
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1;
-      if (ok(mid)) lo = mid;
-      else hi = mid - 1;
-    }
-  } else lo = CAP;
-  const over = walk(shape(lo + 1)) ?? "nothing (at the cap)";
-  const secs = ((Date.now() - t0) / 1000).toFixed(1);
-  console.error(`  ${name}: ${probes} probes, ${secs} s`);
-  console.log(`${name.padEnd(16)} ${String(shape(lo).count).padStart(7)} counted, next throws ${over}`);
-  return { count: shape(lo).count, over };
+  return shape(lo);
 }
 
-// codec.test.ts imports the shapes above; only a run measures.
+const cols = ["toRaw", "check0", "conforms0", "enc", "dec"];
+const row = (name: string, count: number, t: Record<string, number>) =>
+  console.log(name.padEnd(30) + String(count).padStart(8) + cols.map((k) => (t[k] === undefined ? "-" : t[k]!.toFixed(0)).padStart(11)).join(""));
+
 if (import.meta.main) {
-  let worst = Infinity;
-  for (const [name, shape] of Object.entries(SHAPES)) worst = Math.min(worst, edge(name, shape).count);
-  console.log(`\nsmallest count a shape survives: ${worst}; half of it is ${Math.floor(worst / 2)}`);
-  console.log(`the codec's budget: ${BUDGET}`);
+  console.log(`budget ${BUDGET}, keys ${KEYS_MAX}, depth ${DEPTH_MAX}; milliseconds, one run each`);
+  console.log("shape".padEnd(30) + "count".padStart(8) + cols.map((k) => k.padStart(11)).join(""));
+  for (const [name, shape] of Object.entries(SHAPES)) {
+    if (name === "flat object") continue; // KEYS_MAX caps it far below the budget
+    const c = atBudget(shape);
+    row(name, c.count, time(c));
+  }
+
+  // The worst case through the public API, which is what a host calls: a list
+  // of KEYS_MAX-key objects against s.json(), against a schema of KEYS_MAX
+  // fields, and against the same schema made strict.
+  const wide = SHAPES["list of wide objects"]!(BUDGET);
+  const fields: Record<string, ReturnType<typeof s.nat>> = {};
+  for (let i = 0; i < KEYS_MAX; i++) fields["k" + i] = s.nat();
+  const typed = s.list(s.object(fields));
+  const rows: [string, any][] = [
+    ["s.json()", s.json()],
+    [`s.list(${KEYS_MAX} fields)`, typed],
+    [`... .strict()`, s.list(s.object(fields).strict())],
+  ];
+  console.log("\nwide objects, public API: " + wide.count + " counted\n" + "schema".padEnd(30) + "parse".padStart(11) + "encode".padStart(11));
+  for (const [name, schema] of rows) {
+    let parsed: any;
+    const p = ms(() => (parsed = schema.parse(wide.value)));
+    if (!parsed.ok) throw new Error(`${name}: ${parsed.error}`);
+    const e = ms(() => schema.encode(parsed.value));
+    console.log(name.padEnd(30) + p.toFixed(0).padStart(11) + e.toFixed(0).padStart(11));
+  }
 }

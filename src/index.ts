@@ -14,7 +14,7 @@ import { toJsonRaw, toRaw, whyText } from "./codec";
 // bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
+export { BUDGET, DEPTH_MAX, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
 export type { Raw } from "../dist-core/core.mjs";
 
 /** JSON values exposed by the builder are ordinary JavaScript values. */
@@ -120,6 +120,9 @@ export class Schema<T> {
   /** Write x as plain JSON-ready JS; parse reads it back. Throws when x breaks
    * a bound or a refinement, which its type cannot rule out. */
   encode(x: T): unknown {
+    // The size and depth limits come first, as parse applies them: the
+    // conversion and enc below walk x one JavaScript call per level of nesting.
+    if (hasTooBig(toRaw(x))) throw new Error("bend-schema: encode: the value is too large");
     const out = rawToJs(enc(this.node, toMeaning(this, x)));
     // An absent top-level value is legitimate for an Optional schema, and
     // JSON has no way to write it, so it stays undefined rather than throwing.
@@ -245,13 +248,19 @@ function rawAtKey(raw: core.Raw, name: string): core.Raw {
   return { $: "RMissing" };
 }
 
-// toRaw owns the single whole-value budget. This pass only replaces values at
-// SJson positions; a boundary marker from that first pass must not be hidden by
-// a fresh per-subtree toJsonRaw budget.
+// toRaw owns the single whole-value budget and the depth limit. This pass only
+// replaces values at SJson positions, and a size marker from that first pass
+// anywhere inside one must not be hidden by toJsonRaw's own count, which starts
+// afresh: a JSON value carries no marker inside it, so the whole position is
+// too large. A value that is not JSON at all (a cycle, NaN) still says so.
 function rawFor(x: Schema<any>, v: any, raw: core.Raw): core.Raw {
   const k = x.kind;
   switch (k.k) {
-    case "json": return raw.$ === "RTooBig" ? raw : toJsonRaw(v);
+    case "json": {
+      if (raw.$ === "RTooBig") return raw;
+      const j = toJsonRaw(v);
+      return j.$ !== "RBad" && hasTooBig(raw) ? { $: "RTooBig" } : j;
+    }
     case "strLen": return rawFor(k.inner, v, raw);
     case "listLen": return rawFor(k.inner, v, raw);
     case "nullable": return v === null ? raw : rawFor(k.inner, v, raw);
@@ -307,11 +316,29 @@ function rawFor(x: Schema<any>, v: any, raw: core.Raw): core.Raw {
   }
 }
 
+// The first key `name` holds `value`; the keys before it are copied, the rest
+// shared. A loop: an object's width must not cost stack.
 function replaceRawKey(raw: core.Raw, name: string, value: core.Raw): core.Raw {
-  if (raw.$ === "REnd") return raw;
-  if (raw.$ !== "RKey") return raw;
-  if (raw.key === name) return { ...raw, val: value };
-  return { ...raw, rest: replaceRawKey(raw.rest, name, value) };
+  const before: core.Raw[] = [];
+  let r = raw;
+  while (r.$ === "RKey" && r.key !== name) { before.push(r); r = r.rest; }
+  if (r.$ !== "RKey") return raw;
+  let out: core.Raw = { ...r, val: value };
+  for (let i = before.length - 1; i >= 0; i--) out = { ...before[i]!, rest: out } as core.Raw;
+  return out;
+}
+
+// Whether a size marker sits anywhere in raw. A stack, not recursion: raw's
+// depth is bounded by DEPTH_MAX, its width is not.
+function hasTooBig(raw: core.Raw): boolean {
+  const todo: core.Raw[] = [raw];
+  while (todo.length > 0) {
+    const r = todo.pop()!;
+    if (r.$ === "RTooBig") return true;
+    if (r.$ === "RCons") todo.push(r.head, r.tail);
+    else if (r.$ === "RKey") todo.push(r.val, r.rest);
+  }
+  return false;
 }
 
 

@@ -62,15 +62,16 @@ describe("the JSON host codec", () => {
 // comes back.
 //
 // The budget is the part of this file that is not just a test: nothing in the
-// proved core knows a size, so the codec's counting is what keeps the walks
-// inside the stack, and the gate has to fail if the budget is raised past what
-// the runtime can walk or the walk gets deeper. The shapes come from
-// measure_budget.ts, so the numbers in codec.ts and the gate cannot drift.
+// proved core knows a size, so the codec's counting is what keeps a message's
+// cost bounded, and the gate has to fail if a value at the budget no longer
+// converts whole and walks. The shapes come from measure_budget.ts, so the
+// numbers in codec.ts and the gate cannot drift.
 
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.mjs";
 import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
-import { BUDGET, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
+import { BUDGET, DEPTH_MAX, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
+import { s } from "./index";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
 // enc and dec compute a type from a value (Meaning(s)), so bend-emit
@@ -203,7 +204,8 @@ describe("the budget", () => {
 
   test("below the budget the conversion is the one it always was", () => {
     let deep: unknown = 0;
-    for (let i = 0; i < 200; i++) deep = { a: [deep] };
+    // 60 rounds of an object and a list: 120 levels, inside DEPTH_MAX
+    for (let i = 0; i < DEPTH_MAX / 2 - 4; i++) deep = { a: [deep] };
     const values: unknown[] = [null, true, false, 0, 1.5, -1, 2 ** 48, 2 ** 48 - 1, "", "hi", [], {}, [[]], [[[[]]]], undefined, { a: { b: [1, "x", null] } }, deep];
     for (const v of values) expect(toRaw(v)).toEqual(before(v));
     // And at the budget's own size, where the counting is doing the most work:
@@ -211,7 +213,101 @@ describe("the budget", () => {
     // longest one a single call can build.
     const at = Array.from({ length: BUDGET }, () => 1);
     expect(measure(toRaw(at))).toEqual({ count: BUDGET, tooBig: false });
-    expect(toRaw(at)).toEqual(before(at));
+    // toEqual recurses down the chain, so the comparison is made on a prefix
+    const some = at.slice(0, 3000);
+    expect(toRaw(some)).toEqual(before(some));
+    // one level past DEPTH_MAX is where the conversion stops
+    expect(toRaw(nest(DEPTH_MAX))).toEqual(before(nest(DEPTH_MAX)));
+    expect(JSON.stringify(toRaw(nest(DEPTH_MAX + 1)))).toContain("RTooBig");
+  });
+});
+
+// A list nested d levels: the outermost is level 1, the empty innermost level d.
+function nest(d: number): unknown {
+  let v: unknown = [];
+  for (let i = 1; i < d; i++) v = [v];
+  return v;
+}
+
+function nestSchema(d: number) {
+  let sc: any = s.list(s.nat());
+  for (let i = 1; i < d; i++) sc = s.list(sc);
+  return sc as ReturnType<typeof s.list<any>>;
+}
+
+const zeros = (n: number) => Array.from({ length: n }, () => 0);
+const issue = (r: { ok: boolean; error?: { text(): string } }) => (r.ok ? "ok" : r.error!.text());
+
+describe("the depth limit", () => {
+  test("a value DEPTH_MAX deep converts whole, and one level more is TooLarge at the first too-deep container", () => {
+    expect(measure(toRaw(nest(DEPTH_MAX)))).toEqual({ count: DEPTH_MAX - 1, tooBig: false });
+    expect(measure(toRaw(nest(DEPTH_MAX + 1))).tooBig).toBe(true);
+    const lists = nestSchema(DEPTH_MAX);
+    expect(first(lists.node as never, nest(DEPTH_MAX))).toBe(null);
+    // the container at level DEPTH_MAX + 1 sits behind DEPTH_MAX indexes
+    expect(first(lists.node as never, nest(DEPTH_MAX + 1))).toBe("[0]".repeat(DEPTH_MAX) + ": too large");
+  });
+
+  test("an object counts as a level too", () => {
+    let v: unknown = {};
+    for (let i = 1; i < DEPTH_MAX; i++) v = { a: v };
+    expect(measure(toRaw(v)).tooBig).toBe(false);
+    expect(measure(toRaw({ a: v })).tooBig).toBe(true);
+  });
+
+  test("through parse: a typed schema and s.json() accept DEPTH_MAX and refuse one more", () => {
+    const typed = nestSchema(DEPTH_MAX);
+    expect(issue(typed.parse(nest(DEPTH_MAX)))).toBe("ok");
+    expect(issue(typed.parse(nest(DEPTH_MAX + 1)))).toBe("[0]".repeat(DEPTH_MAX) + ": too large");
+    expect(issue(s.json().parse(nest(DEPTH_MAX)))).toBe("ok");
+    // a JSON success value carries no marker inside it, so the error sits at
+    // the s.json() position
+    expect(issue(s.json().parse(nest(DEPTH_MAX + 1)))).toBe("the value: too large");
+    expect(issue(s.object({ a: s.json() }).parse({ a: nest(DEPTH_MAX) }))).toBe("a: too large");
+  });
+});
+
+describe("the budget over s.json() positions", () => {
+  test("two s.json() fields do not each get a fresh budget (W3.g)", () => {
+    const o = s.object({ l: s.list(s.nat()), a: s.json(), b: s.json() });
+    const big = [zeros(BUDGET - 2)]; // BUDGET - 1 counted: nested one level down
+    const r = o.parse({ l: zeros(BUDGET - 3000), a: big, b: big });
+    expect(r.ok).toBe(false);
+    expect(issue(r)).toBe("a: too large");
+    // alone, a value of that size fits
+    expect(issue(o.parse({ l: [], a: [zeros(BUDGET - 10)], b: [] }))).toBe("ok");
+  });
+
+  test("a cycle at an s.json() position is not JSON, not too large", () => {
+    const cyc: unknown[] = [];
+    cyc.push(cyc);
+    expect(issue(s.object({ a: s.json() }).parse({ a: cyc }))).toBe("a: must be a JSON value");
+    expect(issue(s.json().parse(cyc))).toBe("the value: must be a JSON value");
+  });
+});
+
+describe("encode applies the same limits (W3.c)", () => {
+  test("a value past the budget or DEPTH_MAX throws the size error, never RangeError", () => {
+    const msg = "bend-schema: encode: the value is too large";
+    expect(() => s.list(s.nat()).encode(zeros(BUDGET + 1))).toThrow(msg);
+    expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX + 1) as never)).toThrow(msg);
+    expect(() => s.json().encode(nest(DEPTH_MAX + 1) as never)).toThrow(msg);
+    // at the limits it writes
+    expect(() => s.list(s.nat()).encode(zeros(BUDGET))).not.toThrow();
+    expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX) as never)).not.toThrow();
+  });
+});
+
+describe("oneKey with a long object", () => {
+  test("the chosen key after 250 others still yields its value", () => {
+    const sch = s.oneKey({ a: s.nat(), pick: s.json() });
+    const v: Record<string, unknown> = {};
+    for (let i = 0; i < 250; i++) v["x" + i] = i;
+    v.pick = { n: [1, { m: null }] };
+    expect(sch.parse(v)).toEqual({ ok: true, value: { pick: { n: [1, { m: null }] } } });
+    // the replaced value is the one checked: 1.5 is JSON, and parses
+    v.pick = 1.5;
+    expect(sch.parse(v)).toEqual({ ok: true, value: { pick: 1.5 } });
   });
 });
 
