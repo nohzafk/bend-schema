@@ -7,7 +7,7 @@
     "@types/bun": "^1.2.0",
     "ajv": "8.20.0",
     "bend-emit": "0.3.6",
-    "bend-falsify": "github:nohzafk/bend-falsify#a50873f",
+    "bend-falsify": "github:nohzafk/bend-falsify#e5d7135",
     "effect": "4.0.1",
     "typescript": "^7.0.2"
   },
