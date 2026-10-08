@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json, type PathPart, type Schema } from "./index.ts";
+import { BUDGET, DEPTH_MAX, INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json, type PathPart, type Schema } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -342,10 +342,181 @@ describe("the wire form of an Issue", () => {
     const ok = { path: ["a", 0], message: "m", proved: true };
     expect(issueSchema.check(ok)).toBeNull();
     expect(issueSchema.parse({ ...ok, code: 7 })).toEqual({ ok: true, value: ok });
-    for (const p of [[-1], [1.5], [2 ** 53], [null], [true], [["a"]], [{ k: 1 }]]) {
-      expect(issueSchema.check({ ...ok, path: p })?.message).toBe("each path part must be a string or a whole number");
+    // the largest index is NAT_MAX
+    expect(issueSchema.check({ ...ok, path: ["a", NAT_MAX] })).toBeNull();
+    for (const p of [[1.5], [2 ** 48], [2 ** 53], [null], [true], [["a"]], [{ k: 1 }]]) {
+      const e = issueSchema.check({ ...ok, path: p });
+      expect(e?.path).toEqual(["path", 0]);
+      expect(e?.message).toBe("must be a whole number or a string");
     }
+    expect(issueSchema.check({ ...ok, path: [-1] })?.message).toBe(`must be a whole number from 0 to ${NAT_MAX}`);
     expect(issueSchema.check({ path: [], message: "m" })?.path).toEqual(["proved"]);
     expect(issueSchema.check({ path: [], message: 1, proved: true })?.path).toEqual(["message"]);
+  });
+});
+
+describe("union", () => {
+  const roundTrip = <T>(x: Schema<T>, v: T) => {
+    expect(x.parse(v)).toEqual({ ok: true, value: v });
+    expect(x.parse(x.encode(v))).toEqual({ ok: true, value: v });
+  };
+  const msg = (x: Schema<any>, v: unknown) => x.check(v)?.text();
+
+  test("a tagged case refuses a field named like the tag inside a union alternative", () => {
+    // Its encode would write the tag key twice, a value parse refuses.
+    expect(() => s.tagged("type", { a: s.union(s.object({ type: s.nat() }), s.str()) } as any).node).toThrow(/ill-formed/);
+    expect(() => s.tagged("type", { a: s.union(s.object({ other: s.nat() }), s.str()) } as any).node).not.toThrow();
+  });
+
+  test("nat | str, int | str, a nullable union, three alternatives: parse and encode round-trip", () => {
+    const ns = s.union(s.nat(), s.str());
+    for (const v of [0, 7, NAT_MAX, "", "x"]) roundTrip(ns, v);
+    const is = s.union(s.int(), s.str());
+    for (const v of [-5, 0, INT_MIN, "x"]) roundTrip(is, v);
+    const nul = s.union(s.nat(), s.str()).nullable();
+    for (const v of [null, 3, "a"]) roundTrip(nul, v);
+    const inner = s.union(s.nat(), s.str().nullable());
+    for (const v of [null, 3, "a"]) roundTrip(inner, v);
+    const three = s.union(s.nat(), s.str(), s.bool());
+    for (const v of [1, "a", true, false]) roundTrip(three, v);
+    // the type is the union of the alternatives'
+    const t: number | string | boolean = three.parse(1).ok ? 1 : "a";
+    void t;
+  });
+
+  test("a union nested in a list, an object and a tuple", () => {
+    roundTrip(s.list(s.union(s.nat(), s.str())), [1, "a", 2]);
+    roundTrip(s.object({ id: s.union(s.nat(), s.str()), n: s.nat() }), { id: "k", n: 1 });
+    roundTrip(s.tuple(s.union(s.nat(), s.str()), s.union(s.bool(), s.nat())), [1, true]);
+    roundTrip(s.union(s.union(s.nat(), s.str()), s.bool()), "x");
+    roundTrip(s.union(s.bool(), s.union(s.nat(), s.str())), 4);
+  });
+
+  test("object | list, and tagged | nat", () => {
+    const ol = s.union(s.object({ a: s.nat() }), s.list(s.str()));
+    roundTrip(ol, { a: 1 });
+    roundTrip(ol, ["x", "y"]);
+    const tn = s.union(s.tagged("t", { p: s.object({ x: s.nat() }), q: s.object({}) }), s.nat());
+    roundTrip(tn, { t: "p", x: 2 });
+    roundTrip(tn, { t: "q" });
+    roundTrip(tn, 9);
+    expect(msg(tn, { t: "z" })).toBe("t: is not one of the allowed names");
+  });
+
+  test("a value of a kind no alternative takes: NoAlternative, at the value's path", () => {
+    const ns = s.union(s.nat(), s.str());
+    expect(msg(ns, true)).toBe("the value: must be a whole number or a string");
+    expect(msg(ns, 1.5)).toBe("the value: must be a whole number or a string");
+    expect(msg(ns, undefined)).toBe("the value: must be a whole number or a string");
+    expect(msg(ns, new Date())).toBe("the value: must be a whole number or a string");
+    expect(msg(ns, null)).toBe("the value: must be a whole number or a string");
+    expect(msg(s.union(s.nat(), s.str(), s.bool()), [])).toBe("the value: must be a whole number, a string or a boolean");
+    expect(msg(s.union(s.list(s.nat()), s.object({}), s.str().nullable()), 1)).toBe("the value: must be a string, a list, an object or null");
+    expect(s.list(ns).check([1, "a", {}])?.path).toEqual([2]);
+    expect(s.object({ a: ns }).check({ a: [] })?.path).toEqual(["a"]);
+    expect(s.tuple(ns).check([false])?.path).toEqual([0]);
+  });
+
+  test("an alternative's own error is reported by that alternative", () => {
+    const ns = s.union(s.nat(), s.str());
+    expect(msg(ns, -1)).toBe(`the value: must be a whole number from 0 to ${NAT_MAX}`);
+    expect(msg(s.union(s.nat().in(1, 5), s.str().len(2, 3)), 9)).toBe("the value: must be from 1 to 5");
+    expect(msg(s.union(s.nat(), s.str().len(2, 3)), "x")).toBe("the value: must be 2 to 3 characters long");
+    expect(s.union(s.object({ a: s.nat() }), s.str()).check({ a: "x" })?.path).toEqual(["a"]);
+  });
+
+  test("an absent required union field is missing", () => {
+    const o = s.object({ id: s.union(s.nat(), s.str()) });
+    expect(o.check({})?.text()).toBe("id: missing");
+  });
+
+  test("too large through a union", () => {
+    const x = s.union(s.list(s.json()), s.str());
+    let deep: unknown = 0;
+    for (let i = 0; i < 200; i++) deep = [deep];
+    expect(x.check(deep)?.message).toBe("too large");
+    expect(x.check(new Array(BUDGET + 1).fill(0))?.message).toBe("too large");
+    expect(() => x.encode(new Array(BUDGET + 1).fill(0))).toThrow(/too large/);
+  });
+
+  test("an s.json() inside an alternative still gets its JSON value", () => {
+    const x = s.union(s.object({ j: s.json() }), s.str());
+    const v = { j: { a: [1.5, null, "z"] } };
+    expect(x.parse(v)).toEqual({ ok: true, value: v });
+    expect(x.parse(x.encode(v))).toEqual({ ok: true, value: v });
+    expect(x.check({ j: NaN })?.path).toEqual(["j"]);
+  });
+
+  test("an ill-formed union is refused, by the core", () => {
+    const ill = [
+      s.union(s.object({}), s.object({ a: s.nat() })),
+      s.union(s.str(), s.enum(["a", "b"])),
+      s.union(s.nat(), s.int()),
+      s.union(s.nat(), s.nat().in(1, 2)),
+      s.union(s.list(s.nat()), s.tuple(s.nat())),
+      s.union(s.nat(), s.union(s.str(), s.int())),
+      s.object({ a: s.union(s.nat(), s.str().optional()) }),
+      s.union(s.nat(), s.json()),
+      s.union(s.nat(), s.str().nullable()).nullable(),
+    ];
+    for (const x of ill) expect(() => x.node).toThrow(/ill-formed schema.*union/);
+    expect(() => s.union(s.nat(), s.str().nullable()).node).not.toThrow();
+  });
+
+  // a list of unions nested to `n` levels: [[...[0]...]]
+  const nested = (n: number): Schema<any> => {
+    let x: Schema<any> = s.list(s.nat());
+    for (let i = 1; i < n; i++) x = s.list(s.union(s.nat(), x));
+    return x;
+  };
+  const nest = (n: number): unknown => { let v: unknown = 0; for (let i = 0; i < n; i++) v = [v]; return v; };
+
+  test("a union adds no count and no depth: budget and depth, parse and encode", () => {
+    const flat = s.list(s.union(s.nat(), s.str()));
+    const at = new Array(BUDGET).fill(0);
+    expect(flat.check(at)).toBeNull();
+    expect(flat.encode(at)).toEqual(at);
+    expect(flat.check([...at, 0])?.text()).toBe("the value: too large");
+    expect(() => flat.encode([...at, 0])).toThrow(/too large/);
+    // the budget is shared with what the alternative holds
+    const half = new Array(BUDGET / 2).fill(0);
+    const two = s.union(s.list(s.list(s.nat())), s.str());
+    expect(two.check([half])).toBeNull();
+    expect(two.check([half, half])?.message).toBe("too large");
+    expect(() => two.encode([half, half])).toThrow(/too large/);
+
+    const ok = nested(DEPTH_MAX);
+    expect(ok.check(nest(DEPTH_MAX))).toBeNull();
+    expect(ok.encode(nest(DEPTH_MAX))).toEqual(nest(DEPTH_MAX));
+    const over = nested(DEPTH_MAX + 1);
+    expect(over.check(nest(DEPTH_MAX + 1))?.message).toBe("too large");
+    expect(() => over.encode(nest(DEPTH_MAX + 1))).toThrow(/too large/);
+    // the same nesting without unions refuses at the same level
+    let plain: Schema<any> = s.list(s.nat());
+    for (let i = 1; i <= DEPTH_MAX; i++) plain = s.list(plain);
+    expect(plain.check(nest(DEPTH_MAX + 1))?.message).toBe("too large");
+  });
+
+  test("encode refuses a value no alternative takes, and a bound broken", () => {
+    const ns = s.union(s.nat(), s.str());
+    expect(() => ns.encode(true as never)).toThrow(/must be a whole number or a string/);
+    expect(() => ns.encode(undefined as never)).toThrow(/must be a whole number or a string/);
+    expect(() => ns.encode(new Date() as never)).toThrow(/must be a whole number or a string/);
+    expect(() => ns.encode(-1)).toThrow();
+    expect(() => ns.encode(1.5)).toThrow();
+    expect(() => s.object({ id: ns }).encode({ id: null as never })).toThrow(/id: must be/);
+  });
+
+  test("a refinement inside the chosen alternative still runs, at the same path", () => {
+    const x = s.object({ id: s.union(s.nat().refine((n) => n % 2 === 0, "must be even"), s.str().refine((t) => t !== "bad", "no bad")) });
+    expect(x.parse({ id: 4 }).ok).toBe(true);
+    const e = x.check({ id: 3 })!;
+    expect([e.path, e.message, e.proved]).toEqual([["id"], "must be even", false]);
+    const f = x.check({ id: "bad" })!;
+    expect([f.path, f.message, f.proved]).toEqual([["id"], "no bad", false]);
+    // a refinement on the union itself too
+    const u = s.union(s.nat(), s.str()).refine((v) => v !== 7, "not seven");
+    expect(u.check(7)?.message).toBe("not seven");
+    expect(u.check(8)).toBeNull();
   });
 });

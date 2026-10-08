@@ -245,10 +245,12 @@ const MUTANTS: Mutant[] = [
     from: "      Bool.and(wf(fs), Bool.and(fresh_f(n, rest), wf(rest)))", to: "      Bool.and(wf(fs), wf(rest))",
     at: { s: "C.SField{\"a\", C.SNat{}, C.SField{\"a\", C.SNat{}, C.SEnd{}}}", x: "C.Both{0n, C.Both{1n, Unit{}}}" },
     why: "wf lets a record name a key twice, and the second field reads the first one's value", failsIn: "de" },
+  // (The union's kind lemmas, taken with `with` below, read wf's SOpt line
+  // before de does: kind_sound's ks is the first def this change breaks.)
   { law: "decode_encode", section: "what was written reads back as itself",
     from: "      Bool.and(Bool.not(nullable(i)), wf(i))", to: "      wf(i)",
     at: { s: "C.SOpt{C.SOpt{C.SNat{}}}", x: "Some{None{}}" },
-    why: "wf lets an optional value be optional, and Some{None} is written null, read back as None", failsIn: "de" },
+    why: "wf lets an optional value be optional, and Some{None} is written null, read back as None", failsIn: "ks" },
   { law: "checked_decodes", section: "a value check accepts can be read",
     from: "      Some{x <> xs}", to: "      None{}",
     at: { rule: "C.no_rule", s: "C.SList{C.SNat{}}", r: "C.RCons{C.RNum{1n}, C.RNil{}}" },
@@ -373,23 +375,23 @@ const MUTANTS: Mutant[] = [
     why: "between non-negatives the comparison is swapped, so 1 is at most 0 and 0 is not reached from 1 by steps up", failsIn: "Laws.int_le_sound" },
   // sint_meaning: SInt accepts RNum and RNeg and nothing else.
   { law: "sint_meaning", section: "sint_meaning",
-    from: "      True{}", to: "      False{}", nth: 19,
+    from: "      True{}", to: "      False{}", nth: 28,
     at: { rule: "C.no_rule", r: "C.RNeg{0n}" },
     why: "SInt refuses a negative number", failsIn: "sint_go" },
   { law: "sint_meaning", section: "sint_meaning",
-    from: "      True{}", to: "      False{}", nth: 18,
+    from: "      True{}", to: "      False{}", nth: 27,
     at: { rule: "C.no_rule", r: "C.RNum{0n}" },
     why: "SInt refuses a non-negative number", failsIn: "sint_go" },
   { law: "sint_meaning", section: "sint_meaning",
-    from: "      True{}", to: "      True{}\n    case SInt{} RBad{}:\n      True{}", nth: 19,
+    from: "      True{}", to: "      True{}\n    case SInt{} RBad{}:\n      True{}", nth: 28,
     at: { rule: "C.no_rule", r: "C.RBad{}" },
     why: "SInt admits a number the codec could not hold (RBad: a fraction or past the bound)", failsIn: "sint_go" },
   { law: "sint_meaning", section: "sint_meaning",
-    from: "      True{}", to: "      True{}\n    case SInt{} RTooBig{}:\n      True{}", nth: 19,
+    from: "      True{}", to: "      True{}\n    case SInt{} RTooBig{}:\n      True{}", nth: 28,
     at: { rule: "C.no_rule", r: "C.RTooBig{}" },
     why: "SInt admits a size marker", failsIn: "sint_go" },
   { law: "sint_meaning", section: "sint_meaning",
-    from: "      True{}", to: "      True{}\n    case SInt{} RBool{b}:\n      True{}", nth: 19,
+    from: "      True{}", to: "      True{}\n    case SInt{} RBool{b}:\n      True{}", nth: 28,
     at: { rule: "C.no_rule", r: "C.RBool{True{}}" },
     why: "SInt admits a boolean", failsIn: "sint_go" },
   // sint_in_meaning: SIntIn{lo, hi} accepts an integer from lo to hi, both
@@ -506,6 +508,64 @@ const MUTANTS: Mutant[] = [
     from: "      int_ok(lo, hi, i)", to: "      True{}",
     at: { s: "C.SIntIn{C.INeg{2n}, C.INeg{0n}}", x: "C.INeg{5n}" },
     why: "bounds_ok drops SIntIn's bound, so a value outside it passes the premise and is written, and check refuses it", failsIn: "ec" },
+  // The union. Each row is a change to one line of the dispatch, the kind table
+  // or wf, with the law's own binders at literals. The kind laws fail in the
+  // lemma that walks has_kind (kt, ks); union_disjoint in the lemma that reads
+  // the disjointness out of wf; union_exact in ks, whose SEither case unfolds
+  // conforms' dispatch; the two report laws in their own proofs.
+  { law: "kinds_table", section: "kinds_table",
+    from: "      kind_eq(KBool{}, k)", to: "      Bool.or(kind_eq(KBool{}, k), kind_eq(KNum{}, k))", nth: 1,
+    at: { s: "C.SBool{}", k: "C.KNum{}" },
+    why: "SBool also claims the number kind, which the approved table does not list", failsIn: "kt" },
+  { law: "kind_sound", section: "kind_sound",
+    from: "      has_kind(s2, k)", to: "      kind_eq(KList{}, k)", nth: 4,
+    at: { rule: "C.no_rule", s: "C.SStrict{C.SEnd{}}", r: "C.REnd{}", prev: "None{}" },
+    why: "SStrict claims the list kind, so an object it accepts is not of a kind it claims", failsIn: "ks" },
+  { law: "kind_sound", section: "kind_sound",
+    from: "      Bool.or(kind_eq(KNull{}, k), has_kind(i, k))", to: "      has_kind(i, k)",
+    at: { rule: "C.no_rule", s: "C.SOpt{C.SNat{}}", r: "C.RNull{}", prev: "None{}" },
+    why: "SOpt does not claim null, which it accepts", failsIn: "ks" },
+  { law: "union_exact", section: "union_exact", with: ["kind_sound", "union_disjoint"],
+    from: "      pick_bool(has_kind(l, kind_of(x)), conforms(~rule, l, x, prev), Bool.and(has_kind(r, kind_of(x)), conforms(~rule, r, x, prev)))",
+    to: "      pick_bool(has_kind(l, kind_of(x)), conforms(~rule, r, x, prev), Bool.and(has_kind(r, kind_of(x)), conforms(~rule, l, x, prev)))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SStr{}", x: "C.RNum{1n}", prev: "None{}" },
+    why: "conforms sends a value of the left's kind to the right alternative", failsIn: "ks" },
+  { law: "union_disjoint", section: "union_disjoint", with: ["kind_sound"],
+    from: "      Bool.and(alt_ok(l), Bool.and(alt_ok(r), Bool.and(disjoint(l, r), Bool.and(wf(l), wf(r)))))",
+    to: "      Bool.and(alt_ok(l), Bool.and(alt_ok(r), Bool.and(wf(l), wf(r))))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SNatIn{0n, 5n}", x: "C.RNum{3n}", prev: "None{}" },
+    why: "wf no longer asks the alternatives to be disjoint, so both read the same number", failsIn: "wf_e1" },
+  { law: "union_reports_alternative", section: "union_reports_alternative",
+    from: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    to: "      pick_err(has_kind(l, kind_of(x)), first(check(~rule, l, x, prev), here(missing_or(x, no_alt(SEither{l, r})))), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SStr{}", x: "C.RNum{1n}", prev: "None{}" },
+    why: "check reports NoAlternative after the left alternative's own error, so a value the left accepts is refused", failsIn: "Laws.union_reports_alternative" },
+  { law: "union_reports_right", section: "union_reports_right",
+    from: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    to: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, l, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SStr{}", x: "C.RStr{\"a\"}", prev: "None{}" },
+    why: "check reports the left alternative's error for a value of the right one's kind", failsIn: "Laws.union_reports_right" },
+  { law: "check_accurate", section: "what check reports is there", with: [EXACT],
+    from: "      pick_why(has_kind(l, kind_of(x)), defect(~rule, l, x, prev, q), pick_why(has_kind(r, kind_of(x)), defect(~rule, r, x, prev, q), at_end(missing_or(x, no_alt(SEither{l, r})), q)))",
+    to: "      pick_why(has_kind(l, kind_of(x)), defect(~rule, l, x, prev, q), pick_why(has_kind(r, kind_of(x)), defect(~rule, l, x, prev, q), at_end(missing_or(x, no_alt(SEither{l, r})), q)))",
+    at: { rule: "C.no_rule", s: "C.SEither{C.SNat{}, C.SList{C.SNat{}}}", r: "C.RCons{C.RStr{\"x\"}, C.RNil{}}", prev: "None{}", path: "C.AtIndex{0n} <> Nil{}", why: "C.NotNat{}" },
+    why: "defect replays a right-kind value's error through the left alternative", failsIn: "acc" },
+  { law: "union_no_alternative", section: "union_no_alternative",
+    from: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    to: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), check(~rule, r, x, prev))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SStr{}", x: "C.RBool{True{}}", prev: "None{}" },
+    why: "check has no NoAlternative fallback: a value of neither kind is reported as the right alternative's error", failsIn: "Laws.union_no_alternative" },
+  { law: "union_no_alternative", section: "union_no_alternative",
+    from: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))",
+    to: "      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(no_alt(SEither{l, r}))))",
+    at: { rule: "C.no_rule", l: "C.SNat{}", r: "C.SStr{}", x: "C.RMissing{}", prev: "None{}" },
+    why: "the NoAlternative fallback loses missing_or, so an absent value is NoAlternative and not Missing", failsIn: "Laws.union_no_alternative" },
 ];
 
-runMutants(import.meta.dir, MUTANTS);
+// decode_encode and encode_conforms follow what enc writes through a union, by
+// the kind lemmas: their runs take those sections too.
+const KIND_SECTIONS = ["kind_sound", "union_disjoint"];
+const withKinds = (m: Mutant): Mutant =>
+  m.law === "decode_encode" || m.law === "encode_conforms" ? { ...m, with: [...(m.with ?? []), ...KIND_SECTIONS] } : m;
+
+runMutants(import.meta.dir, MUTANTS.map(withKinds));

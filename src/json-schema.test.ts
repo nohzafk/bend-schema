@@ -62,11 +62,13 @@ function draw(r: R, depth: number): Schema<any> {
       default: return s.json();
     }
   }
-  switch (r.int(7)) {
+  switch (r.int(9)) {
     case 0: return genSchema(r, depth - 1).nullable();
     case 1: { const l = s.list(genSchema(r, depth - 1)); return r.next() < 0.5 ? l : l.len(r.int(2), 1 + r.int(2)); }
     case 2: return s.tuple(...Array.from({ length: r.int(3) }, () => genSchema(r, depth - 1)));
     case 3: { const o = s.object(fields(r, depth)); return r.next() < 0.4 ? o.strict() : o; }
+    // Most draws overlap in kind and are refused by wf, then drawn again.
+    case 6: case 7: return s.union(genSchema(r, depth - 1), genSchema(r, depth - 1), ...(r.next() < 0.3 ? [genSchema(r, depth - 1)] : []));
     case 4: return s.oneKey(Object.fromEntries(distinct(r, 1 + r.int(2)).map((k) => [k, genSchema(r, depth - 1)])));
     default: {
       const cases = Object.fromEntries(["a", "b"].slice(0, 1 + r.int(2)).map((n) => {
@@ -123,6 +125,7 @@ function genValue(r: R, x: Schema<any>, depth: number): unknown {
       if (r.next() < 0.2) out[r.pick(["z", "q"])] = 1;
       return out;
     }
+    case "union": return genValue(r, r.pick(k.alts), depth);
     case "tagged": {
       const [n, c] = r.pick(k.cases);
       const ck = c.kind as any;
@@ -187,6 +190,18 @@ describe("toJsonSchema", () => {
     expect(passes(x, { method: "ping", n: 1 })).toBe(true);
     expect(passes(x, { method: "ping", n: 1, extra: 0 })).toBe(false);
     expect(passes(x, { method: "pong", n: 1 })).toBe(false);
+  });
+
+  test("a union is anyOf its alternatives", () => {
+    const x = s.union(s.nat(), s.str());
+    expect(toJsonSchema(x)).toEqual({
+      $schema: DIALECT,
+      anyOf: [{ type: "integer", minimum: 0, maximum: NAT_MAX }, { type: "string" }],
+    });
+    expect(passes(x, 3)).toBe(true);
+    expect(passes(x, "a")).toBe(true);
+    expect(passes(x, true)).toBe(false);
+    expect(passes(s.union(s.object({ a: s.nat() }), s.list(s.str())).nullable(), null)).toBe(true);
   });
 
   test("a field named __proto__ is a property, not a prototype", () => {

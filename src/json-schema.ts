@@ -71,6 +71,7 @@ function body(x: Schema<any>): JsonSchema {
     case "strict": return strictBody(k.obj);
     // With no case, parse accepts nothing, and oneOf may not be empty.
     case "oneKey": return k.cases.length === 0 ? NOTHING : { oneOf: k.cases.map(([n, c]) => oneKeyCase(n, c, k.cases.map(([m]) => m))) };
+    case "union": return { anyOf: k.alts.map(body) };
     case "tagged": return k.cases.length === 0 ? NOTHING : { oneOf: k.cases.map(([n, c]) => taggedCase(k.key, n, c)) };
   }
 }

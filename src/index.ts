@@ -77,7 +77,8 @@ type Kind =
   | { k: "strict"; obj: Schema<any> }
   | { k: "enum"; names: string[] }
   | { k: "oneKey"; cases: [string, Schema<any>][] }
-  | { k: "tagged"; key: string; cases: [string, Schema<any>][] };
+  | { k: "tagged"; key: string; cases: [string, Schema<any>][] }
+  | { k: "union"; alts: Schema<any>[] };
 
 type Refinement = { fn: (x: any) => boolean; why: string };
 
@@ -147,7 +148,9 @@ export class Schema<T> {
       if (!core.wf(n)) {
         throw new Error(
           "bend-schema: ill-formed schema (a duplicate key, a nullable inside a nullable, " +
-            ".optional() outside an object field, or .strict() on a non-object)",
+            ".optional() outside an object field, .strict() on a non-object, a union whose " +
+            "alternatives take the same JSON kind or one of which is optional or s.json(), " +
+            "or a nullable union with a nullable alternative)",
         );
       }
       this.cached = n;
@@ -222,6 +225,7 @@ type ObjOf<S extends Shape> = Simplify<
   { [K in Exclude<keyof S, OptKeys<S>>]: Infer<S[K]> } & { [K in OptKeys<S>]?: Exclude<Infer<S[K]>, undefined> }
 >;
 type Union<S extends Shape> = { [K in keyof S]: { [P in K]: Infer<S[K]> } }[keyof S];
+type Alts<A extends Schema<any>[]> = Infer<A[number]>;
 type TaggedUnion<K extends string, S extends Record<string, ObjectSchema<any>>> = {
   [N in keyof S]: Simplify<{ [P in K]: N } & Infer<S[N]>>;
 }[keyof S];
@@ -243,17 +247,19 @@ export const s = {
   oneKey: <S extends Shape>(cases: S) => new Schema<Union<S>>({ k: "oneKey", cases: Object.entries(cases) }),
   tagged: <K extends string, S extends Record<string, ObjectSchema<any>>>(key: K, cases: S) =>
     new Schema<TaggedUnion<K, S>>({ k: "tagged", key, cases: Object.entries(cases) }),
+  /** One of two or more alternatives, picked by the value's JSON kind: the
+   * alternatives must take different kinds (number, string, boolean, list,
+   * object, null). The value is read as it is, with no tag. */
+  union: <A extends [Schema<any>, Schema<any>, ...Schema<any>[]]>(...alts: A) => new Schema<Alts<A>>({ k: "union", alts }),
 };
 
 /** The schema of `Issue.toJSON()`. Not strict, so a later field does not break
- * an older reader. That each path part is a key or an index is a refinement:
- * bend-schema has no proved string-or-number union yet. */
-export const issueSchema = s
-  .object({ path: s.list(s.json()), message: s.str(), proved: s.bool() })
-  .refine(
-    (x) => x.path.every((p) => typeof p === "string" || (typeof p === "number" && Number.isSafeInteger(p) && p >= 0)),
-    "each path part must be a string or a whole number",
-  ) as unknown as Schema<IssueJson>;
+ * an older reader. Each path part is a key or an index (0 to NAT_MAX). */
+export const issueSchema = s.object({
+  path: s.list(s.union(s.str(), s.nat())),
+  message: s.str(),
+  proved: s.bool(),
+}) as unknown as Schema<IssueJson>;
 
 // `s.Infer<typeof x>` reads as `Infer<typeof x>`.
 export declare namespace s {
@@ -282,8 +288,59 @@ function toNode(x: Schema<any>): Node {
     case "enum": return { $: "SEnum", names: k.names.reduceRight<BendList<string>>((tail, head) => ({ $: "Con", head, tail }), { $: "Nil" }) };
     case "oneKey": return k.cases.reduceRight<Node>((rest, [name, c]) => ({ $: "SVariant", name, s: toNode(c), rest }), { $: "SVEnd" });
     case "tagged": return k.cases.reduceRight<Node>((rest, [name, c]) => ({ $: "STagged", key: k.key, name, s: toNode(c), rest }), { $: "STagEnd", key: k.key });
+    case "union": return k.alts.map(toNode).reduceRight((r, l) => ({ $: "SEither", l, r }));
   }
 }
+
+// The JSON kinds a value has, as the core tells them apart (kind_of): the
+// union picks its alternative by the value's kind. These tables only choose
+// among alternatives the core has already found disjoint (wf); whether a union
+// is well formed is the core's to say.
+type JKind = "num" | "str" | "bool" | "list" | "obj" | "null";
+
+// Whether x may accept a value of kind jk (the core's has_kind).
+function takes(x: Schema<any>, jk: JKind): boolean {
+  const k = x.kind;
+  switch (k.k) {
+    case "nat": case "natIn": case "int": case "intIn": return jk === "num";
+    case "str": case "strLen": case "enum": return jk === "str";
+    case "bool": case "true": return jk === "bool";
+    case "list": case "listLen": case "tuple": return jk === "list";
+    case "object": case "strict": case "tagged": case "oneKey": return jk === "obj";
+    case "json": return false;
+    case "nullable": return jk === "null" || takes(k.inner, jk);
+    case "optional": return takes(k.inner, jk);
+    case "union": return k.alts.some((a) => takes(a, jk));
+  }
+}
+
+function kindOfJs(v: unknown): JKind | null {
+  if (v === null) return "null";
+  if (typeof v === "number") return "num";
+  if (typeof v === "string") return "str";
+  if (typeof v === "boolean") return "bool";
+  if (Array.isArray(v)) return "list";
+  if (typeof v === "object") {
+    const proto = Object.getPrototypeOf(v);
+    return proto === Object.prototype || proto === null ? "obj" : null;
+  }
+  return null;
+}
+
+function kindOfRaw(r: core.Raw): JKind | null {
+  switch (r.$) {
+    case "RNum": case "RNeg": return "num";
+    case "RStr": return "str";
+    case "RBool": return "bool";
+    case "RNil": case "RCons": return "list";
+    case "REnd": case "RKey": return "obj";
+    case "RNull": return "null";
+    default: return null;
+  }
+}
+
+// The index of the alternative that takes kind jk, or -1.
+const pickAlt = (alts: Schema<any>[], jk: JKind | null): number => (jk === null ? -1 : alts.findIndex((a) => takes(a, jk)));
 
 function rawAtKey(raw: core.Raw, name: string): core.Raw {
   for (let r = raw; r.$ === "RKey"; r = r.rest) if (r.key === name) return r.val;
@@ -353,6 +410,10 @@ function rawFor(x: Schema<any>, v: any, raw: core.Raw): core.Raw {
       const selected = k.cases.find(([name]) => v[k.key] === name);
       if (!selected) return raw;
       return rawFor(selected[1], v, raw);
+    }
+    case "union": {
+      const i = pickAlt(k.alts, kindOfRaw(raw));
+      return i < 0 ? raw : rawFor(k.alts[i]!, v, raw);
     }
     default: return raw;
   }
@@ -433,6 +494,11 @@ function toJs(x: Schema<any>, m: M): unknown {
     case "strict": return toJs(k.obj, m);
     case "oneKey": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [n]: toJs(c, e.value) }; e = e.value; } throw new Error("unreachable: Empty"); }
     case "tagged": { let e = m; for (const [n, c] of k.cases) { if (e.$ === "Inl") return { [k.key]: n, ...(toJs(c, e.value) as object) }; e = e.value; } throw new Error("unreachable: Empty"); }
+    case "union": {
+      let e = m;
+      for (let i = 0; i < k.alts.length - 1; i++) { if (e.$ === "Inl") return toJs(k.alts[i]!, e.value); e = e.value; }
+      return toJs(k.alts[k.alts.length - 1]!, e);
+    }
   }
 }
 
@@ -514,6 +580,22 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
       enter(lim, 1);
       return inj(i, toMeaning(k.cases[i]![1], v, lim));
     }
+    case "union": {
+      // The alternative that takes the value's kind; no depth and no count of
+      // its own, so the limits and the path are those of the position.
+      const jk = kindOfJs(v);
+      const i = pickAlt(k.alts, jk);
+      if (i < 0) {
+        const has = (jk: JKind) => k.alts.some((a) => takes(a, jk));
+        const why = whyText({ $: "NoAlternative", num: has("num"), str: has("str"), bool: has("bool"), list: has("list"), obj: has("obj"), null: has("null") });
+        throw new Error(`bend-schema: encode: ${new Issue([...lim.path], why, true).text()}`);
+      }
+      const m = toMeaning(k.alts[i]!, v, lim);
+      // The last alternative is the right end of the nest: Inr^(n-1), no Inl.
+      let out: M = i === k.alts.length - 1 ? m : { $: "Inl", value: m };
+      for (let j = 0; j < i; j++) out = { $: "Inr", value: out };
+      return out;
+    }
   }
 }
 
@@ -581,6 +663,7 @@ function refineAt(x: Schema<any>, v: any, path: PathPart[]): Issue | null {
     case "strict": e = refineAt(k.obj, v, path); break;
     case "oneKey": for (const [n, c] of k.cases) if (!e && n in v) e = sub(c, v[n], n); break;
     case "tagged": for (const [n, c] of k.cases) if (!e && v[k.key] === n) e = refineAt(c, v, path); break;
+    case "union": { const i = pickAlt(k.alts, kindOfJs(v)); if (i >= 0) e = refineAt(k.alts[i]!, v, path); break; }
   }
   if (e) return e;
   for (const r of x.refines) if (!r.fn(v)) return new Issue(path, r.why, false);

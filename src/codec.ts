@@ -232,6 +232,12 @@ export function pathText(p: BendList<Step>): string {
   return steps(p).map((s) => (s.$ === "AtIndex" ? `[${s.i}]` : s.$ === "AtField" ? `.${s.name}` : s.$ === "AtKey" ? `.${s.key}` : `[${s.i}].${s.key}`)).join("");
 }
 
+// "a, b or c"; "a or b"; "a".
+function kindList(kinds: [boolean, string][]): string {
+  const names = kinds.filter(([on]) => on).map(([, name]) => name);
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
 // What is wrong, in words. tsc checks every reason is here.
 export function whyText(w: Why): string {
   switch (w.$) {
@@ -283,6 +289,8 @@ export function whyText(w: Why): string {
       return `must be a whole number from ${INT_MIN} to ${NAT_MAX}`;
     case "IntNotIn":
       return `must be from ${intNumber(w.lo)} to ${intNumber(w.hi)}`;
+    case "NoAlternative":
+      return `must be ${kindList([[w.num, "a whole number"], [w.str, "a string"], [w.bool, "a boolean"], [w.list, "a list"], [w.obj, "an object"], [w.null, "null"]])}`;
     case "TooLarge":
       return "too large";
   }

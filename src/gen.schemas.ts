@@ -31,6 +31,7 @@ export const Every = s.object({
     few: s.list(s.nat()).len(1, 4),
     nick: s.str().optional(),
     pair: s.tuple(s.nat(), s.str()),
+    either: s.union(s.nat(), s.str(), s.list(s.bool())),
     pay: s.oneKey({ card: s.object({ last4: s.str() }), invoice: s.object({ days: s.nat() }) }),
     event: s.tagged("type", { open: s.object({ at: s.nat() }), close: s.object({ why: s.str() }) }),
   }).strict();

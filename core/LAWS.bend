@@ -64,6 +64,23 @@ import ./core.bend as C
 #   sint_in_meaning SIntIn{lo, hi} accepts an integer from lo to hi, both ends
 #                   included, and nothing that is not an integer.
 #
+#   kinds_table     has_kind is the table of JSON kinds the human approved
+#                   for the union: each schema claims exactly the kinds
+#                   listed for it (kinds_spec), no more and no fewer.
+#   kind_sound      a value a schema accepts has a kind the schema claims.
+#   union_exact     a well-formed SEither{l, r} accepts exactly the values
+#                   one of its alternatives accepts.
+#   union_disjoint  no value is accepted by both alternatives of a
+#                   well-formed SEither: the value's kind names the one
+#                   alternative that reads it.
+#   union_reports_alternative
+#                   a value of an alternative's kind is reported exactly as
+#                   that alternative reports it.
+#   union_no_alternative
+#                   a value of neither alternative's kind is NoAlternative
+#                   where it stands, naming the kinds the union takes (an
+#                   absent value is still Missing, a refused node TooLarge).
+#
 # bounds_meaning died with SBounds: the bounded list is billing's rule now,
 # and its meaning is billing's law.
 #
@@ -573,3 +590,146 @@ law sint_in_meaning:
   for +hi: C.Int
   for +r: C.Raw
   {C.conforms(~rule, C.SIntIn{lo, hi}, r, None{}) == int_in_spec(lo, hi, raw_int_spec(r)) : Bool}
+
+
+# ---- the union (SEither) ----
+#
+# Decided by the human with these laws (2026-10-08, W2.a D1-D6): an SEither's
+# alternatives take disjoint JSON kinds (number, string, boolean, list,
+# object, null), checked by wf; neither may be an absent field or s.json();
+# the value is read by the alternative its kind names, and a value of no
+# alternative's kind is NoAlternative.
+
+def in_kinds(+k: C.JKind, ks: List<&2, C.JKind>) -> Bool:
+  match ks:
+    case Nil{}:
+      False{}
+    case x <> rest:
+      Bool.or(C.kind_eq(x, k), in_kinds(k, rest))
+
+# The approved kind table, written as a list per schema.
+def kinds_spec(s: C.Schema) -> List<&2, C.JKind>:
+  match s:
+    case C.SNat{}:
+      [C.KNum{}]
+    case C.SNatIn{lo, hi}:
+      [C.KNum{}]
+    case C.SInt{}:
+      [C.KNum{}]
+    case C.SIntIn{lo, hi}:
+      [C.KNum{}]
+    case C.SStr{}:
+      [C.KStr{}]
+    case C.SEnum{names}:
+      [C.KStr{}]
+    case C.SBool{}:
+      [C.KBool{}]
+    case C.STrue{}:
+      [C.KBool{}]
+    case C.SList{e}:
+      [C.KList{}]
+    case C.STuple{ts, rest}:
+      [C.KList{}]
+    case C.STEnd{}:
+      [C.KList{}]
+    case C.SField{n, fs, rest}:
+      [C.KObj{}]
+    case C.SEnd{}:
+      [C.KObj{}]
+    case C.STagged{key, n, cs, rest}:
+      [C.KObj{}]
+    case C.STagEnd{key}:
+      [C.KObj{}]
+    case C.SVariant{n, vs, rest}:
+      [C.KObj{}]
+    case C.SVEnd{}:
+      [C.KObj{}]
+    case C.SJson{}:
+      [C.KJson{}]
+    case C.SOpt{i}:
+      C.KNull{} <> kinds_spec(i)
+    case C.SOptional{i}:
+      C.KAbsent{} <> kinds_spec(i)
+    case C.SStrLen{lo, hi, s2}:
+      kinds_spec(s2)
+    case C.SListLen{lo, hi, s2}:
+      kinds_spec(s2)
+    case C.SRule{s2, tag}:
+      kinds_spec(s2)
+    case C.SStrict{s2}:
+      kinds_spec(s2)
+    case C.SEither{l, r}:
+      List.append(&2, C.JKind, kinds_spec(l), kinds_spec(r))
+
+# has_kind is the approved table: it claims no kind the table does not list
+# (which would make wf refuse a union the table allows), and misses none.
+law kinds_table:
+  for +s: C.Schema
+  for +k: C.JKind
+  {C.has_kind(s, k) == in_kinds(k, kinds_spec(s)) : Bool}
+
+# A schema accepts only values of the kinds it claims: what the dispatch and
+# wf rely on when they read has_kind.
+law kind_sound:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +s: C.Schema
+  for +r: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hw: {C.wf(s) == True{} : Bool}
+  for h: {C.conforms(~rule, s, r, prev) == True{} : Bool}
+  {C.has_kind(s, C.kind_of(r)) == True{} : Bool}
+
+# A well-formed union accepts exactly what one of its alternatives accepts.
+law union_exact:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +l: C.Schema
+  for +r: C.Schema
+  for +x: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hw: {C.wf(C.SEither{l, r}) == True{} : Bool}
+  {C.conforms(~rule, C.SEither{l, r}, x, prev) == Bool.or(C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev)) : Bool}
+
+# ... and never two at once: which alternative read a value is never in
+# doubt, so the meaning dec gives it is the only one.
+law union_disjoint:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +l: C.Schema
+  for +r: C.Schema
+  for +x: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hw: {C.wf(C.SEither{l, r}) == True{} : Bool}
+  {Bool.and(C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev)) == False{} : Bool}
+
+# The error a union reports is the alternative's own, when the value is of
+# that alternative's kind ...
+law union_reports_alternative:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +l: C.Schema
+  for +r: C.Schema
+  for +x: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hl: {C.has_kind(l, C.kind_of(x)) == True{} : Bool}
+  {C.check(~rule, C.SEither{l, r}, x, prev) == C.check(~rule, l, x, prev) : Maybe<&2, C.Err>}
+
+# ... and of the right one's kind, not the left's, the right one's report.
+law union_reports_right:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +l: C.Schema
+  for +r: C.Schema
+  for +x: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hl: {C.has_kind(l, C.kind_of(x)) == False{} : Bool}
+  for hr: {C.has_kind(r, C.kind_of(x)) == True{} : Bool}
+  {C.check(~rule, C.SEither{l, r}, x, prev) == C.check(~rule, r, x, prev) : Maybe<&2, C.Err>}
+
+# ... and when it is of no alternative's kind, NoAlternative at the union
+# itself, listing the kinds it would have taken.
+law union_no_alternative:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +l: C.Schema
+  for +r: C.Schema
+  for +x: C.Raw
+  for +prev: Maybe<&2, Nat>
+  for hl: {C.has_kind(l, C.kind_of(x)) == False{} : Bool}
+  for hr: {C.has_kind(r, C.kind_of(x)) == False{} : Bool}
+  {C.check(~rule, C.SEither{l, r}, x, prev) == Some{C.Err{[], C.missing_or(x, C.no_alt(C.SEither{l, r}))}} : Maybe<&2, C.Err>}

@@ -219,6 +219,8 @@ def none_dup(s: C.Schema, +r: C.Raw) -> {Maybe.is_none(&2, C.Err, C.dup_err(s, r
       {==}
     case C.SIntIn{lo_, hi_}:
       {==}
+    case C.SEither{l_, r_}:
+      {==}
 
 # ---- tools: a tagged case, one side or the other ----
 
@@ -251,6 +253,19 @@ def tag_acc(b: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +d1: Maybe<&2
       i1(h)
     case False{}:
       i2(h)
+
+# A union reads a value by its kind: the left alternative if it claims the
+# kind, else the right one if it does, else nothing is there to read it. hl
+# and hr are what has_kind said of the value's kind.
+def either_tail_exact(hr: Bool, +m2: Maybe<&2, C.Err>, +c2: Bool, +w: C.Why, e2: {Maybe.is_none(&2, C.Err, m2) == c2 : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(hr, m2, C.here(w))) == Bool.and(hr, c2) : Bool}:
+  match hr:
+    case True{}:
+      e2
+    case False{}:
+      {==}
+
+def either_exact(hl: Bool, +hr: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +c1: Bool, +c2: Bool, +w: C.Why, e1: {Maybe.is_none(&2, C.Err, m1) == c1 : Bool}, e2: {Maybe.is_none(&2, C.Err, m2) == c2 : Bool}) -> {Maybe.is_none(&2, C.Err, C.pick_err(hl, m1, C.pick_err(hr, m2, C.here(w)))) == C.pick_bool(hl, c1, Bool.and(hr, c2)) : Bool}:
+  tag_exact(hl, m1, C.pick_err(hr, m2, C.here(w)), c1, Bool.and(hr, c2), e1, either_tail_exact(hr, m2, c2, w, e2))
 
 # ---- check finds nothing exactly when the value conforms ----
 #
@@ -858,6 +873,8 @@ def exact(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev:
       {==}
     case C.SIntIn{+lo, +hi} C.RNeg{+n}:
       in_err_none(C.int_ok(lo, hi, C.INeg{n}), C.IntNotIn{lo, hi})
+    case C.SEither{+l, +r} +x:
+      either_exact(C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.check(~rule, l, x, prev), C.check(~rule, r, x, prev), C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev), C.missing_or(x, C.no_alt(C.SEither{l, r})), exact(~rule, l, x, prev), exact(~rule, r, x, prev))
 
 def Laws.check_exact(rule, s, r, prev):
   exact(~rule, s, r, prev)
@@ -1106,6 +1123,23 @@ def Laws.unnamed_key_ignored():
   ({==}, ({==}, {==}))
 
 # ---- what check reports is there ----
+
+# The union's reports: a value of an alternative's kind is reported as that
+# alternative reports it, and one of neither's is NoAlternative where it stands.
+def either_tail_acc(hr: Bool, +m2: Maybe<&2, C.Err>, +d2: Maybe<&2, C.Why>, +w: C.Why, +path: List<&2, C.Step>, +why: C.Why, +h: {C.pick_err(hr, m2, C.here(w)) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, i2: {m2 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d2 == Some{why} : Maybe<&2, C.Why>}) -> {C.pick_why(hr, d2, C.at_end(w, path)) == Some{why} : Maybe<&2, C.Why>}:
+  match hr:
+    case True{}:
+      i2(h)
+    case False{}:
+      %same_path(Nil{}, w, path, why, h) : {C.at_end(w, _) == Some{why} : Maybe<&2, C.Why>}
+      same_why_m(Nil{}, w, path, why, h)
+
+def either_acc(hl: Bool, hr: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +d1: Maybe<&2, C.Why>, +d2: Maybe<&2, C.Why>, +w: C.Why, +path: List<&2, C.Step>, +why: C.Why, +h: {C.pick_err(hl, m1, C.pick_err(hr, m2, C.here(w))) == Some{C.Err{path, why}} : Maybe<&2, C.Err>}, i1: {m1 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d1 == Some{why} : Maybe<&2, C.Why>}, i2: {m2 == Some{C.Err{path, why}} : Maybe<&2, C.Err>} -> {d2 == Some{why} : Maybe<&2, C.Why>}) -> {C.pick_why(hl, d1, C.pick_why(hr, d2, C.at_end(w, path))) == Some{why} : Maybe<&2, C.Why>}:
+  match hl:
+    case True{}:
+      i1(h)
+    case False{}:
+      either_tail_acc(hr, m2, d2, w, path, why, h, i2)
 #
 # The same walk again. Where check reports here, the path is empty and the
 # reason is the one defect computes at that node. Where it reports what a
@@ -1472,6 +1506,8 @@ def dup_shape(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.du
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
     case C.SIntIn{lo_, hi_}:
       Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
+    case C.SEither{l_, r_}:
+      Empty.absurd({head_is_field(p) == True{} : Bool}, none_some(C.Err{p, w}, h))
 
 # What dup_err reports, dup_defect replays.
 def dup_path(pp: List<&2, C.Step>, +ww: C.Why, +n: String, +vs: C.Schema, +rr: C.Schema, +r: C.Raw, +eb: {True{} == C.is_missing(C.lookup(n, r)) : Bool}, d: {C.dup_defect(rr, r, pp) == Some{ww} : Maybe<&2, C.Why>}, sh: {head_is_field(pp) == True{} : Bool}) -> {C.dup_defect(C.SVariant{n, vs, rr}, r, C.later_f_path(pp)) == Some{ww} : Maybe<&2, C.Why>}:
@@ -1560,6 +1596,8 @@ def dup_acc(s: C.Schema, +r: C.Raw, +p: List<&2, C.Step>, +w: C.Why, +h: {C.dup_
       Empty.absurd({C.dup_defect(C.SInt{}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
     case C.SIntIn{lo_, hi_}:
       Empty.absurd({C.dup_defect(C.SIntIn{lo_, hi_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
+    case C.SEither{l_, r_}:
+      Empty.absurd({C.dup_defect(C.SEither{l_, r_}, r, p) == Some{w} : Maybe<&2, C.Why>}, none_some(C.Err{p, w}, h))
 
 # A key present: an error in its value is under its field; else a second key
 # is one field along, found by dup_err.
@@ -2570,6 +2608,8 @@ def acc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: M
       {==}
     case C.SIntIn{+lo, +hi} C.RNeg{+n}:
       acc_int_in_neg(~rule, C.int_ok(lo, hi, C.INeg{n}), lo, hi, n, prev, path, why, {==}, h)
+    case C.SEither{+l, +r} +x:
+      either_acc(C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.check(~rule, l, x, prev), C.check(~rule, r, x, prev), C.defect(~rule, l, x, prev, path), C.defect(~rule, r, x, prev, path), C.missing_or(x, C.no_alt(C.SEither{l, r})), path, why, h, hh => acc(~rule, l, x, prev, path, why, hh), hh => acc(~rule, r, x, prev, path, why, hh))
 
 def Laws.check_accurate(rule, s, r, prev, path, why, h):
   acc(~rule, s, r, prev, path, why, h)
@@ -2582,6 +2622,19 @@ def Laws.check_accurate(rule, s, r, prev, path, why, h):
 # that look further into the value (an optional, a rule, a strict object, a
 # tag) reach their own arm first, and each of those either recurses or takes
 # the reason straight from the sub-walk.
+
+# A value no alternative can take is TooLarge, whichever alternative or the
+# union's own refusal (m3) answers.
+def either_big(hl: Bool, hr: Bool, +m1: Maybe<&2, C.Err>, +m2: Maybe<&2, C.Err>, +m3: Maybe<&2, C.Err>, h1: {m1 == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}, h2: {m2 == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}, h3: {m3 == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}) -> {C.pick_err(hl, m1, C.pick_err(hr, m2, m3)) == Some{C.Err{Nil{}, C.TooLarge{}}} : Maybe<&2, C.Err>}:
+  match hl hr:
+    case True{} True{}:
+      h1
+    case True{} False{}:
+      h1
+    case False{} True{}:
+      h2
+    case False{} False{}:
+      h3
 
 # arms: s
 # arms leaf: {==}
@@ -2638,6 +2691,8 @@ def too_large_go(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +prev: Ma
       {==}
     case C.SIntIn{lo_, hi_}:
       {==}
+    case C.SEither{+l, +r}:
+      either_big(C.has_kind(l, C.KOther{}), C.has_kind(r, C.KOther{}), C.check(~rule, l, C.RTooBig{}, prev), C.check(~rule, r, C.RTooBig{}, prev), C.here(C.missing_or(C.RTooBig{}, C.no_alt(C.SEither{l, r}))), too_large_go(~rule, l, prev), too_large_go(~rule, r, prev), {==})
 
 def Laws.too_large_reported(rule, s, prev):
   too_large_go(~rule, s, prev)
@@ -2765,6 +2820,8 @@ def count_zero(s: C.Schema, +r: C.Raw) -> {Nat.is_eq(C.count_present(s, r), 0n) 
       {==}
     case C.SIntIn{lo_, hi_}:
       {==}
+    case C.SEither{l_, r_}:
+      {==}
 
 def np_pc_step(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +cv: Bool, +vn: String, +vv: C.Schema, +rr: C.Schema, +r: C.Raw, ih: {Bool.and(cv, C.none_present(rr, r)) == Bool.and(C.none_present(rr, r), Bool.and(cv, C.present_conform(~rule, rr, r))) : Bool}) -> {Bool.and(cv, Bool.and(b, C.none_present(rr, r))) == Bool.and(Bool.and(b, C.none_present(rr, r)), Bool.and(cv, C.pick_bool(b, C.present_conform(~rule, rr, r), Bool.and(C.key_once(vn, r), Bool.and(C.conforms(~rule, vv, C.lookup(vn, r), None{}), C.present_conform(~rule, rr, r)))))) : Bool}:
   match b:
@@ -2825,6 +2882,8 @@ def np_pc(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, +r: C.Raw, +cv: 
     case C.SInt{}:
       {==}
     case C.SIntIn{lo_, hi_}:
+      {==}
+    case C.SEither{l_, r_}:
       {==}
 
 # The key's own case, in two splits. b is whether the chain's key is in the
@@ -2926,6 +2985,8 @@ def vm(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.i
       Empty.absurd({C.conforms(~rule, C.SInt{}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SInt{}, r), 1n), C.present_conform(~rule, C.SInt{}, r))) : Bool}, to_empty(hc))
     case C.SIntIn{lo_, hi_}:
       Empty.absurd({C.conforms(~rule, C.SIntIn{lo_, hi_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SIntIn{lo_, hi_}, r), 1n), C.present_conform(~rule, C.SIntIn{lo_, hi_}, r))) : Bool}, to_empty(hc))
+    case C.SEither{l_, r_}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, r, None{}) == Bool.and(C.is_object(r), Bool.and(Nat.is_eq(C.count_present(C.SEither{l_, r_}, r), 1n), C.present_conform(~rule, C.SEither{l_, r_}, r))) : Bool}, to_empty(hc))
 
 def Laws.variant_meaning(rule, s, r, hc):
   vm(~rule, s, r, hc)
@@ -3064,74 +3125,6 @@ def not_true(b: Bool, h: {Bool.not(b) == True{} : Bool}) -> {False{} == b : Bool
     case False{}:
       {==}
 
-# enc never writes a missing value, as long as no absent value can reach the
-# top of what it writes (opt_at): the schemas that would are an SOptional
-# itself, and the ones that hand their value straight to one.
-def not_missing(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.opt_at(s) : Bool}) -> {False{} == C.is_missing(C.enc(s, x)) : Bool}:
-  match s x:
-    case C.SNat{} n:
-      {==}
-    case C.SNatIn{lo_, hi_} n:
-      {==}
-    case C.SBool{} b:
-      {==}
-    case C.SJson{} jv:
-      {==}
-    case C.SInt{} C.IPos{m_}:
-      {==}
-    case C.SInt{} C.INeg{m_}:
-      {==}
-    case C.SIntIn{lo_, hi_} C.IPos{m_}:
-      {==}
-    case C.SIntIn{lo_, hi_} C.INeg{m_}:
-      {==}
-    case C.SStr{} n:
-      {==}
-    case C.SStrLen{lo_, hi_, s2} v:
-      not_missing(s2, v, hn)
-    case C.SListLen{lo_, hi_, s2} v:
-      not_missing(s2, v, hn)
-    case C.SOpt{i} None{}:
-      {==}
-    case C.SOpt{i} Some{v}:
-      not_missing(i, v, hn)
-    case C.SList{e} Nil{}:
-      {==}
-    case C.SList{e} h <> t:
-      {==}
-    case C.SField{n, fs, rest} C.Both{a, b}:
-      {==}
-    case C.SEnd{} Unit{}:
-      {==}
-    case C.SRule{s2, tag} v:
-      not_missing(s2, v, hn)
-    case C.SStrict{s2} v:
-      not_missing(s2, v, hn)
-    case C.STagged{k, n, cs, rest} Inl{a}:
-      {==}
-    case C.STagged{k, n, cs, rest} Inr{b}:
-      not_missing(rest, b, hn)
-    case C.STagEnd{k_} e:
-      Empty.absurd({False{} == C.is_missing(C.enc(C.STagEnd{k_}, e)) : Bool}, e)
-    case C.STrue{} Unit{}:
-      {==}
-    case C.SEnum{names} v:
-      {==}
-    case C.SVariant{+n, vs, +rest} Inl{a}:
-      {==}
-    case C.SVariant{n, vs, rest} Inr{b}:
-      not_missing(rest, b, hn)
-    case C.SVEnd{} e:
-      Empty.absurd({False{} == C.is_missing(C.enc(C.SVEnd{}, e)) : Bool}, e)
-    case C.STuple{ts, rest} C.Both{a, b}:
-      {==}
-    case C.STEnd{} Unit{}:
-      {==}
-    case C.SOptional{i} None{}:
-      Empty.absurd({False{} == C.is_missing(C.enc(C.SOptional{i}, None{})) : Bool}, to_empty(hn))
-    case C.SOptional{i} Some{v}:
-      Empty.absurd({False{} == C.is_missing(C.enc(C.SOptional{i}, Some{v})) : Bool}, to_empty(hn))
-
 # Reading a key from the object that starts with it.
 def lk_self(+n: String, +v: C.Raw, +o: C.Raw) -> {v == C.lookup(n, C.RKey{n, v, o}) : C.Raw}:
   %MS.eq_refl_sym(n) : {v == C.pick_raw(_, v, C.lookup(n, o)) : C.Raw}
@@ -3208,6 +3201,22 @@ def absent(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_v(n, s) == Tr
       Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SOptional{i_}, v))) : Bool}, to_empty(hf))
     case C.SListLen{lo_, hi_, s2_} v:
       Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SListLen{lo_, hi_, s2_}, v))) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} v:
+      Empty.absurd({True{} == C.is_missing(C.lookup(n, C.enc(C.SEither{l_, r_}, v))) : Bool}, to_empty(hf))
+
+def or_false_l(a: Bool, +b: Bool, h: {False{} == Bool.or(a, b) : Bool}) -> {False{} == a : Bool}:
+  match a:
+    case True{}:
+      Empty.absurd({False{} == True{} : Bool}, to_empty(h))
+    case False{}:
+      {==}
+
+def or_false_r(a: Bool, +b: Bool, h: {False{} == Bool.or(a, b) : Bool}) -> {False{} == b : Bool}:
+  match a:
+    case True{}:
+      Empty.absurd({False{} == b : Bool}, to_empty(h))
+    case False{}:
+      h
 
 # A schema that is not nullable does not write null.
 def not_nullish(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.nullable(s) : Bool}) -> {False{} == C.nullish(C.enc(s, x)) : Bool}:
@@ -3270,6 +3279,10 @@ def not_nullish(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.nullable(s) : B
       Empty.absurd({False{} == C.nullish(C.enc(C.SOptional{i}, v)) : Bool}, to_empty(hn))
     case C.SListLen{lo_, hi_, s2} v:
       not_nullish(s2, v, hn)
+    case C.SEither{+l, +r} Inl{a}:
+      not_nullish(l, a, or_false_l(C.nullable(l), C.nullable(r), hn))
+    case C.SEither{+l, +r} Inr{b}:
+      not_nullish(r, b, or_false_r(C.nullable(l), C.nullable(r), hn))
 
 # A tagged case: the tag enc writes reads back as this case's, drop_key
 # takes it out again, and no later case of a well-formed chain claims it.
@@ -3341,6 +3354,1122 @@ def tag_other(+k: String, +n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fres
       Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.STuple{ts_, rs_}, x_)) : Bool}, to_empty(hf))
     case C.STEnd{} x_:
       Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.STEnd{}, x_)) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} x_:
+      Empty.absurd({False{} == C.is_tag(k, n, C.enc(C.SEither{l_, r_}, x_)) : Bool}, to_empty(hf))
+
+# ---- kinds_table ----
+#
+# in_kinds is a search through a list with an or over kind_eq. A schema with
+# one kind is a list of one, whose or with False is the kind test itself; a
+# union's list is its alternatives' two lists appended.
+
+def or_false(b: Bool) -> {b == Bool.or(b, False{}) : Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def or_assoc(a: Bool, +b: Bool, +c: Bool) -> {Bool.or(Bool.or(a, b), c) == Bool.or(a, Bool.or(b, c)) : Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def ik_append(+k: C.JKind, xs: List<&2, C.JKind>, +ys: List<&2, C.JKind>) -> {Bool.or(Laws.in_kinds(k, xs), Laws.in_kinds(k, ys)) == Laws.in_kinds(k, List.append(&2, C.JKind, xs, ys)) : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case +x <> +t:
+      %ik_append(k, t, ys) : {Bool.or(Bool.or(C.kind_eq(x, k), Laws.in_kinds(k, t)), Laws.in_kinds(k, ys)) == Bool.or(C.kind_eq(x, k), _) : Bool}
+      or_assoc(C.kind_eq(x, k), Laws.in_kinds(k, t), Laws.in_kinds(k, ys))
+
+# arms: s
+# arms leaf: or_false(C.kind_eq($W, k))
+# arms why: SNat=C.KNum{} SNatIn=C.KNum{} SInt=C.KNum{} SIntIn=C.KNum{} SStr=C.KStr{} SEnum=C.KStr{} SBool=C.KBool{} STrue=C.KBool{} SList=C.KList{} STuple=C.KList{} STEnd=C.KList{} SField=C.KObj{} SEnd=C.KObj{} STagged=C.KObj{} STagEnd=C.KObj{} SVariant=C.KObj{} SVEnd=C.KObj{} SJson=C.KJson{}
+def kt(s: C.Schema, +k: C.JKind) -> {C.has_kind(s, k) == Laws.in_kinds(k, Laws.kinds_spec(s)) : Bool}:
+  match s:
+    case C.SNat{}:
+      or_false(C.kind_eq(C.KNum{}, k))
+    case C.SNatIn{lo_, hi_}:
+      or_false(C.kind_eq(C.KNum{}, k))
+    case C.SStr{}:
+      or_false(C.kind_eq(C.KStr{}, k))
+    case C.SStrLen{lo_, hi_, s2}:
+      kt(s2, k)
+    case C.SOpt{+i}:
+      %kt(i, k) : {Bool.or(C.kind_eq(C.KNull{}, k), C.has_kind(i, k)) == Bool.or(C.kind_eq(C.KNull{}, k), _) : Bool}
+      {==}
+    case C.SList{elem_}:
+      or_false(C.kind_eq(C.KList{}, k))
+    case C.SField{name_, s_, rest_}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.SEnd{}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.SRule{s2, tag}:
+      kt(s2, k)
+    case C.SStrict{s2}:
+      kt(s2, k)
+    case C.STagged{key_, name_, s_, rest_}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.STagEnd{key_}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.SBool{}:
+      or_false(C.kind_eq(C.KBool{}, k))
+    case C.STrue{}:
+      or_false(C.kind_eq(C.KBool{}, k))
+    case C.SEnum{names_}:
+      or_false(C.kind_eq(C.KStr{}, k))
+    case C.SVariant{name_, s_, rest_}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.SVEnd{}:
+      or_false(C.kind_eq(C.KObj{}, k))
+    case C.STuple{s_, rest_}:
+      or_false(C.kind_eq(C.KList{}, k))
+    case C.STEnd{}:
+      or_false(C.kind_eq(C.KList{}, k))
+    case C.SOptional{+i}:
+      %kt(i, k) : {Bool.or(C.kind_eq(C.KAbsent{}, k), C.has_kind(i, k)) == Bool.or(C.kind_eq(C.KAbsent{}, k), _) : Bool}
+      {==}
+    case C.SListLen{lo_, hi_, s2}:
+      kt(s2, k)
+    case C.SJson{}:
+      or_false(C.kind_eq(C.KJson{}, k))
+    case C.SInt{}:
+      or_false(C.kind_eq(C.KNum{}, k))
+    case C.SIntIn{lo_, hi_}:
+      or_false(C.kind_eq(C.KNum{}, k))
+    case C.SEither{+l, +r}:
+      %ik_append(k, Laws.kinds_spec(l), Laws.kinds_spec(r)) : {Bool.or(C.has_kind(l, k), C.has_kind(r, k)) == _ : Bool}
+      %kt(l, k) : {Bool.or(C.has_kind(l, k), C.has_kind(r, k)) == Bool.or(_, Laws.in_kinds(k, Laws.kinds_spec(r))) : Bool}
+      %kt(r, k) : {Bool.or(C.has_kind(l, k), C.has_kind(r, k)) == Bool.or(C.has_kind(l, k), _) : Bool}
+      {==}
+
+def Laws.kinds_table(s, k):
+  kt(s, k)
+
+# ---- kind_sound ----
+#
+# A value a well-formed schema accepts has a kind the schema claims. The proof
+# walks conforms. The wrappers pass the value on; an SOpt and an SOptional pass
+# on every value but the one they add; the union's two alternatives decide it
+# by the kinds alone; and a tagged chain's tail must be a chain, which wf
+# asks (fresh_t), so that the tail claims only the object kind.
+
+# arms: s
+# arms leaf: Empty.absurd({C.has_kind($S, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+def chain_t(+k: String, +n: String, s: C.Schema, +kk: C.JKind, +hf: {C.fresh_t(k, n, s) == True{} : Bool}) -> {C.has_kind(s, kk) == C.kind_eq(C.KObj{}, kk) : Bool}:
+  match s:
+    case C.SNat{}:
+      Empty.absurd({C.has_kind(C.SNat{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStr{}:
+      Empty.absurd({C.has_kind(C.SStr{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s_}:
+      Empty.absurd({C.has_kind(C.SStrLen{lo_, hi_, s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SOpt{inner_}:
+      Empty.absurd({C.has_kind(C.SOpt{inner_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SList{elem_}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SField{name_, s_, rest_}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEnd{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SRule{s_, tag_}:
+      Empty.absurd({C.has_kind(C.SRule{s_, tag_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStrict{s_}:
+      Empty.absurd({C.has_kind(C.SStrict{s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STagged{k2_, m_, cs_, rest_}:
+      {==}
+    case C.STagEnd{k2_}:
+      {==}
+    case C.SBool{}:
+      Empty.absurd({C.has_kind(C.SBool{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STrue{}:
+      Empty.absurd({C.has_kind(C.STrue{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEnum{names_}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SVariant{name_, s_, rest_}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SVEnd{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STuple{s_, rest_}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STEnd{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SOptional{inner_}:
+      Empty.absurd({C.has_kind(C.SOptional{inner_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SListLen{lo_, hi_, s_}:
+      Empty.absurd({C.has_kind(C.SListLen{lo_, hi_, s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SJson{}:
+      Empty.absurd({C.has_kind(C.SJson{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SInt{}:
+      Empty.absurd({C.has_kind(C.SInt{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SIntIn{lo_, hi_}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_}:
+      Empty.absurd({C.has_kind(C.SEither{l_, r_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+
+# arms: s
+# arms leaf: Empty.absurd({C.has_kind($S, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+def chain_v(+n: String, s: C.Schema, +kk: C.JKind, +hf: {C.fresh_v(n, s) == True{} : Bool}) -> {C.has_kind(s, kk) == C.kind_eq(C.KObj{}, kk) : Bool}:
+  match s:
+    case C.SNat{}:
+      Empty.absurd({C.has_kind(C.SNat{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SNatIn{lo_, hi_}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStr{}:
+      Empty.absurd({C.has_kind(C.SStr{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStrLen{lo_, hi_, s_}:
+      Empty.absurd({C.has_kind(C.SStrLen{lo_, hi_, s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SOpt{inner_}:
+      Empty.absurd({C.has_kind(C.SOpt{inner_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SList{elem_}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SField{name_, s_, rest_}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEnd{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SRule{s_, tag_}:
+      Empty.absurd({C.has_kind(C.SRule{s_, tag_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SStrict{s_}:
+      Empty.absurd({C.has_kind(C.SStrict{s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STagged{key_, name_, s_, rest_}:
+      Empty.absurd({C.has_kind(C.STagged{key_, name_, s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STagEnd{key_}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SBool{}:
+      Empty.absurd({C.has_kind(C.SBool{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STrue{}:
+      Empty.absurd({C.has_kind(C.STrue{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEnum{names_}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SVariant{m_, vs_, rest_}:
+      {==}
+    case C.SVEnd{}:
+      {==}
+    case C.STuple{s_, rest_}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.STEnd{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SOptional{inner_}:
+      Empty.absurd({C.has_kind(C.SOptional{inner_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SListLen{lo_, hi_, s_}:
+      Empty.absurd({C.has_kind(C.SListLen{lo_, hi_, s_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SJson{}:
+      Empty.absurd({C.has_kind(C.SJson{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SInt{}:
+      Empty.absurd({C.has_kind(C.SInt{}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SIntIn{lo_, hi_}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_}:
+      Empty.absurd({C.has_kind(C.SEither{l_, r_}, kk) == C.kind_eq(C.KObj{}, kk) : Bool}, to_empty(hf))
+
+def wf_tag_fresh(+k: String, +n: String, +cs: C.Schema, +rest: C.Schema, hw: {C.wf(C.STagged{k, n, cs, rest}) == True{} : Bool}) -> {C.fresh_t(k, n, rest) == True{} : Bool}:
+  and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))
+
+def wf_tag_rest(+k: String, +n: String, +cs: C.Schema, +rest: C.Schema, hw: {C.wf(C.STagged{k, n, cs, rest}) == True{} : Bool}) -> {C.wf(rest) == True{} : Bool}:
+  and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))
+
+# A tag the object reads is in an object.
+# arms: x
+# arms leaf: Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of($S)) == True{} : Bool}, to_empty(h))
+# arms accept: RKey
+# arms accept leaf: {==}
+def tag_obj(+k: String, +n: String, x: C.Raw, h: {C.is_tag(k, n, x) == True{} : Bool}) -> {C.kind_eq(C.KObj{}, C.kind_of(x)) == True{} : Bool}:
+  match x:
+    case C.RNum{n_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RNum{n_})) == True{} : Bool}, to_empty(h))
+    case C.RBool{b_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RBool{b_})) == True{} : Bool}, to_empty(h))
+    case C.RNull{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.RStr{s_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RStr{s_})) == True{} : Bool}, to_empty(h))
+    case C.RBad{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.RTooBig{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.RMissing{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.RNil{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.RCons{head_, tail_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RCons{head_, tail_})) == True{} : Bool}, to_empty(h))
+    case C.REnd{}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.RKey{key_, val_, rest_}:
+      {==}
+    case C.RJson{value_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RJson{value_})) == True{} : Bool}, to_empty(h))
+    case C.RNeg{n_}:
+      Empty.absurd({C.kind_eq(C.KObj{}, C.kind_of(C.RNeg{n_})) == True{} : Bool}, to_empty(h))
+
+# A tagged case reads the object by its tag key, or hands it to the rest of
+# the chain; b is whether the tag matched.
+def ks_tag(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, b: Bool, +k: String, +n: String, +cs: C.Schema, +rest: C.Schema, +x: C.Raw, eb: {b == C.is_tag(k, n, x) : Bool}, ih: {C.conforms(~rule, rest, x, None{}) == True{} : Bool} -> {C.has_kind(rest, C.kind_of(x)) == True{} : Bool}, +hf: {C.fresh_t(k, n, rest) == True{} : Bool}, h: {C.pick_bool(b, Bool.and(C.key_once(k, x), C.conforms(~rule, cs, C.drop_key(k, x), None{})), C.conforms(~rule, rest, x, None{})) == True{} : Bool}) -> {C.kind_eq(C.KObj{}, C.kind_of(x)) == True{} : Bool}:
+  match b:
+    case True{}:
+      tag_obj(k, n, x, Equal.sym(Bool, True{}, C.is_tag(k, n, x), eb))
+    case False{}:
+      %chain_t(k, n, rest, C.kind_of(x), hf) : {_ == True{} : Bool}
+      ih(h)
+
+# A union that accepts a value claims its kind: one of the two alternatives
+# does, or the dispatch would have refused it.
+def ks_either(hl: Bool, hr: Bool, +cl: Bool, +cr: Bool, h: {C.pick_bool(hl, cl, Bool.and(hr, cr)) == True{} : Bool}) -> {Bool.or(hl, hr) == True{} : Bool}:
+  match hl:
+    case True{}:
+      {==}
+    case False{}:
+      and_l(hr, cr, h)
+
+# arms: s r
+# arms leaf: Empty.absurd({C.has_kind($S, C.kind_of($R)) == True{} : Bool}, to_empty(h))
+# arms accept: SNat.RNum SNatIn.RNum SStr.RStr SList.RNil SList.RCons SJson.RJson SInt.RNum SInt.RNeg SIntIn.RNum SIntIn.RNeg SField.REnd SField.RKey SEnd.REnd SEnd.RKey SBool.RBool STrue.RBool SEnum.RStr SVariant.REnd SVariant.RKey STuple.RCons STEnd.RNil SOpt.RNull SOptional.RMissing
+# arms accept leaf: {==}
+def ks(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +prev: Maybe<&2, Nat>, +hw: {C.wf(s) == True{} : Bool}, h: {C.conforms(~rule, s, r, prev) == True{} : Bool}) -> {C.has_kind(s, C.kind_of(r)) == True{} : Bool}:
+  match s r:
+    case C.SNat{} C.RNum{n}:
+      {==}
+    case C.SNat{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SNat{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SNat{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RNum{n}:
+      {==}
+    case C.SNatIn{lo_, hi_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SNatIn{lo_, hi_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SNatIn{lo_, hi_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RStr{x}:
+      {==}
+    case C.SStr{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SStr{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SStr{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SStrLen{+lo, +hi, +s2} +x:
+      ks(~rule, s2, x, prev, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw), and_l(C.conforms(~rule, s2, x, prev), C.len_ok(lo, hi, x), h))
+    case C.SOpt{+i} C.RNum{n}:
+      ks(~rule, i, C.RNum{n}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RBool{bb}:
+      ks(~rule, i, C.RBool{bb}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RNull{}:
+      {==}
+    case C.SOpt{+i} C.RStr{x}:
+      ks(~rule, i, C.RStr{x}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RBad{}:
+      ks(~rule, i, C.RBad{}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RTooBig{}:
+      ks(~rule, i, C.RTooBig{}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RMissing{}:
+      ks(~rule, i, C.RMissing{}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RNil{}:
+      ks(~rule, i, C.RNil{}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RCons{h1, t1}:
+      ks(~rule, i, C.RCons{h1, t1}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.REnd{}:
+      ks(~rule, i, C.REnd{}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RKey{k1, v1, o1}:
+      ks(~rule, i, C.RKey{k1, v1, o1}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RJson{jv}:
+      ks(~rule, i, C.RJson{jv}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SOpt{+i} C.RNeg{n}:
+      ks(~rule, i, C.RNeg{n}, None{}, and_r(Bool.not(C.nullable(i)), C.wf(i), hw), h)
+    case C.SList{elem_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RNil{}:
+      {==}
+    case C.SList{elem_} C.RCons{h1, t1}:
+      {==}
+    case C.SList{elem_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SList{elem_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SList{elem_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.REnd{}:
+      {==}
+    case C.SField{name_, s_, rest_} C.RKey{k1, v1, o1}:
+      {==}
+    case C.SField{name_, s_, rest_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SField{name_, s_, rest_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SField{name_, s_, rest_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.REnd{}:
+      {==}
+    case C.SEnd{} C.RKey{k1, v1, o1}:
+      {==}
+    case C.SEnd{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SEnd{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SEnd{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SRule{+s2, +tag} +x:
+      ks(~rule, s2, x, prev, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw), and_l(C.conforms(~rule, s2, x, prev), Maybe.is_none(&2, C.Err, rule(tag, x)), h))
+    case C.SStrict{+s2} +x:
+      ks(~rule, s2, x, prev, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), and_r(C.is_keyed(s2), Bool.and(Bool.not(C.opt_at(s2)), C.wf(s2)), hw)), and_l(C.conforms(~rule, s2, x, prev), C.no_extra(C.key_names(s2), x), h))
+    case C.STagged{+k, +n, +cs, +rest} +x:
+      ks_tag(~rule, C.is_tag(k, n, x), k, n, cs, rest, x, {==}, hh => ks(~rule, rest, x, None{}, wf_tag_rest(k, n, cs, rest, hw), hh), wf_tag_fresh(k, n, cs, rest, hw), h)
+    case C.STagEnd{key_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.STagEnd{key_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.STagEnd{key_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RBool{bb}:
+      {==}
+    case C.SBool{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SBool{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SBool{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RBool{bb}:
+      {==}
+    case C.STrue{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.STrue{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.STrue{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RStr{x}:
+      {==}
+    case C.SEnum{names_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SEnum{names_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SEnum{names_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.REnd{}:
+      {==}
+    case C.SVariant{name_, s_, rest_} C.RKey{k1, v1, o1}:
+      {==}
+    case C.SVariant{name_, s_, rest_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SVariant{name_, s_, rest_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SVariant{name_, s_, rest_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SVEnd{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SVEnd{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RCons{h1, t1}:
+      {==}
+    case C.STuple{s_, rest_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.STuple{s_, rest_} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.STuple{s_, rest_}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RNil{}:
+      {==}
+    case C.STEnd{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.STEnd{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.STEnd{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SOptional{+i} C.RNum{n}:
+      ks(~rule, i, C.RNum{n}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RBool{bb}:
+      ks(~rule, i, C.RBool{bb}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RNull{}:
+      ks(~rule, i, C.RNull{}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RStr{x}:
+      ks(~rule, i, C.RStr{x}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RBad{}:
+      ks(~rule, i, C.RBad{}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RTooBig{}:
+      ks(~rule, i, C.RTooBig{}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RMissing{}:
+      {==}
+    case C.SOptional{+i} C.RNil{}:
+      ks(~rule, i, C.RNil{}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RCons{h1, t1}:
+      ks(~rule, i, C.RCons{h1, t1}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.REnd{}:
+      ks(~rule, i, C.REnd{}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RKey{k1, v1, o1}:
+      ks(~rule, i, C.RKey{k1, v1, o1}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RJson{jv}:
+      ks(~rule, i, C.RJson{jv}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SOptional{+i} C.RNeg{n}:
+      ks(~rule, i, C.RNeg{n}, None{}, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), h)
+    case C.SListLen{+lo, +hi, +s2} +r2:
+      ks(~rule, s2, r2, None{}, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw), and_r(C.list_len_ok(lo, hi, r2), C.conforms(~rule, s2, r2, None{}), h))
+    case C.SJson{} C.RNum{n}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RNum{n})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SJson{} C.RJson{jv}:
+      {==}
+    case C.SJson{} C.RNeg{n}:
+      Empty.absurd({C.has_kind(C.SJson{}, C.kind_of(C.RNeg{n})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RNum{n}:
+      {==}
+    case C.SInt{} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SInt{}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SInt{} C.RNeg{n}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.RNum{n}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.RBool{bb}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RBool{bb})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RNull{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RNull{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RStr{x}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RStr{x})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RBad{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RBad{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RTooBig{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RTooBig{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RMissing{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RMissing{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RNil{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RNil{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RCons{h1, t1}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RCons{h1, t1})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.REnd{}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.REnd{})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RKey{k1, v1, o1}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RKey{k1, v1, o1})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RJson{jv}:
+      Empty.absurd({C.has_kind(C.SIntIn{lo_, hi_}, C.kind_of(C.RJson{jv})) == True{} : Bool}, to_empty(h))
+    case C.SIntIn{lo_, hi_} C.RNeg{n}:
+      {==}
+    case C.SEither{+l, +r} +x:
+      ks_either(C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev), h)
+
+# The law this proves is stated with the premise hw, that the schema is well
+# formed: without it an STagged whose tail is not a chain (say
+# STagged{"t", "a", SEnd{}, SNat{}}) accepts the number 5, a kind it does not
+# claim, so the law as approved without hw is false.
+def Laws.kind_sound(rule, s, r, prev, hw, h):
+  ks(~rule, s, r, prev, hw, h)
+
+# ---- union_disjoint ----
+#
+# wf(SEither{l, r}) is a chain of ands: both alternatives are alt_ok, they are
+# disjoint, and each is well formed. Each fact is read out of the chain once,
+# here.
+
+#
+# wf(SEither{l, r}) is a chain of ands: both alternatives are alt_ok, they are
+# disjoint, and each is well formed. Each fact is read out of the chain once,
+# here.
+
+def wf_e1(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {Bool.and(C.alt_ok(r), Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r)))) == True{} : Bool}:
+  and_r(C.alt_ok(l), Bool.and(C.alt_ok(r), Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r)))), hw)
+
+def wf_e2(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r))) == True{} : Bool}:
+  and_r(C.alt_ok(r), Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r))), wf_e1(l, r, hw))
+
+def wf_e3(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {Bool.and(C.wf(l), C.wf(r)) == True{} : Bool}:
+  and_r(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r)), wf_e2(l, r, hw))
+
+def wf_alt_l(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.alt_ok(l) == True{} : Bool}:
+  and_l(C.alt_ok(l), Bool.and(C.alt_ok(r), Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r)))), hw)
+
+def wf_alt_r(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.alt_ok(r) == True{} : Bool}:
+  and_l(C.alt_ok(r), Bool.and(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r))), wf_e1(l, r, hw))
+
+def wf_dis(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.disjoint(l, r) == True{} : Bool}:
+  and_l(C.disjoint(l, r), Bool.and(C.wf(l), C.wf(r)), wf_e2(l, r, hw))
+
+def wf_left(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.wf(l) == True{} : Bool}:
+  and_l(C.wf(l), C.wf(r), wf_e3(l, r, hw))
+
+def wf_right(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.wf(r) == True{} : Bool}:
+  and_r(C.wf(l), C.wf(r), wf_e3(l, r, hw))
+
+# disjoint is an and of nine apart tests, one per kind; dj_i reads the i-th.
+def dj_0(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a0 == True{} : Bool}:
+  and_l(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h)
+
+def dj_1(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a1 == True{} : Bool}:
+  and_l(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h))
+
+def dj_2(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a2 == True{} : Bool}:
+  and_l(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h)))
+
+def dj_3(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a3 == True{} : Bool}:
+  and_l(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h))))
+
+def dj_4(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a4 == True{} : Bool}:
+  and_l(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))), and_r(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h)))))
+
+def dj_5(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a5 == True{} : Bool}:
+  and_l(a5, Bool.and(a6, Bool.and(a7, a8)), and_r(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))), and_r(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h))))))
+
+def dj_6(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a6 == True{} : Bool}:
+  and_l(a6, Bool.and(a7, a8), and_r(a5, Bool.and(a6, Bool.and(a7, a8)), and_r(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))), and_r(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h)))))))
+
+def dj_7(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a7 == True{} : Bool}:
+  and_l(a7, a8, and_r(a6, Bool.and(a7, a8), and_r(a5, Bool.and(a6, Bool.and(a7, a8)), and_r(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))), and_r(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h))))))))
+
+def dj_8(+a0: Bool, +a1: Bool, +a2: Bool, +a3: Bool, +a4: Bool, +a5: Bool, +a6: Bool, +a7: Bool, +a8: Bool, h: {Bool.and(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))))) == True{} : Bool}) -> {a8 == True{} : Bool}:
+  and_r(a7, a8, and_r(a6, Bool.and(a7, a8), and_r(a5, Bool.and(a6, Bool.and(a7, a8)), and_r(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))), and_r(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))), and_r(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))), and_r(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8)))))), and_r(a0, Bool.and(a1, Bool.and(a2, Bool.and(a3, Bool.and(a4, Bool.and(a5, Bool.and(a6, Bool.and(a7, a8))))))), h))))))))
+
+# A well-formed union's alternatives are apart at every kind ...
+def dis_apart(+l: C.Schema, +r: C.Schema, k: C.JKind, +hd: {C.disjoint(l, r) == True{} : Bool}) -> {C.apart(l, r, k) == True{} : Bool}:
+  match k:
+    case C.KNum{}:
+      dj_0(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KStr{}:
+      dj_1(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KBool{}:
+      dj_2(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KList{}:
+      dj_3(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KObj{}:
+      dj_4(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KNull{}:
+      dj_5(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KAbsent{}:
+      dj_6(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KJson{}:
+      dj_7(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+    case C.KOther{}:
+      dj_8(C.apart(l, r, C.KNum{}), C.apart(l, r, C.KStr{}), C.apart(l, r, C.KBool{}), C.apart(l, r, C.KList{}), C.apart(l, r, C.KObj{}), C.apart(l, r, C.KNull{}), C.apart(l, r, C.KAbsent{}), C.apart(l, r, C.KJson{}), C.apart(l, r, C.KOther{}), hd)
+
+# ... so a kind the right one claims is not the left one's.
+def apart_miss(a: Bool, b: Bool, hab: {Bool.not(Bool.and(a, b)) == True{} : Bool}, hb: {True{} == b : Bool}) -> {False{} == a : Bool}:
+  match a b:
+    case True{} True{}:
+      Empty.absurd({False{} == True{} : Bool}, to_empty(hab))
+    case True{} False{}:
+      Empty.absurd({False{} == True{} : Bool}, to_empty(Equal.sym(Bool, True{}, False{}, hb)))
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+def left_miss(+l: C.Schema, +r: C.Schema, +e: C.Raw, +hd: {C.disjoint(l, r) == True{} : Bool}, hr: {True{} == C.has_kind(r, C.kind_of(e)) : Bool}) -> {False{} == C.has_kind(l, C.kind_of(e)) : Bool}:
+  apart_miss(C.has_kind(l, C.kind_of(e)), C.has_kind(r, C.kind_of(e)), dis_apart(l, r, C.kind_of(e), hd), hr)
+
+def apart_sym(a: Bool, b: Bool, h: {Bool.not(Bool.and(a, b)) == True{} : Bool}) -> {Bool.not(Bool.and(b, a)) == True{} : Bool}:
+  match a b:
+    case True{} True{}:
+      Empty.absurd({Bool.not(Bool.and(True{}, True{})) == True{} : Bool}, to_empty(h))
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# ... and the other way round.
+def right_miss(+l: C.Schema, +r: C.Schema, +e: C.Raw, +hd: {C.disjoint(l, r) == True{} : Bool}, hl: {True{} == C.has_kind(l, C.kind_of(e)) : Bool}) -> {False{} == C.has_kind(r, C.kind_of(e)) : Bool}:
+  apart_miss(C.has_kind(r, C.kind_of(e)), C.has_kind(l, C.kind_of(e)), apart_sym(C.has_kind(l, C.kind_of(e)), C.has_kind(r, C.kind_of(e)), dis_apart(l, r, C.kind_of(e), hd)), hl)
+
+# No value is accepted by both: each alternative accepts only a kind it claims
+# (kind_sound), and they claim none in common.
+def ud_bools(+hl: Bool, +hr: Bool, cl: Bool, cr: Bool, ksl: {cl == True{} : Bool} -> {hl == True{} : Bool}, ksr: {cr == True{} : Bool} -> {hr == True{} : Bool}, hd: {Bool.not(Bool.and(hl, hr)) == True{} : Bool}) -> {Bool.and(cl, cr) == False{} : Bool}:
+  match cl cr:
+    case True{} True{}:
+      Empty.absurd({Bool.and(True{}, True{}) == False{} : Bool}, to_empty(Equal.trans(Bool, False{}, hl, True{}, apart_miss(hl, hr, hd, Equal.sym(Bool, hr, True{}, ksr({==}))), ksl({==}))))
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+def ud(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +l: C.Schema, +r: C.Schema, +x: C.Raw, +prev: Maybe<&2, Nat>, +hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {Bool.and(C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev)) == False{} : Bool}:
+  ud_bools(C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev), hh => ks(~rule, l, x, prev, wf_left(l, r, hw), hh), hh => ks(~rule, r, x, prev, wf_right(l, r, hw), hh), dis_apart(l, r, C.kind_of(x), wf_dis(l, r, hw)))
+
+def Laws.union_disjoint(rule, l, r, x, prev, hw):
+  ud(~rule, l, r, x, prev, hw)
+
+# What enc writes for a well-formed schema has a kind the schema claims; the
+# union reads a value by it. decode_encode and encode_conforms follow the
+# encoder through an alternative with the lemmas that follow, so they take this
+# section.
+
+def enc_kind(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {True{} == C.has_kind(s, C.kind_of(C.enc(s, x))) : Bool}:
+  match s x:
+    case C.SNat{} n:
+      {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SBool{} b:
+      {==}
+    case C.SJson{} jv:
+      {==}
+    case C.SInt{} C.IPos{m_}:
+      {==}
+    case C.SInt{} C.INeg{m_}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.IPos{m_}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.INeg{m_}:
+      {==}
+    case C.SStr{} n:
+      {==}
+    case C.SStrLen{lo_, hi_, +s2} v:
+      enc_kind(s2, v, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SListLen{lo_, hi_, +s2} v:
+      enc_kind(s2, v, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SOpt{+i} None{}:
+      {==}
+    case C.SOpt{+i} Some{+v}:
+      %enc_kind(i, v, and_r(Bool.not(C.nullable(i)), C.wf(i), hw)) : {True{} == Bool.or(C.kind_eq(C.KNull{}, C.kind_of(C.enc(i, v))), _) : Bool}
+      or_true_x(C.kind_eq(C.KNull{}, C.kind_of(C.enc(i, v))))
+    case C.SOptional{+i} None{}:
+      {==}
+    case C.SOptional{+i} Some{+v}:
+      %enc_kind(i, v, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw)) : {True{} == Bool.or(C.kind_eq(C.KAbsent{}, C.kind_of(C.enc(i, v))), _) : Bool}
+      or_true_x(C.kind_eq(C.KAbsent{}, C.kind_of(C.enc(i, v))))
+    case C.SList{e} Nil{}:
+      {==}
+    case C.SList{e} h <> t:
+      {==}
+    case C.SField{n, fs, rest} C.Both{a, b}:
+      {==}
+    case C.SEnd{} Unit{}:
+      {==}
+    case C.SRule{+s2, tag} v:
+      enc_kind(s2, v, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SStrict{+s2} v:
+      enc_kind(s2, v, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), and_r(C.is_keyed(s2), Bool.and(Bool.not(C.opt_at(s2)), C.wf(s2)), hw)))
+    case C.STagged{k, n, cs, rest} Inl{a}:
+      {==}
+    case C.STagged{+k, +n, +cs, +rest} Inr{+b}:
+      %chain_t(k, n, rest, C.kind_of(C.enc(rest, b)), and_l(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw))))) : {True{} == _ : Bool}
+      enc_kind(rest, b, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw)))))
+    case C.STagEnd{k_} e:
+      Empty.absurd({True{} == C.has_kind(C.STagEnd{k_}, C.kind_of(C.enc(C.STagEnd{k_}, e))) : Bool}, e)
+    case C.STrue{} Unit{}:
+      {==}
+    case C.SEnum{names} v:
+      {==}
+    case C.SVariant{n, vs, rest} Inl{a}:
+      {==}
+    case C.SVariant{+n, +vs, +rest} Inr{+b}:
+      %chain_v(n, rest, C.kind_of(C.enc(rest, b)), and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)))) : {True{} == _ : Bool}
+      enc_kind(rest, b, and_r(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))))
+    case C.SVEnd{} e:
+      Empty.absurd({True{} == C.has_kind(C.SVEnd{}, C.kind_of(C.enc(C.SVEnd{}, e))) : Bool}, e)
+    case C.STuple{ts, rest} C.Both{a, b}:
+      {==}
+    case C.STEnd{} Unit{}:
+      {==}
+    case C.SEither{+l, +r} Inl{+a}:
+      %enc_kind(l, a, wf_left(l, r, hw)) : {True{} == Bool.or(_, C.has_kind(r, C.kind_of(C.enc(l, a)))) : Bool}
+      {==}
+    case C.SEither{+l, +r} Inr{+b}:
+      %enc_kind(r, b, wf_right(l, r, hw)) : {True{} == Bool.or(C.has_kind(l, C.kind_of(C.enc(r, b))), _) : Bool}
+      or_true_x(C.has_kind(l, C.kind_of(C.enc(r, b))))
+
+# An absent value has no kind a well-formed alternative claims, so what enc
+# writes for one is never absent.
+# arms: e
+# arms leaf: {==}
+def miss_kind(s: C.Schema, e: C.Raw, hk: {True{} == C.has_kind(s, C.kind_of(e)) : Bool}, ha: {False{} == C.has_kind(s, C.KAbsent{}) : Bool}) -> {False{} == C.is_missing(e) : Bool}:
+  match e:
+    case C.RNum{n_}:
+      {==}
+    case C.RBool{b_}:
+      {==}
+    case C.RNull{}:
+      {==}
+    case C.RStr{s_}:
+      {==}
+    case C.RBad{}:
+      {==}
+    case C.RTooBig{}:
+      {==}
+    case C.RMissing{}:
+      Empty.absurd({False{} == True{} : Bool}, to_empty(Equal.trans(Bool, False{}, C.has_kind(s, C.KAbsent{}), True{}, ha, Equal.sym(Bool, True{}, C.has_kind(s, C.KAbsent{}), hk))))
+    case C.RNil{}:
+      {==}
+    case C.RCons{head_, tail_}:
+      {==}
+    case C.REnd{}:
+      {==}
+    case C.RKey{key_, val_, rest_}:
+      {==}
+    case C.RJson{value_}:
+      {==}
+    case C.RNeg{n_}:
+      {==}
+
+def not_abs(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {False{} == C.has_kind(l, C.KAbsent{}) : Bool}:
+  not_true(C.has_kind(l, C.KAbsent{}), and_l(Bool.not(C.has_kind(l, C.KAbsent{})), Bool.not(C.has_kind(l, C.KJson{})), wf_alt_l(l, r, hw)))
+
+def not_abs_r(+l: C.Schema, +r: C.Schema, hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {False{} == C.has_kind(r, C.KAbsent{}) : Bool}:
+  not_true(C.has_kind(r, C.KAbsent{}), and_l(Bool.not(C.has_kind(r, C.KAbsent{})), Bool.not(C.has_kind(r, C.KJson{})), wf_alt_r(l, r, hw)))
+
+# enc never writes a missing value, as long as no absent value can reach the
+# top of what it writes (opt_at): the schemas that would are an SOptional
+# itself, and the ones that hand their value straight to one.
+def not_missing(s: C.Schema, x: C.Meaning(s), +hn: {False{} == C.opt_at(s) : Bool}, +hw: {C.wf(s) == True{} : Bool}) -> {False{} == C.is_missing(C.enc(s, x)) : Bool}:
+  match s x:
+    case C.SNat{} n:
+      {==}
+    case C.SNatIn{lo_, hi_} n:
+      {==}
+    case C.SBool{} b:
+      {==}
+    case C.SJson{} jv:
+      {==}
+    case C.SInt{} C.IPos{m_}:
+      {==}
+    case C.SInt{} C.INeg{m_}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.IPos{m_}:
+      {==}
+    case C.SIntIn{lo_, hi_} C.INeg{m_}:
+      {==}
+    case C.SStr{} n:
+      {==}
+    case C.SStrLen{lo_, hi_, +s2} v:
+      not_missing(s2, v, hn, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SListLen{lo_, hi_, +s2} v:
+      not_missing(s2, v, hn, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SOpt{i} None{}:
+      {==}
+    case C.SOpt{+i} Some{v}:
+      not_missing(i, v, hn, and_r(Bool.not(C.nullable(i)), C.wf(i), hw))
+    case C.SList{e} Nil{}:
+      {==}
+    case C.SList{e} h <> t:
+      {==}
+    case C.SField{n, fs, rest} C.Both{a, b}:
+      {==}
+    case C.SEnd{} Unit{}:
+      {==}
+    case C.SRule{+s2, tag} v:
+      not_missing(s2, v, hn, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), hw))
+    case C.SStrict{+s2} v:
+      not_missing(s2, v, hn, and_r(Bool.not(C.opt_at(s2)), C.wf(s2), and_r(C.is_keyed(s2), Bool.and(Bool.not(C.opt_at(s2)), C.wf(s2)), hw)))
+    case C.STagged{k, n, cs, rest} Inl{a}:
+      {==}
+    case C.STagged{+k, +n, +cs, +rest} Inr{b}:
+      not_missing(rest, b, hn, and_r(C.fresh_t(k, n, rest), C.wf(rest), and_r(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)), and_r(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest))), and_r(Bool.not(C.opt_at(cs)), Bool.and(C.wf(cs), Bool.and(C.no_key(k, cs), Bool.and(C.fresh_t(k, n, rest), C.wf(rest)))), hw)))))
+    case C.STagEnd{k_} e:
+      Empty.absurd({False{} == C.is_missing(C.enc(C.STagEnd{k_}, e)) : Bool}, e)
+    case C.STrue{} Unit{}:
+      {==}
+    case C.SEnum{names} v:
+      {==}
+    case C.SVariant{+n, vs, +rest} Inl{a}:
+      {==}
+    case C.SVariant{+n, +vs, +rest} Inr{b}:
+      not_missing(rest, b, hn, and_r(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))))
+    case C.SVEnd{} e:
+      Empty.absurd({False{} == C.is_missing(C.enc(C.SVEnd{}, e)) : Bool}, e)
+    case C.STuple{ts, rest} C.Both{a, b}:
+      {==}
+    case C.STEnd{} Unit{}:
+      {==}
+    case C.SOptional{i} None{}:
+      Empty.absurd({False{} == C.is_missing(C.enc(C.SOptional{i}, None{})) : Bool}, to_empty(hn))
+    case C.SOptional{i} Some{v}:
+      Empty.absurd({False{} == C.is_missing(C.enc(C.SOptional{i}, Some{v})) : Bool}, to_empty(hn))
+    case C.SEither{+l, +r} Inl{+a}:
+      miss_kind(l, C.enc(l, a), enc_kind(l, a, wf_left(l, r, hw)), not_abs(l, r, hw))
+    case C.SEither{+l, +r} Inr{+b}:
+      miss_kind(r, C.enc(r, b), enc_kind(r, b, wf_right(l, r, hw)), not_abs_r(l, r, hw))
 
 # ---- what was written reads back as itself ----
 
@@ -3397,6 +4526,8 @@ def skip_f(+n: String, s: C.Schema, +v: C.Raw, +o: C.Raw, +hf: {C.fresh_f(n, s) 
       Empty.absurd({C.dec(C.SOptional{i_}, o) == C.dec(C.SOptional{i_}, C.RKey{n, v, o}) : Maybe<&2, C.Meaning(C.SOptional{i_})>}, to_empty(hf))
     case C.SListLen{lo_, hi_, s2_}:
       Empty.absurd({C.dec(C.SListLen{lo_, hi_, s2_}, o) == C.dec(C.SListLen{lo_, hi_, s2_}, C.RKey{n, v, o}) : Maybe<&2, C.Meaning(C.SListLen{lo_, hi_, s2_})>}, to_empty(hf))
+    case C.SEither{l_, r_}:
+      Empty.absurd({C.dec(C.SEither{l_, r_}, o) == C.dec(C.SEither{l_, r_}, C.RKey{n, v, o}) : Maybe<&2, C.Meaning(C.SEither{l_, r_})>}, to_empty(hf))
 
 def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x} == C.dec(s, C.enc(s, x)) : Maybe<&2, C.Meaning(s)>}:
   match s x:
@@ -3435,7 +4566,7 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
     case C.SOptional{+i} None{}:
       {==}
     case C.SOptional{+i} Some{+v}:
-      %not_missing(i, v, not_true(C.opt_at(i), and_l(Bool.not(C.opt_at(i)), C.wf(i), hw))) : {Some{Some{v}} == C.pick_m(Maybe<&2, Maybe<&2, C.Meaning(i)>>, _, Some{None{}}, C.opt_some(C.Meaning(i), C.dec(i, C.enc(i, v)))) : Maybe<&2, Maybe<&2, C.Meaning(i)>>}
+      %not_missing(i, v, not_true(C.opt_at(i), and_l(Bool.not(C.opt_at(i)), C.wf(i), hw)), and_r(Bool.not(C.opt_at(i)), C.wf(i), hw)) : {Some{Some{v}} == C.pick_m(Maybe<&2, Maybe<&2, C.Meaning(i)>>, _, Some{None{}}, C.opt_some(C.Meaning(i), C.dec(i, C.enc(i, v)))) : Maybe<&2, Maybe<&2, C.Meaning(i)>>}
       %de(i, v, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw)) : {Some{Some{v}} == C.opt_some(C.Meaning(i), _) : Maybe<&2, Maybe<&2, C.Meaning(i)>>}
       {==}
     case C.SField{+n, +fs, +rest} C.Both{+a, +b}:
@@ -3469,7 +4600,7 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
       {==}
     case C.SVariant{+n, +vs, +rest} Inl{+a}:
       %lk_self(n, C.enc(vs, a), C.REnd{}) : {Some{Inl{a}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>, C.is_missing(_), C.map_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, C.RKey{n, C.enc(vs, a), C.REnd{}})), C.map_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, _))) : Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>}
-      %not_missing(vs, a, not_true(C.opt_at(vs), and_l(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))) : {Some{Inl{a}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>, _, C.map_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, C.RKey{n, C.enc(vs, a), C.REnd{}})), C.map_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.enc(vs, a)))) : Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>}
+      %not_missing(vs, a, not_true(C.opt_at(vs), and_l(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)), and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))) : {Some{Inl{a}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>, _, C.map_inr(C.Meaning(vs), C.Meaning(rest), C.dec(rest, C.RKey{n, C.enc(vs, a), C.REnd{}})), C.map_inl(C.Meaning(vs), C.Meaning(rest), C.dec(vs, C.enc(vs, a)))) : Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>}
       %de(vs, a, and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))) : {Some{Inl{a}} == C.map_inl(C.Meaning(vs), C.Meaning(rest), _) : Maybe<&2, Either<&2, &2, C.Meaning(vs), C.Meaning(rest)>>}
       {==}
     case C.SVariant{+n, +vs, +rest} Inr{+b}:
@@ -3483,6 +4614,15 @@ def de(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}) -> {Some{x
       %de(rest, b, and_r(Bool.not(C.opt_at(rest)), C.wf(rest), and_r(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest)), and_r(Bool.not(C.opt_at(ts)), Bool.and(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest))), hw)))) : {Some{C.Both{a, b}} == C.both(C.Meaning(ts), C.Meaning(rest), Some{a}, _) : Maybe<&2, C.Both<C.Meaning(ts), C.Meaning(rest)>>}
       {==}
     case C.STEnd{} Unit{}:
+      {==}
+    case C.SEither{+l, +r} Inl{+a}:
+      %enc_kind(l, a, wf_left(l, r, hw)) : {Some{Inl{a}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>, _, C.map_inl(C.Meaning(l), C.Meaning(r), C.dec(l, C.enc(l, a))), C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>, C.has_kind(r, C.kind_of(C.enc(l, a))), C.map_inr(C.Meaning(l), C.Meaning(r), C.dec(r, C.enc(l, a))), None{})) : Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>}
+      %de(l, a, wf_left(l, r, hw)) : {Some{Inl{a}} == C.map_inl(C.Meaning(l), C.Meaning(r), _) : Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>}
+      {==}
+    case C.SEither{+l, +r} Inr{+b}:
+      %left_miss(l, r, C.enc(r, b), wf_dis(l, r, hw), enc_kind(r, b, wf_right(l, r, hw))) : {Some{Inr{b}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>, _, C.map_inl(C.Meaning(l), C.Meaning(r), C.dec(l, C.enc(r, b))), C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>, C.has_kind(r, C.kind_of(C.enc(r, b))), C.map_inr(C.Meaning(l), C.Meaning(r), C.dec(r, C.enc(r, b))), None{})) : Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>}
+      %enc_kind(r, b, wf_right(l, r, hw)) : {Some{Inr{b}} == C.pick_m(Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>, _, C.map_inr(C.Meaning(l), C.Meaning(r), C.dec(r, C.enc(r, b))), None{}) : Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>}
+      %de(r, b, wf_right(l, r, hw)) : {Some{Inr{b}} == C.map_inr(C.Meaning(l), C.Meaning(r), _) : Maybe<&2, Either<&2, &2, C.Meaning(l), C.Meaning(r)>>}
       {==}
 
 def Laws.decode_encode(s, x, hw):
@@ -3556,6 +4696,22 @@ def tu(b: Bool, h: {b == True{} : Bool}) -> {Maybe.is_some(&2, Unit, C.true_unit
       {==}
     case False{}:
       Empty.absurd({Maybe.is_some(&2, Unit, C.true_unit(False{})) == True{} : Bool}, to_empty(h))
+
+# The union case: the left alternative if it claims the value's kind, else the
+# right one if it does. hl and hr are what has_kind said of that kind.
+def cd_either_tail(-A: Data, -B: Data, hr: Bool, mr: Maybe<&2, B>, cr: Bool, hc: {Bool.and(hr, cr) == True{} : Bool}, ihr: {cr == True{} : Bool} -> {Maybe.is_some(&2, B, mr) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, A, B>, C.pick_m(Maybe<&2, Either<&2, &2, A, B>>, hr, C.map_inr(A, B, mr), None{})) == True{} : Bool}:
+  match hr:
+    case True{}:
+      some_inr(A, B, mr, ihr(hc))
+    case False{}:
+      Empty.absurd({Maybe.is_some(&2, Either<&2, &2, A, B>, None{}) == True{} : Bool}, to_empty(hc))
+
+def cd_either(-A: Data, -B: Data, hl: Bool, hr: Bool, ml: Maybe<&2, A>, mr: Maybe<&2, B>, cl: Bool, cr: Bool, hc: {C.pick_bool(hl, cl, Bool.and(hr, cr)) == True{} : Bool}, ihl: {cl == True{} : Bool} -> {Maybe.is_some(&2, A, ml) == True{} : Bool}, ihr: {cr == True{} : Bool} -> {Maybe.is_some(&2, B, mr) == True{} : Bool}) -> {Maybe.is_some(&2, Either<&2, &2, A, B>, C.pick_m(Maybe<&2, Either<&2, &2, A, B>>, hl, C.map_inl(A, B, ml), C.pick_m(Maybe<&2, Either<&2, &2, A, B>>, hr, C.map_inr(A, B, mr), None{}))) == True{} : Bool}:
+  match hl:
+    case True{}:
+      some_inl(A, B, ml, ihl(hc))
+    case False{}:
+      cd_either_tail(A, B, hr, mr, cr, hc, ihr)
 
 # arms: s r
 # arms leaf: Empty.absurd({Maybe.is_some(&2, C.Meaning($S), C.dec($S, $R)) == True{} : Bool}, to_empty(hc))
@@ -4065,6 +5221,8 @@ def cd(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, s: C.Schema, r: C.Raw, +hc: {C.c
       Empty.absurd({Maybe.is_some(&2, C.Meaning(C.SIntIn{lo, hi}), C.dec(C.SIntIn{lo, hi}, C.RJson{jv})) == True{} : Bool}, to_empty(hc))
     case C.SIntIn{+lo, +hi} C.RNeg{+n}:
       {==}
+    case C.SEither{+l, +r} +x:
+      cd_either(C.Meaning(l), C.Meaning(r), C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.dec(l, x), C.dec(r, x), C.conforms(~rule, l, x, None{}), C.conforms(~rule, r, x, None{}), hc, hh => cd(~rule, l, x, hh), hh => cd(~rule, r, x, hh))
 
 def Laws.checked_decodes(rule, s, r, hc):
   cd(~rule, s, r, hc)
@@ -4153,6 +5311,10 @@ def no_key_once(+k: String, s: C.Schema, x: C.Meaning(s), b: Bool, +h: {C.no_key
       key_step(b, k2, k, cs2, a, not_true(String.eq(k2, k), and_l(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)), no_key_once(k, cs2, a, True{}, and_l(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)))), no_key_once(k, cs2, a, False{}, and_l(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h)))))
     case C.STagged{+k2, n2, +cs2, +rest2} Inr{b2}:
       no_key_once(k, rest2, b2, b, and_r(C.no_key(k, cs2), C.no_key(k, rest2), and_r(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2)), and_r(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(C.no_key(k, cs2), C.no_key(k, rest2))), h))))
+    case C.SEither{+l, +r} Inl{a}:
+      no_key_once(k, l, a, b, and_l(C.no_key(k, l), C.no_key(k, r), h))
+    case C.SEither{+l, +r} Inr{b2}:
+      no_key_once(k, r, b2, b, and_r(C.no_key(k, l), C.no_key(k, r), h))
 
 # ---- what is written is accepted ----
 
@@ -4211,6 +5373,8 @@ def obj_f(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_f(n, s) == Tru
       Empty.absurd({C.is_object(C.enc(C.SOptional{i_}, v)) == True{} : Bool}, to_empty(hf))
     case C.SListLen{lo_, hi_, s2_} v:
       Empty.absurd({C.is_object(C.enc(C.SListLen{lo_, hi_, s2_}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} v:
+      Empty.absurd({C.is_object(C.enc(C.SEither{l_, r_}, v)) == True{} : Bool}, to_empty(hf))
 
 def obj_v(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_v(n, s) == True{} : Bool}) -> {C.is_object(C.enc(s, x)) == True{} : Bool}:
   match s x:
@@ -4268,6 +5432,8 @@ def obj_v(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_v(n, s) == Tru
       Empty.absurd({C.is_object(C.enc(C.SOptional{i_}, v)) == True{} : Bool}, to_empty(hf))
     case C.SListLen{lo_, hi_, s2_} v:
       Empty.absurd({C.is_object(C.enc(C.SListLen{lo_, hi_, s2_}, v)) == True{} : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} v:
+      Empty.absurd({C.is_object(C.enc(C.SEither{l_, r_}, v)) == True{} : Bool}, to_empty(hf))
 
 # No variant of a well-formed chain is in an object holding one other key.
 def np(+n: String, s: C.Schema, +v: C.Raw, +hf: {C.fresh_v(n, s) == True{} : Bool}) -> {C.none_present(s, C.RKey{n, v, C.REnd{}}) == True{} : Bool}:
@@ -4320,6 +5486,8 @@ def np(+n: String, s: C.Schema, +v: C.Raw, +hf: {C.fresh_v(n, s) == True{} : Boo
     case C.STuple{ts_, rest_}:
       {==}
     case C.STEnd{}:
+      {==}
+    case C.SEither{l_, r_}:
       {==}
 
 # n is not a key of what enc writes for the record chain s: enc writes the
@@ -4381,6 +5549,8 @@ def key_once_enc(+n: String, s: C.Schema, x: C.Meaning(s), +hf: {C.fresh_f(n, s)
       Empty.absurd({True{} == C.key_once_at(C.enc(C.SOptional{i_}, v), True{}, n) : Bool}, to_empty(hf))
     case C.SListLen{lo_, hi_, s2_} v:
       Empty.absurd({True{} == C.key_once_at(C.enc(C.SListLen{lo_, hi_, s2_}, v), True{}, n) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} v:
+      Empty.absurd({True{} == C.key_once_at(C.enc(C.SEither{l_, r_}, v), True{}, n) : Bool}, to_empty(hf))
 
 # A present value of an optional schema conforms as its inner schema does.
 def opt_conf(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, i: C.Schema, r: C.Raw, +hn: {False{} == C.nullish(r) : Bool}) -> {C.conforms(~rule, i, r, None{}) == C.conforms(~rule, C.SOpt{i}, r, None{}) : Bool}:
@@ -4446,7 +5616,7 @@ def var_skip(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, +vs: C.Schema,
 # A record chain ignores a key it does not name.
 # arms: s o
 # arms leaf: Empty.absurd({C.conforms(~rule, $S, $R, None{}) == C.conforms(~rule, $S, C.RKey{n, v, $R}, None{}) : Bool}, to_empty($W))
-# arms why: RNeg=ho SInt=hf SIntIn=hf RJson=ho SJson=hf RNum=ho RBool=ho RNull=ho RStr=ho RBad=ho RTooBig=ho RMissing=ho RNil=ho RCons=ho SNat=hf SStr=hf SOpt=hf SList=hf SRule=hf SStrict=hf SBool=hf SNatIn=hf SStrLen=hf STagged=hf STagEnd=hf STrue=hf SEnum=hf SVariant=hf SVEnd=hf STuple=hf STEnd=hf SOptional=hf SListLen=hf
+# arms why: SEither=hf RNeg=ho SInt=hf SIntIn=hf RJson=ho SJson=hf RNum=ho RBool=ho RNull=ho RStr=ho RBad=ho RTooBig=ho RMissing=ho RNil=ho RCons=ho SNat=hf SStr=hf SOpt=hf SList=hf SRule=hf SStrict=hf SBool=hf SNatIn=hf SStrLen=hf STagged=hf STagEnd=hf STrue=hf SEnum=hf SVariant=hf SVEnd=hf STuple=hf STEnd=hf SOptional=hf SListLen=hf
 def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v: C.Raw, o: C.Raw, +hf: {C.fresh_f(n, s) == True{} : Bool}, +ho: {C.is_object(o) == True{} : Bool}) -> {C.conforms(~rule, s, o, None{}) == C.conforms(~rule, s, C.RKey{n, v, o}, None{}) : Bool}:
   match s o:
     case C.SNat{} C.RNum{n__}:
@@ -5078,6 +6248,32 @@ def skip_c(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +n: String, s: C.Schema, +v:
       Empty.absurd({C.conforms(~rule, C.SIntIn{lo_, hi_}, C.RJson{jv}, None{}) == C.conforms(~rule, C.SIntIn{lo_, hi_}, C.RKey{n, v, C.RJson{jv}}, None{}) : Bool}, to_empty(ho))
     case C.SIntIn{lo_, hi_} C.RNeg{n__}:
       Empty.absurd({C.conforms(~rule, C.SIntIn{lo_, hi_}, C.RNeg{n__}, None{}) == C.conforms(~rule, C.SIntIn{lo_, hi_}, C.RKey{n, v, C.RNeg{n__}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RNum{n__}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RNum{n__}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RNum{n__}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RBool{b__}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RBool{b__}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RBool{b__}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RNull{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RNull{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RNull{}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RStr{s__}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RStr{s__}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RStr{s__}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RBad{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RBad{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RBad{}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RTooBig{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RTooBig{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RTooBig{}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RMissing{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RMissing{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RMissing{}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RNil{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RNil{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RNil{}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RCons{head__, tail__}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RCons{head__, tail__}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RCons{head__, tail__}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.REnd{}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.REnd{}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.REnd{}}, None{}) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} C.RKey{+k, +w, +o2}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RKey{k, w, o2}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RKey{k, w, o2}}, None{}) : Bool}, to_empty(hf))
+    case C.SEither{l_, r_} C.RJson{+jv}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RJson{jv}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RJson{jv}}, None{}) : Bool}, to_empty(ho))
+    case C.SEither{l_, r_} C.RNeg{n__}:
+      Empty.absurd({C.conforms(~rule, C.SEither{l_, r_}, C.RNeg{n__}, None{}) == C.conforms(~rule, C.SEither{l_, r_}, C.RKey{n, v, C.RNeg{n__}}, None{}) : Bool}, to_empty(ho))
 
 # A strict object's encoding: every key enc writes for a chain of keys is
 # one of the chain's names; a longer list of names allows at least as much.
@@ -5174,6 +6370,8 @@ def keyed_enc(s: C.Schema, x: C.Meaning(s), +hk: {C.is_keyed(s) == True{} : Bool
       Empty.absurd({C.no_extra(C.key_names(C.SOptional{i_}), C.enc(C.SOptional{i_}, v)) == True{} : Bool}, to_empty(hk))
     case C.SListLen{lo_, hi_, s2_} v:
       Empty.absurd({C.no_extra(C.key_names(C.SListLen{lo_, hi_, s2_}), C.enc(C.SListLen{lo_, hi_, s2_}, v)) == True{} : Bool}, to_empty(hk))
+    case C.SEither{l_, r_} v:
+      Empty.absurd({C.no_extra(C.key_names(C.SEither{l_, r_}), C.enc(C.SEither{l_, r_}, v)) == True{} : Bool}, to_empty(hk))
 
 def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.names_ok(s, x) == True{} : Bool}, +hb: {C.bounds_ok(s, x) == True{} : Bool}) -> {C.conforms(~C.no_rule, s, C.enc(s, x), None{}) == True{} : Bool}:
   match s x:
@@ -5195,7 +6393,7 @@ def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.na
     case C.SOptional{+i} None{}:
       {==}
     case C.SOptional{+i} Some{+v}:
-      %not_missing(i, v, not_true(C.opt_at(i), and_l(Bool.not(C.opt_at(i)), C.wf(i), hw))) : {Bool.or(_, C.conforms(~C.no_rule, i, C.enc(i, v), None{})) == True{} : Bool}
+      %not_missing(i, v, not_true(C.opt_at(i), and_l(Bool.not(C.opt_at(i)), C.wf(i), hw)), and_r(Bool.not(C.opt_at(i)), C.wf(i), hw)) : {Bool.or(_, C.conforms(~C.no_rule, i, C.enc(i, v), None{})) == True{} : Bool}
       ec(i, v, and_r(Bool.not(C.opt_at(i)), C.wf(i), hw), hn, hb)
     case C.SList{e} Nil{}:
       {==}
@@ -5240,7 +6438,7 @@ def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.na
       hn
     case C.SVariant{+n, +vs, +rest} Inl{+a}:
       %lk_self(n, C.enc(vs, a), C.REnd{}) : {C.pick_bool(C.is_missing(_), C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(vs, a), C.REnd{}}, None{}), Bool.and(C.conforms(~C.no_rule, vs, _, None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}))) == True{} : Bool}
-      %not_missing(vs, a, not_true(C.opt_at(vs), and_l(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))) : {C.pick_bool(_, C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(vs, a), C.REnd{}}, None{}), Bool.and(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}))) == True{} : Bool}
+      %not_missing(vs, a, not_true(C.opt_at(vs), and_l(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)), and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))) : {C.pick_bool(_, C.conforms(~C.no_rule, rest, C.RKey{n, C.enc(vs, a), C.REnd{}}, None{}), Bool.and(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}))) == True{} : Bool}
       and_true2(C.conforms(~C.no_rule, vs, C.enc(vs, a), None{}), C.none_present(rest, C.RKey{n, C.enc(vs, a), C.REnd{}}), ec(vs, a, and_l(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)), hn, hb), np(n, rest, C.enc(vs, a), and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)))))
     case C.SVariant{+n, +vs, +rest} Inr{+b}:
       %var_skip(~C.no_rule, n, vs, rest, C.enc(rest, b), obj_v(n, rest, b, and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw)))), absent(n, rest, b, and_l(C.fresh_v(n, rest), C.wf(rest), and_r(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest)), and_r(Bool.not(C.opt_at(vs)), Bool.and(C.wf(vs), Bool.and(C.fresh_v(n, rest), C.wf(rest))), hw))))) : {_ == True{} : Bool}
@@ -5251,6 +6449,13 @@ def ec(s: C.Schema, x: C.Meaning(s), +hw: {C.wf(s) == True{} : Bool}, +hn: {C.na
       and_true2(C.conforms(~C.no_rule, ts, C.enc(ts, a), None{}), C.conforms(~C.no_rule, rest, C.enc(rest, b), None{}), ec(ts, a, and_l(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest)), and_r(Bool.not(C.opt_at(ts)), Bool.and(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest))), hw)), and_l(C.names_ok(ts, a), C.names_ok(rest, b), hn), and_l(C.bounds_ok(ts, a), C.bounds_ok(rest, b), hb)), ec(rest, b, and_r(Bool.not(C.opt_at(rest)), C.wf(rest), and_r(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest)), and_r(Bool.not(C.opt_at(ts)), Bool.and(C.wf(ts), Bool.and(Bool.not(C.opt_at(rest)), C.wf(rest))), hw))), and_r(C.names_ok(ts, a), C.names_ok(rest, b), hn), and_r(C.bounds_ok(ts, a), C.bounds_ok(rest, b), hb)))
     case C.STEnd{} Unit{}:
       {==}
+    case C.SEither{+l, +r} Inl{+a}:
+      %enc_kind(l, a, wf_left(l, r, hw)) : {C.pick_bool(_, C.conforms(~C.no_rule, l, C.enc(l, a), None{}), Bool.and(C.has_kind(r, C.kind_of(C.enc(l, a))), C.conforms(~C.no_rule, r, C.enc(l, a), None{}))) == True{} : Bool}
+      ec(l, a, wf_left(l, r, hw), hn, hb)
+    case C.SEither{+l, +r} Inr{+b}:
+      %left_miss(l, r, C.enc(r, b), wf_dis(l, r, hw), enc_kind(r, b, wf_right(l, r, hw))) : {C.pick_bool(_, C.conforms(~C.no_rule, l, C.enc(r, b), None{}), Bool.and(C.has_kind(r, C.kind_of(C.enc(r, b))), C.conforms(~C.no_rule, r, C.enc(r, b), None{}))) == True{} : Bool}
+      %enc_kind(r, b, wf_right(l, r, hw)) : {Bool.and(_, C.conforms(~C.no_rule, r, C.enc(r, b), None{})) == True{} : Bool}
+      ec(r, b, wf_right(l, r, hw), hn, hb)
 
 def Laws.encode_conforms(s, x, hw, hn, hb):
   ec(s, x, hw, hn, hb)
@@ -5933,3 +7138,80 @@ def sint_in_go(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +lo: C.Int, +hi: C.Int, 
 
 def Laws.sint_in_meaning(rule, lo, hi, r):
   sint_in_go(~rule, lo, hi, r)
+
+# ---- union_exact ----
+#
+# A union reads a value by its kind. When the left alternative claims the kind
+# it reads the value and the right one cannot accept it (kind_sound, and the
+# kinds are apart); when only the right claims it, the left cannot; when
+# neither does nobody accepts.
+
+def ue_bools(hl: Bool, hr: Bool, cl: Bool, cr: Bool, ksl: {cl == True{} : Bool} -> {hl == True{} : Bool}, ksr: {cr == True{} : Bool} -> {hr == True{} : Bool}, hd: {Bool.not(Bool.and(hl, hr)) == True{} : Bool}) -> {C.pick_bool(hl, cl, Bool.and(hr, cr)) == Bool.or(cl, cr) : Bool}:
+  match hl hr cl cr:
+    case True{} True{} True{} True{}:
+      Empty.absurd({C.pick_bool(True{}, True{}, Bool.and(True{}, True{})) == Bool.or(True{}, True{}) : Bool}, to_empty(hd))
+    case True{} True{} True{} False{}:
+      Empty.absurd({C.pick_bool(True{}, True{}, Bool.and(True{}, False{})) == Bool.or(True{}, False{}) : Bool}, to_empty(hd))
+    case True{} True{} False{} True{}:
+      Empty.absurd({C.pick_bool(True{}, False{}, Bool.and(True{}, True{})) == Bool.or(False{}, True{}) : Bool}, to_empty(hd))
+    case True{} True{} False{} False{}:
+      Empty.absurd({C.pick_bool(True{}, False{}, Bool.and(True{}, False{})) == Bool.or(False{}, False{}) : Bool}, to_empty(hd))
+    case True{} False{} True{} True{}:
+      Empty.absurd({C.pick_bool(True{}, True{}, Bool.and(False{}, True{})) == Bool.or(True{}, True{}) : Bool}, to_empty(ksr({==})))
+    case True{} False{} True{} False{}:
+      {==}
+    case True{} False{} False{} True{}:
+      Empty.absurd({C.pick_bool(True{}, False{}, Bool.and(False{}, True{})) == Bool.or(False{}, True{}) : Bool}, to_empty(ksr({==})))
+    case True{} False{} False{} False{}:
+      {==}
+    case False{} True{} True{} True{}:
+      Empty.absurd({C.pick_bool(False{}, True{}, Bool.and(True{}, True{})) == Bool.or(True{}, True{}) : Bool}, to_empty(ksl({==})))
+    case False{} True{} True{} False{}:
+      Empty.absurd({C.pick_bool(False{}, True{}, Bool.and(True{}, False{})) == Bool.or(True{}, False{}) : Bool}, to_empty(ksl({==})))
+    case False{} True{} False{} True{}:
+      {==}
+    case False{} True{} False{} False{}:
+      {==}
+    case False{} False{} True{} True{}:
+      Empty.absurd({C.pick_bool(False{}, True{}, Bool.and(False{}, True{})) == Bool.or(True{}, True{}) : Bool}, to_empty(ksl({==})))
+    case False{} False{} True{} False{}:
+      Empty.absurd({C.pick_bool(False{}, True{}, Bool.and(False{}, False{})) == Bool.or(True{}, False{}) : Bool}, to_empty(ksl({==})))
+    case False{} False{} False{} True{}:
+      Empty.absurd({C.pick_bool(False{}, False{}, Bool.and(False{}, True{})) == Bool.or(False{}, True{}) : Bool}, to_empty(ksr({==})))
+    case False{} False{} False{} False{}:
+      {==}
+
+def ue(~rule: Nat -> C.Raw -> Maybe<&2, C.Err>, +l: C.Schema, +r: C.Schema, +x: C.Raw, +prev: Maybe<&2, Nat>, +hw: {C.wf(C.SEither{l, r}) == True{} : Bool}) -> {C.conforms(~rule, C.SEither{l, r}, x, prev) == Bool.or(C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev)) : Bool}:
+  ue_bools(C.has_kind(l, C.kind_of(x)), C.has_kind(r, C.kind_of(x)), C.conforms(~rule, l, x, prev), C.conforms(~rule, r, x, prev), hh => ks(~rule, l, x, prev, wf_left(l, r, hw), hh), hh => ks(~rule, r, x, prev, wf_right(l, r, hw), hh), dis_apart(l, r, C.kind_of(x), wf_dis(l, r, hw)))
+
+def Laws.union_exact(rule, l, r, x, prev, hw):
+  ue(~rule, l, r, x, prev, hw)
+
+# ---- union_reports_alternative ----
+#
+# The union's check is pick_err on the kind; the kind the premise names is the
+# left one's, so the pick takes the left alternative's report.
+
+def Laws.union_reports_alternative(rule, l, r, x, prev, hl):
+  %Equal.sym(Bool, C.has_kind(l, C.kind_of(x)), True{}, hl) : {C.pick_err(_, C.check(~rule, l, x, prev), C.pick_err(C.has_kind(r, C.kind_of(x)), C.check(~rule, r, x, prev), C.here(C.missing_or(x, C.no_alt(C.SEither{l, r}))))) == C.check(~rule, l, x, prev) : Maybe<&2, C.Err>}
+  {==}
+
+# ---- union_reports_right ----
+#
+# The left pick falls through on the left kind's False, and the right pick
+# takes the right alternative's report on the right kind's True.
+
+def Laws.union_reports_right(rule, l, r, x, prev, hl, hr):
+  %Equal.sym(Bool, C.has_kind(l, C.kind_of(x)), False{}, hl) : {C.pick_err(_, C.check(~rule, l, x, prev), C.pick_err(C.has_kind(r, C.kind_of(x)), C.check(~rule, r, x, prev), C.here(C.missing_or(x, C.no_alt(C.SEither{l, r}))))) == C.check(~rule, r, x, prev) : Maybe<&2, C.Err>}
+  %Equal.sym(Bool, C.has_kind(r, C.kind_of(x)), True{}, hr) : {C.pick_err(_, C.check(~rule, r, x, prev), C.here(C.missing_or(x, C.no_alt(C.SEither{l, r})))) == C.check(~rule, r, x, prev) : Maybe<&2, C.Err>}
+  {==}
+
+# ---- union_no_alternative ----
+#
+# When neither alternative claims the kind, both picks fall through to the
+# union's own error at the value.
+
+def Laws.union_no_alternative(rule, l, r, x, prev, hl, hr):
+  %Equal.sym(Bool, C.has_kind(l, C.kind_of(x)), False{}, hl) : {C.pick_err(_, C.check(~rule, l, x, prev), C.pick_err(C.has_kind(r, C.kind_of(x)), C.check(~rule, r, x, prev), C.here(C.missing_or(x, C.no_alt(C.SEither{l, r}))))) == Some{C.Err{[], C.missing_or(x, C.no_alt(C.SEither{l, r}))}} : Maybe<&2, C.Err>}
+  %Equal.sym(Bool, C.has_kind(r, C.kind_of(x)), False{}, hr) : {C.pick_err(_, C.check(~rule, r, x, prev), C.here(C.missing_or(x, C.no_alt(C.SEither{l, r})))) == Some{C.Err{[], C.missing_or(x, C.no_alt(C.SEither{l, r}))}} : Maybe<&2, C.Err>}
+  {==}

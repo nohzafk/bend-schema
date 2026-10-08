@@ -22,6 +22,25 @@ class $C$LengthNotIn$lo$hi { constructor(a0, a1) { this.$ = "LengthNotIn"; this.
 class $C$NotIn$lo$hi { constructor(a0, a1) { this.$ = "NotIn"; this.lo = a0; this.hi = a1; } }
 class $C$AtField$skip$name { constructor(a0, a1) { this.$ = "AtField"; this.skip = a0; this.name = a1; } }
 class $C$RepeatedKey$key { constructor(a0) { this.$ = "RepeatedKey"; this.key = a0; } }
+class $C$KNum { constructor() { this.$ = "KNum"; } }
+const $N$KNum = new $C$KNum();
+class $C$KStr { constructor() { this.$ = "KStr"; } }
+const $N$KStr = new $C$KStr();
+class $C$KBool { constructor() { this.$ = "KBool"; } }
+const $N$KBool = new $C$KBool();
+class $C$KList { constructor() { this.$ = "KList"; } }
+const $N$KList = new $C$KList();
+class $C$KObj { constructor() { this.$ = "KObj"; } }
+const $N$KObj = new $C$KObj();
+class $C$KNull { constructor() { this.$ = "KNull"; } }
+const $N$KNull = new $C$KNull();
+class $C$KAbsent { constructor() { this.$ = "KAbsent"; } }
+const $N$KAbsent = new $C$KAbsent();
+class $C$KJson { constructor() { this.$ = "KJson"; } }
+const $N$KJson = new $C$KJson();
+class $C$KOther { constructor() { this.$ = "KOther"; } }
+const $N$KOther = new $C$KOther();
+class $C$NoAlternative$num$str$bool$list$obj$null { constructor(a0, a1, a2, a3, a4, a5) { this.$ = "NoAlternative"; this.num = a0; this.str = a1; this.bool = a2; this.list = a3; this.obj = a4; this.null = a5; } }
 class $C$Missing { constructor() { this.$ = "Missing"; } }
 const $N$Missing = new $C$Missing();
 class $C$TooLarge { constructor() { this.$ = "TooLarge"; } }
@@ -80,6 +99,7 @@ class $C$TooShort { constructor() { this.$ = "TooShort"; } }
 const $N$TooShort = new $C$TooShort();
 class $C$TooLong { constructor() { this.$ = "TooLong"; } }
 const $N$TooLong = new $C$TooLong();
+class $C$SEither$l$r { constructor(a0, a1) { this.$ = "SEither"; this.l = a0; this.r = a1; } }
 class $C$LT { constructor() { this.$ = "LT"; } }
 const $N$LT = new $C$LT();
 class $C$GT { constructor() { this.$ = "GT"; } }
@@ -646,6 +666,197 @@ function $key_err$(_b_0, _name_0) {
   } else {
     return new $C$Some$value(new $C$Err$path$why(new $C$Con$head$tail(new $C$AtField$skip$name(0, _name_0), $N$Nil), new $C$RepeatedKey$key(_name_0)));
   }
+}
+
+function $kind_eq$(_a_0, _b_0) {
+  if (_a_0.$ === "KNum") {
+    if (_b_0.$ === "KNum") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KStr") {
+    if (_b_0.$ === "KStr") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KBool") {
+    if (_b_0.$ === "KBool") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KList") {
+    if (_b_0.$ === "KList") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KObj") {
+    if (_b_0.$ === "KObj") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KNull") {
+    if (_b_0.$ === "KNull") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KAbsent") {
+    if (_b_0.$ === "KAbsent") {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (_a_0.$ === "KJson") {
+    if (_b_0.$ === "KJson") {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    if (_b_0.$ === "KOther") {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
+function $kind_of$(_r_0) {
+  if (_r_0.$ === "RNum") {
+    return $N$KNum;
+  } else if (_r_0.$ === "RNeg") {
+    return $N$KNum;
+  } else if (_r_0.$ === "RStr") {
+    return $N$KStr;
+  } else if (_r_0.$ === "RBool") {
+    return $N$KBool;
+  } else if (_r_0.$ === "RNil") {
+    return $N$KList;
+  } else if (_r_0.$ === "RCons") {
+    return $N$KList;
+  } else if (_r_0.$ === "REnd") {
+    return $N$KObj;
+  } else if (_r_0.$ === "RKey") {
+    return $N$KObj;
+  } else if (_r_0.$ === "RNull") {
+    return $N$KNull;
+  } else if (_r_0.$ === "RMissing") {
+    return $N$KAbsent;
+  } else if (_r_0.$ === "RJson") {
+    return $N$KJson;
+  } else {
+    return $N$KOther;
+  }
+}
+
+function $has_kind$($0, $1) {
+  const $stk = [];
+  for (;;) {
+    {
+      const _s_0 = $0;
+      const _k_0 = $1;
+      if (_s_0.$ === "SNat") {
+        return $unwind$($stk, $kind_eq$($N$KNum, _k_0));
+      } else if (_s_0.$ === "SNatIn") {
+        return $unwind$($stk, $kind_eq$($N$KNum, _k_0));
+      } else if (_s_0.$ === "SInt") {
+        return $unwind$($stk, $kind_eq$($N$KNum, _k_0));
+      } else if (_s_0.$ === "SIntIn") {
+        return $unwind$($stk, $kind_eq$($N$KNum, _k_0));
+      } else if (_s_0.$ === "SStr") {
+        return $unwind$($stk, $kind_eq$($N$KStr, _k_0));
+      } else if (_s_0.$ === "SEnum") {
+        return $unwind$($stk, $kind_eq$($N$KStr, _k_0));
+      } else if (_s_0.$ === "SBool") {
+        return $unwind$($stk, $kind_eq$($N$KBool, _k_0));
+      } else if (_s_0.$ === "STrue") {
+        return $unwind$($stk, $kind_eq$($N$KBool, _k_0));
+      } else if (_s_0.$ === "SList") {
+        return $unwind$($stk, $kind_eq$($N$KList, _k_0));
+      } else if (_s_0.$ === "STuple") {
+        return $unwind$($stk, $kind_eq$($N$KList, _k_0));
+      } else if (_s_0.$ === "STEnd") {
+        return $unwind$($stk, $kind_eq$($N$KList, _k_0));
+      } else if (_s_0.$ === "SField") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "SEnd") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "STagged") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "STagEnd") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "SVariant") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "SVEnd") {
+        return $unwind$($stk, $kind_eq$($N$KObj, _k_0));
+      } else if (_s_0.$ === "SJson") {
+        return $unwind$($stk, $kind_eq$($N$KJson, _k_0));
+      } else if (_s_0.$ === "SOpt") {
+        const _i_0 = _s_0["inner"];
+        const _x_0 = ($kind_eq$($N$KNull, _k_0));
+        {
+          $stk.push(($r) => { const _x_1 = ($r); return (_x_0 || _x_1); });
+          const $a0 = _i_0; const $a1 = _k_0; $0 = $a0; $1 = $a1; continue;
+        }
+      } else if (_s_0.$ === "SOptional") {
+        const _i_1 = _s_0["inner"];
+        const _x_2 = ($kind_eq$($N$KAbsent, _k_0));
+        {
+          $stk.push(($r) => { const _x_3 = ($r); return (_x_2 || _x_3); });
+          const $a0 = _i_1; const $a1 = _k_0; $0 = $a0; $1 = $a1; continue;
+        }
+      } else if (_s_0.$ === "SStrLen") {
+        const _s2_0 = _s_0["s"];
+        $0 = _s2_0;
+        $1 = _k_0;
+        continue;
+      } else if (_s_0.$ === "SListLen") {
+        const _s2_1 = _s_0["s"];
+        $0 = _s2_1;
+        $1 = _k_0;
+        continue;
+      } else if (_s_0.$ === "SRule") {
+        const _s2_2 = _s_0["s"];
+        $0 = _s2_2;
+        $1 = _k_0;
+        continue;
+      } else if (_s_0.$ === "SStrict") {
+        const _s2_3 = _s_0["s"];
+        $0 = _s2_3;
+        $1 = _k_0;
+        continue;
+      } else {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        const _x_4 = ($has_kind$(_l_0, _k_0));
+        {
+          $stk.push(($r) => { const _x_5 = ($r); return (_x_4 || _x_5); });
+          const $a0 = _r_0; const $a1 = _k_0; $0 = $a0; $1 = $a1; continue;
+        }
+      }
+    }
+  }
+}
+
+function $apart$(_l_0, _r_0, _k_0) {
+  return $Bool$not$(($Bool$and$(($has_kind$(_l_0, _k_0)), ($has_kind$(_r_0, _k_0)))));
+}
+
+function $disjoint$(_l_0, _r_0) {
+  return $Bool$and$(($apart$(_l_0, _r_0, $N$KNum)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KStr)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KBool)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KList)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KObj)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KNull)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KAbsent)), ($Bool$and$(($apart$(_l_0, _r_0, $N$KJson)), ($apart$(_l_0, _r_0, $N$KOther)))))))))))))))));
+}
+
+function $alt_ok$(_s_0) {
+  return $Bool$and$(($Bool$not$(($has_kind$(_s_0, $N$KAbsent)))), ($Bool$not$(($has_kind$(_s_0, $N$KJson)))));
+}
+
+function $no_alt$(_s_0) {
+  return new $C$NoAlternative$num$str$bool$list$obj$null(($has_kind$(_s_0, $N$KNum)), ($has_kind$(_s_0, $N$KStr)), ($has_kind$(_s_0, $N$KBool)), ($has_kind$(_s_0, $N$KList)), ($has_kind$(_s_0, $N$KObj)), ($has_kind$(_s_0, $N$KNull)));
 }
 
 function $here$(_w_0) {
@@ -1465,6 +1676,8 @@ function $Meaning$($0) {
         return null;
       } else if (_s_0.$ === "SInt") {
         return null;
+      } else if (_s_0.$ === "SIntIn") {
+        return null;
       } else {
         return null;
       }
@@ -1609,8 +1822,22 @@ function $enc$($0, $1) {
         return $unwind$($stk, new $C$RJson$value(_x_0));
       } else if (_s_0.$ === "SInt") {
         return $unwind$($stk, $int_raw$(_x_0));
-      } else {
+      } else if (_s_0.$ === "SIntIn") {
         return $unwind$($stk, $int_raw$(_x_0));
+      } else {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        if (_x_0.$ === "Inl") {
+          const _a_4 = _x_0["value"];
+          $0 = _l_0;
+          $1 = _a_4;
+          continue;
+        } else {
+          const _b_4 = _x_0["value"];
+          $0 = _r_0;
+          $1 = _b_4;
+          continue;
+        }
       }
     }
   }
@@ -1873,6 +2100,16 @@ function $dec$($0, $1) {
         } else {
           return $unwind$($stk, $N$None);
         }
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_1 = _s_0["r"];
+        {
+          const $t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
+          const $t1 = ($map_inl$(($dec$(_l_0, _r_0))));
+          const $t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
+          $stk.push(($r) => ($pick_m$($t0, $t1, ($pick_m$($t2, ($map_inr$(($r))), $N$None)))));
+          const $a0 = _r_1; const $a1 = _r_0; $0 = $a0; $1 = $a1; continue;
+        }
       } else {
         return $unwind$($stk, $N$None);
       }
@@ -1922,13 +2159,14 @@ function $opt_at$($0) {
 }
 
 function $nullable$($0) {
+  const $stk = [];
   for (;;) {
     {
       const _s_0 = $0;
       if (_s_0.$ === "SOpt") {
-        return true;
+        return $unwind$($stk, true);
       } else if (_s_0.$ === "SOptional") {
-        return true;
+        return $unwind$($stk, true);
       } else if (_s_0.$ === "SRule") {
         const _s2_0 = _s_0["s"];
         $0 = _s2_0;
@@ -1953,8 +2191,16 @@ function $nullable$($0) {
         const _rest_1 = _s_0["rest"];
         $0 = _rest_1;
         continue;
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        const _x_0 = ($nullable$(_l_0));
+        {
+          $stk.push(($r) => { const _x_1 = ($r); return (_x_0 || _x_1); });
+          const $a0 = _r_0; $0 = $a0; continue;
+        }
       } else {
-        return false;
+        return $unwind$($stk, false);
       }
     }
   }
@@ -2014,6 +2260,14 @@ function $no_key$($0, $1) {
         $0 = _k_0;
         $1 = _i_1;
         continue;
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        {
+          const $t0 = ($no_key$(_k_0, _l_0));
+          $stk.push(($r) => ($Bool$and$($t0, ($r))));
+          const $a0 = _k_0; const $a1 = _r_0; $0 = $a0; $1 = $a1; continue;
+        }
       } else if (_s_0.$ === "STagged") {
         const _k2_0 = _s_0["key"];
         const _cs2_0 = _s_0["s"];
@@ -2216,6 +2470,17 @@ function $wf$(_s_0) {
     }
   } else if (_s_0.$ === "SJson") {
     return $unwind$($stk, true);
+  } else if (_s_0.$ === "SEither") {
+    const _l_0 = _s_0["l"];
+    const _r_0 = _s_0["r"];
+    {
+      const $t0 = ($alt_ok$(_l_0));
+      const $t1 = ($alt_ok$(_r_0));
+      const $t2 = ($disjoint$(_l_0, _r_0));
+      const $t3 = ($wf$(_l_0));
+      $stk.push(($r) => ($Bool$and$($t0, ($Bool$and$($t1, ($Bool$and$($t2, ($Bool$and$($t3, ($r))))))))));
+      const $a0 = _r_0; _s_0 = $a0; continue;
+    }
   } else {
     return $unwind$($stk, true);
   }
@@ -2334,6 +2599,20 @@ function $names_ok$($0, $1) {
         }
       } else if (_s_0.$ === "SJson") {
         return $unwind$($stk, true);
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        if (_x_0.$ === "Inl") {
+          const _a_4 = _x_0["value"];
+          $0 = _l_0;
+          $1 = _a_4;
+          continue;
+        } else {
+          const _b_4 = _x_0["value"];
+          $0 = _r_0;
+          $1 = _b_4;
+          continue;
+        }
       } else {
         return $unwind$($stk, true);
       }
@@ -2464,6 +2743,20 @@ function $bounds_ok$($0, $1) {
         const _lo_3 = _s_0["lo"];
         const _hi_3 = _s_0["hi"];
         return $unwind$($stk, $int_ok$(_lo_3, _hi_3, _x_0));
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_0 = _s_0["r"];
+        if (_x_0.$ === "Inl") {
+          const _a_4 = _x_0["value"];
+          $0 = _l_0;
+          $1 = _a_4;
+          continue;
+        } else {
+          const _b_4 = _x_0["value"];
+          $0 = _r_0;
+          $1 = _b_4;
+          continue;
+        }
       } else {
         return $unwind$($stk, true);
       }
@@ -2732,13 +3025,23 @@ function $check$1260$($0, $1, $2) {
         } else {
           return $unwind$($stk, $here$(($missing_or$(_r_0, $N$NotList))));
         }
-      } else {
+      } else if (_s_0.$ === "STEnd") {
         if (_r_0.$ === "RNil") {
           return $unwind$($stk, $N$None);
         } else if (_r_0.$ === "RCons") {
           return $unwind$($stk, $here$($N$TooLong));
         } else {
           return $unwind$($stk, $here$(($missing_or$(_r_0, $N$NotList))));
+        }
+      } else {
+        const _l_0 = _s_0["l"];
+        const _r_1 = _s_0["r"];
+        {
+          const $t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
+          const $t1 = ($check$1260$(_l_0, _r_0, _prev_0));
+          const $t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
+          $stk.push(($r) => ($pick_err$($t0, $t1, ($pick_err$($t2, ($r), ($here$(($missing_or$(_r_0, ($no_alt$(new $C$SEither$l$r(_l_0, _r_1))))))))))));
+          const $a0 = _r_1; const $a1 = _r_0; const $a2 = _prev_0; $0 = $a0; $1 = $a1; $2 = $a2; continue;
         }
       }
     }
@@ -2970,6 +3273,16 @@ function $conforms$1260$($0, $1, $2) {
         } else {
           return $unwind$($stk, false);
         }
+      } else if (_s_0.$ === "SEither") {
+        const _l_0 = _s_0["l"];
+        const _r_1 = _s_0["r"];
+        {
+          const $t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
+          const $t1 = ($conforms$1260$(_l_0, _r_0, _prev_0));
+          const $t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
+          $stk.push(($r) => ($pick_bool$($t0, $t1, ($Bool$and$($t2, ($r))))));
+          const $a0 = _r_1; const $a1 = _r_0; const $a2 = _prev_0; $0 = $a0; $1 = $a1; $2 = $a2; continue;
+        }
       } else {
         return $unwind$($stk, false);
       }
@@ -3151,7 +3464,8 @@ function $0m2(v) {
       case "SJson": at[key] = v; return top[0];
       case "SInt": at[key] = v; return top[0];
       case "SIntIn": at = at[key] = {...v, "lo": $0m3(v["lo"]), "hi": $0m3(v["hi"])}; return top[0];
-      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn); a tag names its constructor as the"
+      case "SEither": at = at[key] = {...v, "l": $0m2(v["l"])}; key = "r"; v = v[key]; continue;
+      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn, SEither); a tag names its constructor as the"
       + " loading file sees it, which a later version will make the same"
       + " everywhere (#1105)";
     }
@@ -3199,7 +3513,8 @@ function $0m4(v) {
       case "SJson": at[key] = v; return top[0];
       case "SInt": at[key] = v; return top[0];
       case "SIntIn": at = at[key] = {...v, "lo": $0m5(v["lo"]), "hi": $0m5(v["hi"])}; return top[0];
-      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn); a tag names its constructor as the"
+      case "SEither": at = at[key] = {...v, "l": $0m4(v["l"])}; key = "r"; v = v[key]; continue;
+      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn, SEither); a tag names its constructor as the"
       + " loading file sees it, which a later version will make the same"
       + " everywhere (#1105)";
     }
@@ -3235,7 +3550,8 @@ function $0m6(v) {
       case "NotJson": at[key] = v; return top[0];
       case "NotInt": at[key] = v; return top[0];
       case "IntNotIn": at = at[key] = {...v, "lo": $0m3(v["lo"]), "hi": $0m3(v["hi"])}; return top[0];
-      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn); a tag names its constructor as the"
+      case "NoAlternative": at[key] = v; return top[0];
+      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn, NoAlternative); a tag names its constructor as the"
       + " loading file sees it, which a later version will make the same"
       + " everywhere (#1105)";
     }
@@ -3271,7 +3587,8 @@ function $0m7(v) {
       case "NotJson": at[key] = v; return top[0];
       case "NotInt": at[key] = v; return top[0];
       case "IntNotIn": at = at[key] = {...v, "lo": $0m5(v["lo"]), "hi": $0m5(v["hi"])}; return top[0];
-      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn); a tag names its constructor as the"
+      case "NoAlternative": at[key] = v; return top[0];
+      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn, NoAlternative); a tag names its constructor as the"
       + " loading file sees it, which a later version will make the same"
       + " everywhere (#1105)";
     }
@@ -3469,6 +3786,13 @@ const $bend_emit = {
   "key_once_at": run_lib((a0, a1, a2) => { const r = (run_loop($key_once_at$($0m0(a0), (a1), (a2)))); $0m1(a0); (a1); (a2); return r; }, 3),
   "key_once": run_lib((a0, a1) => { const r = (run_loop($key_once$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
   "key_err": run_lib((a0, a1) => { const r = $0m8(run_loop($key_err$((a0), (a1)))); (a0); (a1); return r; }, 2),
+  "kind_eq": run_lib((a0, a1) => { const r = (run_loop($kind_eq$((a0), (a1)))); (a0); (a1); return r; }, 2),
+  "kind_of": run_lib((a0) => { const r = (run_loop($kind_of$($0m0(a0)))); $0m1(a0); return r; }, 1),
+  "has_kind": run_lib((a0, a1) => { const r = (run_loop($has_kind$($0m2(a0), (a1)))); $0m4(a0); (a1); return r; }, 2),
+  "apart": run_lib((a0, a1, a2) => { const r = (run_loop($apart$($0m2(a0), $0m2(a1), (a2)))); $0m4(a0); $0m4(a1); (a2); return r; }, 3),
+  "disjoint": run_lib((a0, a1) => { const r = (run_loop($disjoint$($0m2(a0), $0m2(a1)))); $0m4(a0); $0m4(a1); return r; }, 2),
+  "alt_ok": run_lib((a0) => { const r = (run_loop($alt_ok$($0m2(a0)))); $0m4(a0); return r; }, 1),
+  "no_alt": run_lib((a0) => { const r = $0m7(run_loop($no_alt$($0m2(a0)))); $0m4(a0); return r; }, 1),
   "here": run_lib((a0) => { const r = $0m8(run_loop($here$($0m6(a0)))); $0m7(a0); return r; }, 1),
   "under": run_lib((a0, a1) => { const r = $0m8(run_loop($under$($0m12(a0), $0m13(a1)))); $0m11(a0); $0m8(a1); return r; }, 2),
   "len_err": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($len_err$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
@@ -3575,75 +3899,82 @@ const $bend_emit$29 = $bend_emit["has_key"];
 const $bend_emit$30 = $bend_emit["key_once_at"];
 const $bend_emit$31 = $bend_emit["key_once"];
 const $bend_emit$32 = $bend_emit["key_err"];
-const $bend_emit$33 = $bend_emit["here"];
-const $bend_emit$34 = $bend_emit["under"];
-const $bend_emit$35 = $bend_emit["len_err"];
-const $bend_emit$36 = $bend_emit["later_l_path"];
-const $bend_emit$37 = $bend_emit["later_l"];
-const $bend_emit$38 = $bend_emit["later_i_path"];
-const $bend_emit$39 = $bend_emit["later_i"];
-const $bend_emit$40 = $bend_emit["later_f_path"];
-const $bend_emit$41 = $bend_emit["later_f"];
-const $bend_emit$42 = $bend_emit["first"];
-const $bend_emit$43 = $bend_emit["missing_or"];
-const $bend_emit$44 = $bend_emit["pick_err"];
-const $bend_emit$45 = $bend_emit["true_err"];
-const $bend_emit$46 = $bend_emit["enum_err"];
-const $bend_emit$47 = $bend_emit["dup_err"];
-const $bend_emit$48 = $bend_emit["extra_err"];
-const $bend_emit$49 = $bend_emit["tag_err"];
-const $bend_emit$50 = $bend_emit["count_err"];
-const $bend_emit$51 = $bend_emit["guard"];
-const $bend_emit$52 = $bend_emit["nat_in_defect"];
-const $bend_emit$53 = $bend_emit["int_defect"];
-const $bend_emit$54 = $bend_emit["int_in_defect"];
-const $bend_emit$55 = $bend_emit["bool_defect"];
-const $bend_emit$56 = $bend_emit["no_rule"];
-const $bend_emit$57 = $bend_emit["first_why"];
-const $bend_emit$58 = $bend_emit["step_eq"];
-const $bend_emit$59 = $bend_emit["path_eq"];
-const $bend_emit$60 = $bend_emit["rule_defect"];
-const $bend_emit$61 = $bend_emit["not_list"];
-const $bend_emit$62 = $bend_emit["not_object"];
-const $bend_emit$63 = $bend_emit["nat_defect"];
-const $bend_emit$64 = $bend_emit["str_defect"];
-const $bend_emit$65 = $bend_emit["pick_why"];
-const $bend_emit$66 = $bend_emit["true_defect"];
-const $bend_emit$67 = $bend_emit["enum_defect"];
-const $bend_emit$68 = $bend_emit["no_variant"];
-const $bend_emit$69 = $bend_emit["dup_defect"];
-const $bend_emit$70 = $bend_emit["at_end"];
-const $bend_emit$71 = $bend_emit["extra_defect"];
-const $bend_emit$72 = $bend_emit["tag_defect"];
-const $bend_emit$73 = $bend_emit["tag_key_defect"];
-const $bend_emit$74 = $bend_emit["check0"];
-const $bend_emit$75 = $bend_emit["conforms0"];
-const $bend_emit$76 = $bend_emit["is_chain"];
-const $bend_emit$77 = $bend_emit["is_object"];
-const $bend_emit$78 = $bend_emit["one_if_there"];
-const $bend_emit$79 = $bend_emit["count_present"];
-const $bend_emit$80 = $bend_emit["tuple_of"];
-const $bend_emit$81 = $bend_emit["at_raw"];
-const $bend_emit$82 = $bend_emit["count_unknown"];
-const $bend_emit$83 = $bend_emit["Meaning"];
-const $bend_emit$84 = $bend_emit["enc"];
-const $bend_emit$85 = $bend_emit["lcons"];
-const $bend_emit$86 = $bend_emit["both"];
-const $bend_emit$87 = $bend_emit["opt_some"];
-const $bend_emit$88 = $bend_emit["map_inl"];
-const $bend_emit$89 = $bend_emit["map_inr"];
-const $bend_emit$90 = $bend_emit["pick_m"];
-const $bend_emit$91 = $bend_emit["true_unit"];
-const $bend_emit$92 = $bend_emit["nullish"];
-const $bend_emit$93 = $bend_emit["dec"];
-const $bend_emit$94 = $bend_emit["opt_at"];
-const $bend_emit$95 = $bend_emit["nullable"];
-const $bend_emit$96 = $bend_emit["no_key"];
-const $bend_emit$97 = $bend_emit["fresh_f"];
-const $bend_emit$98 = $bend_emit["fresh_v"];
-const $bend_emit$99 = $bend_emit["is_keyed"];
-const $bend_emit$100 = $bend_emit["fresh_t"];
-const $bend_emit$101 = $bend_emit["wf"];
-const $bend_emit$102 = $bend_emit["names_ok"];
-const $bend_emit$103 = $bend_emit["bounds_ok"];
-export { $bend_emit$0 as finite_number, $bend_emit$1 as key_in, $bend_emit$2 as valid_json, $bend_emit$3 as pick_raw, $bend_emit$4 as lookup, $bend_emit$5 as pick_bool, $bend_emit$6 as is_rnil, $bend_emit$7 as is_missing, $bend_emit$8 as in_names, $bend_emit$9 as none_present, $bend_emit$10 as key_names, $bend_emit$11 as no_extra, $bend_emit$12 as drop_key, $bend_emit$13 as is_str, $bend_emit$14 as is_tag, $bend_emit$15 as in_err, $bend_emit$16 as str_len_ok, $bend_emit$17 as num_ok, $bend_emit$18 as int_le, $bend_emit$19 as int_ok, $bend_emit$20 as int_raw, $bend_emit$21 as len_ok, $bend_emit$22 as str_len_in, $bend_emit$23 as nat_in, $bend_emit$24 as is_bool, $bend_emit$25 as raw_list, $bend_emit$26 as raw_len, $bend_emit$27 as count_ok, $bend_emit$28 as list_len_ok, $bend_emit$29 as has_key, $bend_emit$30 as key_once_at, $bend_emit$31 as key_once, $bend_emit$32 as key_err, $bend_emit$33 as here, $bend_emit$34 as under, $bend_emit$35 as len_err, $bend_emit$36 as later_l_path, $bend_emit$37 as later_l, $bend_emit$38 as later_i_path, $bend_emit$39 as later_i, $bend_emit$40 as later_f_path, $bend_emit$41 as later_f, $bend_emit$42 as first, $bend_emit$43 as missing_or, $bend_emit$44 as pick_err, $bend_emit$45 as true_err, $bend_emit$46 as enum_err, $bend_emit$47 as dup_err, $bend_emit$48 as extra_err, $bend_emit$49 as tag_err, $bend_emit$50 as count_err, $bend_emit$51 as guard, $bend_emit$52 as nat_in_defect, $bend_emit$53 as int_defect, $bend_emit$54 as int_in_defect, $bend_emit$55 as bool_defect, $bend_emit$56 as no_rule, $bend_emit$57 as first_why, $bend_emit$58 as step_eq, $bend_emit$59 as path_eq, $bend_emit$60 as rule_defect, $bend_emit$61 as not_list, $bend_emit$62 as not_object, $bend_emit$63 as nat_defect, $bend_emit$64 as str_defect, $bend_emit$65 as pick_why, $bend_emit$66 as true_defect, $bend_emit$67 as enum_defect, $bend_emit$68 as no_variant, $bend_emit$69 as dup_defect, $bend_emit$70 as at_end, $bend_emit$71 as extra_defect, $bend_emit$72 as tag_defect, $bend_emit$73 as tag_key_defect, $bend_emit$74 as check0, $bend_emit$75 as conforms0, $bend_emit$76 as is_chain, $bend_emit$77 as is_object, $bend_emit$78 as one_if_there, $bend_emit$79 as count_present, $bend_emit$80 as tuple_of, $bend_emit$81 as at_raw, $bend_emit$82 as count_unknown, $bend_emit$83 as Meaning, $bend_emit$84 as enc, $bend_emit$85 as lcons, $bend_emit$86 as both, $bend_emit$87 as opt_some, $bend_emit$88 as map_inl, $bend_emit$89 as map_inr, $bend_emit$90 as pick_m, $bend_emit$91 as true_unit, $bend_emit$92 as nullish, $bend_emit$93 as dec, $bend_emit$94 as opt_at, $bend_emit$95 as nullable, $bend_emit$96 as no_key, $bend_emit$97 as fresh_f, $bend_emit$98 as fresh_v, $bend_emit$99 as is_keyed, $bend_emit$100 as fresh_t, $bend_emit$101 as wf, $bend_emit$102 as names_ok, $bend_emit$103 as bounds_ok };
+const $bend_emit$33 = $bend_emit["kind_eq"];
+const $bend_emit$34 = $bend_emit["kind_of"];
+const $bend_emit$35 = $bend_emit["has_kind"];
+const $bend_emit$36 = $bend_emit["apart"];
+const $bend_emit$37 = $bend_emit["disjoint"];
+const $bend_emit$38 = $bend_emit["alt_ok"];
+const $bend_emit$39 = $bend_emit["no_alt"];
+const $bend_emit$40 = $bend_emit["here"];
+const $bend_emit$41 = $bend_emit["under"];
+const $bend_emit$42 = $bend_emit["len_err"];
+const $bend_emit$43 = $bend_emit["later_l_path"];
+const $bend_emit$44 = $bend_emit["later_l"];
+const $bend_emit$45 = $bend_emit["later_i_path"];
+const $bend_emit$46 = $bend_emit["later_i"];
+const $bend_emit$47 = $bend_emit["later_f_path"];
+const $bend_emit$48 = $bend_emit["later_f"];
+const $bend_emit$49 = $bend_emit["first"];
+const $bend_emit$50 = $bend_emit["missing_or"];
+const $bend_emit$51 = $bend_emit["pick_err"];
+const $bend_emit$52 = $bend_emit["true_err"];
+const $bend_emit$53 = $bend_emit["enum_err"];
+const $bend_emit$54 = $bend_emit["dup_err"];
+const $bend_emit$55 = $bend_emit["extra_err"];
+const $bend_emit$56 = $bend_emit["tag_err"];
+const $bend_emit$57 = $bend_emit["count_err"];
+const $bend_emit$58 = $bend_emit["guard"];
+const $bend_emit$59 = $bend_emit["nat_in_defect"];
+const $bend_emit$60 = $bend_emit["int_defect"];
+const $bend_emit$61 = $bend_emit["int_in_defect"];
+const $bend_emit$62 = $bend_emit["bool_defect"];
+const $bend_emit$63 = $bend_emit["no_rule"];
+const $bend_emit$64 = $bend_emit["first_why"];
+const $bend_emit$65 = $bend_emit["step_eq"];
+const $bend_emit$66 = $bend_emit["path_eq"];
+const $bend_emit$67 = $bend_emit["rule_defect"];
+const $bend_emit$68 = $bend_emit["not_list"];
+const $bend_emit$69 = $bend_emit["not_object"];
+const $bend_emit$70 = $bend_emit["nat_defect"];
+const $bend_emit$71 = $bend_emit["str_defect"];
+const $bend_emit$72 = $bend_emit["pick_why"];
+const $bend_emit$73 = $bend_emit["true_defect"];
+const $bend_emit$74 = $bend_emit["enum_defect"];
+const $bend_emit$75 = $bend_emit["no_variant"];
+const $bend_emit$76 = $bend_emit["dup_defect"];
+const $bend_emit$77 = $bend_emit["at_end"];
+const $bend_emit$78 = $bend_emit["extra_defect"];
+const $bend_emit$79 = $bend_emit["tag_defect"];
+const $bend_emit$80 = $bend_emit["tag_key_defect"];
+const $bend_emit$81 = $bend_emit["check0"];
+const $bend_emit$82 = $bend_emit["conforms0"];
+const $bend_emit$83 = $bend_emit["is_chain"];
+const $bend_emit$84 = $bend_emit["is_object"];
+const $bend_emit$85 = $bend_emit["one_if_there"];
+const $bend_emit$86 = $bend_emit["count_present"];
+const $bend_emit$87 = $bend_emit["tuple_of"];
+const $bend_emit$88 = $bend_emit["at_raw"];
+const $bend_emit$89 = $bend_emit["count_unknown"];
+const $bend_emit$90 = $bend_emit["Meaning"];
+const $bend_emit$91 = $bend_emit["enc"];
+const $bend_emit$92 = $bend_emit["lcons"];
+const $bend_emit$93 = $bend_emit["both"];
+const $bend_emit$94 = $bend_emit["opt_some"];
+const $bend_emit$95 = $bend_emit["map_inl"];
+const $bend_emit$96 = $bend_emit["map_inr"];
+const $bend_emit$97 = $bend_emit["pick_m"];
+const $bend_emit$98 = $bend_emit["true_unit"];
+const $bend_emit$99 = $bend_emit["nullish"];
+const $bend_emit$100 = $bend_emit["dec"];
+const $bend_emit$101 = $bend_emit["opt_at"];
+const $bend_emit$102 = $bend_emit["nullable"];
+const $bend_emit$103 = $bend_emit["no_key"];
+const $bend_emit$104 = $bend_emit["fresh_f"];
+const $bend_emit$105 = $bend_emit["fresh_v"];
+const $bend_emit$106 = $bend_emit["is_keyed"];
+const $bend_emit$107 = $bend_emit["fresh_t"];
+const $bend_emit$108 = $bend_emit["wf"];
+const $bend_emit$109 = $bend_emit["names_ok"];
+const $bend_emit$110 = $bend_emit["bounds_ok"];
+export { $bend_emit$0 as finite_number, $bend_emit$1 as key_in, $bend_emit$2 as valid_json, $bend_emit$3 as pick_raw, $bend_emit$4 as lookup, $bend_emit$5 as pick_bool, $bend_emit$6 as is_rnil, $bend_emit$7 as is_missing, $bend_emit$8 as in_names, $bend_emit$9 as none_present, $bend_emit$10 as key_names, $bend_emit$11 as no_extra, $bend_emit$12 as drop_key, $bend_emit$13 as is_str, $bend_emit$14 as is_tag, $bend_emit$15 as in_err, $bend_emit$16 as str_len_ok, $bend_emit$17 as num_ok, $bend_emit$18 as int_le, $bend_emit$19 as int_ok, $bend_emit$20 as int_raw, $bend_emit$21 as len_ok, $bend_emit$22 as str_len_in, $bend_emit$23 as nat_in, $bend_emit$24 as is_bool, $bend_emit$25 as raw_list, $bend_emit$26 as raw_len, $bend_emit$27 as count_ok, $bend_emit$28 as list_len_ok, $bend_emit$29 as has_key, $bend_emit$30 as key_once_at, $bend_emit$31 as key_once, $bend_emit$32 as key_err, $bend_emit$33 as kind_eq, $bend_emit$34 as kind_of, $bend_emit$35 as has_kind, $bend_emit$36 as apart, $bend_emit$37 as disjoint, $bend_emit$38 as alt_ok, $bend_emit$39 as no_alt, $bend_emit$40 as here, $bend_emit$41 as under, $bend_emit$42 as len_err, $bend_emit$43 as later_l_path, $bend_emit$44 as later_l, $bend_emit$45 as later_i_path, $bend_emit$46 as later_i, $bend_emit$47 as later_f_path, $bend_emit$48 as later_f, $bend_emit$49 as first, $bend_emit$50 as missing_or, $bend_emit$51 as pick_err, $bend_emit$52 as true_err, $bend_emit$53 as enum_err, $bend_emit$54 as dup_err, $bend_emit$55 as extra_err, $bend_emit$56 as tag_err, $bend_emit$57 as count_err, $bend_emit$58 as guard, $bend_emit$59 as nat_in_defect, $bend_emit$60 as int_defect, $bend_emit$61 as int_in_defect, $bend_emit$62 as bool_defect, $bend_emit$63 as no_rule, $bend_emit$64 as first_why, $bend_emit$65 as step_eq, $bend_emit$66 as path_eq, $bend_emit$67 as rule_defect, $bend_emit$68 as not_list, $bend_emit$69 as not_object, $bend_emit$70 as nat_defect, $bend_emit$71 as str_defect, $bend_emit$72 as pick_why, $bend_emit$73 as true_defect, $bend_emit$74 as enum_defect, $bend_emit$75 as no_variant, $bend_emit$76 as dup_defect, $bend_emit$77 as at_end, $bend_emit$78 as extra_defect, $bend_emit$79 as tag_defect, $bend_emit$80 as tag_key_defect, $bend_emit$81 as check0, $bend_emit$82 as conforms0, $bend_emit$83 as is_chain, $bend_emit$84 as is_object, $bend_emit$85 as one_if_there, $bend_emit$86 as count_present, $bend_emit$87 as tuple_of, $bend_emit$88 as at_raw, $bend_emit$89 as count_unknown, $bend_emit$90 as Meaning, $bend_emit$91 as enc, $bend_emit$92 as lcons, $bend_emit$93 as both, $bend_emit$94 as opt_some, $bend_emit$95 as map_inl, $bend_emit$96 as map_inr, $bend_emit$97 as pick_m, $bend_emit$98 as true_unit, $bend_emit$99 as nullish, $bend_emit$100 as dec, $bend_emit$101 as opt_at, $bend_emit$102 as nullable, $bend_emit$103 as no_key, $bend_emit$104 as fresh_f, $bend_emit$105 as fresh_v, $bend_emit$106 as is_keyed, $bend_emit$107 as fresh_t, $bend_emit$108 as wf, $bend_emit$109 as names_ok, $bend_emit$110 as bounds_ok };

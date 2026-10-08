@@ -69,14 +69,14 @@ same thing:
 ```
 
 - `path` lists object keys (strings) and list indices (whole numbers from 0
-  to 2^53-1), outer first. An empty path means the value itself.
+  to 2^48-1), outer first. An empty path means the value itself.
 - The field names and their types are stable: a change to them is a major
   version. **The `message` text is not stable.** It is written for people, so
   do not branch on it.
 - `issueSchema` is the schema of this form, so the receiver can check it like
   any other value. It is not strict: a field added later does not break an
-  older reader. That each path part is a string or a whole number is a
-  `.refine()`, so that part is not proved.
+  older reader. Each path part is a string or a whole number, as a proved
+  `s.union`.
 
 For example, as the `data` of a JSON-RPC "Invalid params" error:
 
@@ -99,6 +99,7 @@ if (!r.ok) return { jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: 
 | `s.object({...})`, `.strict()` | object; `.strict()` refuses unknown keys |
 | `s.tagged(key, {...})` | union chosen by a tag key |
 | `s.oneKey({...})` | object with exactly one of the keys |
+| `s.union(a, b, ...)` | one of the alternatives, which take different JSON kinds |
 | `.optional()` | the object key may be absent |
 | `.nullable()` | the value may be `null` |
 | `.refine(fn, message)` | a custom check (not proved) |
@@ -196,7 +197,7 @@ const doc = toJsonSchema(s.object({ id: s.nat(), name: s.str().optional() }));
 - **Mapping.** `nat`, `int` and `.in()` are bounded `integer`s; `.len()` is
   `minLength`/`maxLength` (both count code points) or `minItems`/`maxItems`;
   a tuple is `prefixItems` with no further items; `.strict()` is
-  `additionalProperties: false`; `tagged` and `oneKey` are `oneOf`; `s.json()`
+  `additionalProperties: false`; `tagged` and `oneKey` are `oneOf`; `union` is `anyOf`; `s.json()`
   is `{}`.
 - **ajv and `__proto__`.** ajv 8 skips a `properties` entry named
   `__proto__`, so it does not check a field of that name. The document itself

@@ -92,6 +92,7 @@ type Schema is Data:
   SJson{}
   SInt{}
   SIntIn{lo: Int, hi: Int}
+  SEither{l: Schema, r: Schema}
 
 # A step of a path. Positions count what was passed on the way, so that
 # following a path never compares two names: AtIndex{i} is element i of a
@@ -130,6 +131,7 @@ type Why is Data:
   NotJson{}
   NotInt{}
   IntNotIn{lo: Int, hi: Int}
+  NoAlternative{num: Bool, str: Bool, bool: Bool, list: Bool, obj: Bool, null: Bool}
 
 type Err is Data:
   Err{path: List<&2, Step>, why: Why}
@@ -457,6 +459,145 @@ def key_err(b: Bool, +name: String) -> Maybe<&2, Err>:
 
 # ---- what a valid value is ----
 
+# ---- the kind of a value, and the kinds a schema can accept ----
+#
+# An SEither picks its alternative by the value's JSON kind, so its
+# alternatives must take disjoint kinds (wf). has_kind(s, k) says that s may
+# accept a value of kind k: it never misses one s accepts (a schema accepts
+# only values of its kinds), and it may claim more (an STagEnd claims an
+# object it never accepts), which only makes wf stricter.
+
+type JKind is Data:
+  KNum{}
+  KStr{}
+  KBool{}
+  KList{}
+  KObj{}
+  KNull{}
+  KAbsent{}
+  KJson{}
+  KOther{}
+
+def kind_eq(a: JKind, b: JKind) -> Bool:
+  match a b:
+    case KNum{} KNum{}:
+      True{}
+    case KStr{} KStr{}:
+      True{}
+    case KBool{} KBool{}:
+      True{}
+    case KList{} KList{}:
+      True{}
+    case KObj{} KObj{}:
+      True{}
+    case KNull{} KNull{}:
+      True{}
+    case KAbsent{} KAbsent{}:
+      True{}
+    case KJson{} KJson{}:
+      True{}
+    case KOther{} KOther{}:
+      True{}
+    case _ _:
+      False{}
+
+def kind_of(r: Raw) -> JKind:
+  match r:
+    case RNum{n}:
+      KNum{}
+    case RNeg{n}:
+      KNum{}
+    case RStr{x}:
+      KStr{}
+    case RBool{b}:
+      KBool{}
+    case RNil{}:
+      KList{}
+    case RCons{h, t}:
+      KList{}
+    case REnd{}:
+      KObj{}
+    case RKey{k, v, o}:
+      KObj{}
+    case RNull{}:
+      KNull{}
+    case RMissing{}:
+      KAbsent{}
+    case RJson{value}:
+      KJson{}
+    case _:
+      KOther{}
+
+def has_kind(s: Schema, +k: JKind) -> Bool:
+  match s:
+    case SNat{}:
+      kind_eq(KNum{}, k)
+    case SNatIn{lo, hi}:
+      kind_eq(KNum{}, k)
+    case SInt{}:
+      kind_eq(KNum{}, k)
+    case SIntIn{lo, hi}:
+      kind_eq(KNum{}, k)
+    case SStr{}:
+      kind_eq(KStr{}, k)
+    case SEnum{names}:
+      kind_eq(KStr{}, k)
+    case SBool{}:
+      kind_eq(KBool{}, k)
+    case STrue{}:
+      kind_eq(KBool{}, k)
+    case SList{e}:
+      kind_eq(KList{}, k)
+    case STuple{ts, rest}:
+      kind_eq(KList{}, k)
+    case STEnd{}:
+      kind_eq(KList{}, k)
+    case SField{n, fs, rest}:
+      kind_eq(KObj{}, k)
+    case SEnd{}:
+      kind_eq(KObj{}, k)
+    case STagged{key, n, cs, rest}:
+      kind_eq(KObj{}, k)
+    case STagEnd{key}:
+      kind_eq(KObj{}, k)
+    case SVariant{n, vs, rest}:
+      kind_eq(KObj{}, k)
+    case SVEnd{}:
+      kind_eq(KObj{}, k)
+    case SJson{}:
+      kind_eq(KJson{}, k)
+    case SOpt{i}:
+      Bool.or(kind_eq(KNull{}, k), has_kind(i, k))
+    case SOptional{i}:
+      Bool.or(kind_eq(KAbsent{}, k), has_kind(i, k))
+    case SStrLen{lo, hi, s2}:
+      has_kind(s2, k)
+    case SListLen{lo, hi, s2}:
+      has_kind(s2, k)
+    case SRule{s2, tag}:
+      has_kind(s2, k)
+    case SStrict{s2}:
+      has_kind(s2, k)
+    case SEither{l, r}:
+      Bool.or(has_kind(l, k), has_kind(r, k))
+
+# No value of kind k is claimed by both.
+def apart(+l: Schema, +r: Schema, +k: JKind) -> Bool:
+  Bool.not(Bool.and(has_kind(l, k), has_kind(r, k)))
+
+def disjoint(+l: Schema, +r: Schema) -> Bool:
+  Bool.and(apart(l, r, KNum{}), Bool.and(apart(l, r, KStr{}), Bool.and(apart(l, r, KBool{}), Bool.and(apart(l, r, KList{}), Bool.and(apart(l, r, KObj{}), Bool.and(apart(l, r, KNull{}), Bool.and(apart(l, r, KAbsent{}), Bool.and(apart(l, r, KJson{}), apart(l, r, KOther{})))))))))
+
+# An alternative is a value that is present and has a kind of its own: not an
+# absent field (the host writes no key, so no kind is there to pick by), and
+# not s.json(), which takes every kind.
+def alt_ok(+s: Schema) -> Bool:
+  Bool.and(Bool.not(has_kind(s, KAbsent{})), Bool.not(has_kind(s, KJson{})))
+
+# What an SEither would have taken, for the host to say.
+def no_alt(+s: Schema) -> Why:
+  NoAlternative{has_kind(s, KNum{}), has_kind(s, KStr{}), has_kind(s, KBool{}), has_kind(s, KList{}), has_kind(s, KObj{}), has_kind(s, KNull{})}
+
 def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&2, Nat>) -> Bool:
   match s r:
     case SNat{} RNum{n}:
@@ -519,6 +660,8 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
       Bool.and(conforms(~rule, ts, h, None{}), conforms(~rule, rest, t, None{}))
     case STEnd{} RNil{}:
       True{}
+    case SEither{+l, +r} +x:
+      pick_bool(has_kind(l, kind_of(x)), conforms(~rule, l, x, prev), Bool.and(has_kind(r, kind_of(x)), conforms(~rule, r, x, prev)))
     case _ _:
       False{}
 
@@ -785,6 +928,8 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       here(TooLong{})
     case STEnd{} x:
       here(missing_or(x, NotList{}))
+    case SEither{+l, +r} +x:
+      pick_err(has_kind(l, kind_of(x)), check(~rule, l, x, prev), pick_err(has_kind(r, kind_of(x)), check(~rule, r, x, prev), here(missing_or(x, no_alt(SEither{l, r})))))
 
 # ---- the claim the accuracy law makes ----
 #
@@ -1133,6 +1278,8 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       at_end(TooLong{}, q)
     case STEnd{} x q:
       not_list(x, q)
+    case SEither{+l, +r} +x +q:
+      pick_why(has_kind(l, kind_of(x)), defect(~rule, l, x, prev, q), pick_why(has_kind(r, kind_of(x)), defect(~rule, r, x, prev, q), at_end(missing_or(x, no_alt(SEither{l, r})), q)))
 
 # The closed forms: template defs cannot cross the bundler, so the host
 # calls these (a project with no rules).
@@ -1304,6 +1451,8 @@ def Meaning(s: Schema) -> Data:
       Int
     case SIntIn{lo, hi}:
       Int
+    case SEither{l, r}:
+      Either<&2, &2, Meaning(l), Meaning(r)>
 
 def enc(s: Schema, x: Meaning(s)) -> Raw:
   match s x:
@@ -1365,6 +1514,10 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
       int_raw(i)
     case SIntIn{lo_, hi_} i:
       int_raw(i)
+    case SEither{l, r} Inl{a}:
+      enc(l, a)
+    case SEither{l, r} Inr{b}:
+      enc(r, b)
 
 def lcons(-A: Data, h: Maybe<&2, A>, t: Maybe<&2, List<&2, A>>) -> Maybe<&2, List<&2, A>>:
   match h t:
@@ -1476,6 +1629,8 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       Some{IPos{n}}
     case SIntIn{lo_, hi_} RNeg{n}:
       Some{INeg{n}}
+    case SEither{+l, +r} +x:
+      pick_m(Maybe<&2, Either<&2, &2, Meaning(l), Meaning(r)>>, has_kind(l, kind_of(x)), map_inl(Meaning(l), Meaning(r), dec(l, x)), pick_m(Maybe<&2, Either<&2, &2, Meaning(l), Meaning(r)>>, has_kind(r, kind_of(x)), map_inr(Meaning(l), Meaning(r), dec(r, x)), None{}))
     case _ _:
       None{}
 
@@ -1506,6 +1661,10 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
 #
 #   SOpt's inner may not be nullable at all (its own None and the inner's null
 #   would both be written null), and nullable asks an SOptional too.
+#
+#   SEither's alternatives take disjoint kinds, so the value's kind names
+#   the one alternative that reads it; neither may be an absent field or
+#   s.json() (alt_ok).
 
 # An absent value reaches the top of what enc writes for s: s is an SOptional,
 # or it hands the value it was given straight to a schema that is (a rule, a
@@ -1551,6 +1710,8 @@ def nullable(s: Schema) -> Bool:
       nullable(rest)
     case SVariant{n, vs, rest}:
       nullable(rest)
+    case SEither{l, r}:
+      Bool.or(nullable(l), nullable(r))  # a null would read as the inner's
     case _:
       False{}
 
@@ -1586,6 +1747,8 @@ def no_key(+k: String, s: Schema) -> Bool:
       no_key(k, i)
     case SOptional{i}:
       no_key(k, i)
+    case SEither{l, r}:
+      Bool.and(no_key(k, l), no_key(k, r))
     case STagged{+k2, n2, cs2, rest2}:
       Bool.and(Bool.not(String.eq(k2, k)), Bool.and(Bool.not(String.eq(k, k2)), Bool.and(no_key(k, cs2), no_key(k, rest2))))
     case _:
@@ -1670,6 +1833,8 @@ def wf(s: Schema) -> Bool:
       Bool.and(Bool.not(opt_at(ts)), Bool.and(wf(ts), Bool.and(Bool.not(opt_at(rest)), wf(rest))))
     case SJson{}:
       True{}
+    case SEither{+l, +r}:
+      Bool.and(alt_ok(l), Bool.and(alt_ok(r), Bool.and(disjoint(l, r), Bool.and(wf(l), wf(r)))))
     case _:
       True{}
 
@@ -1712,6 +1877,10 @@ def names_ok(s: Schema, x: Meaning(s)) -> Bool:
       Bool.and(names_ok(ts, a), names_ok(rest, b))
     case SJson{} value:
       True{}
+    case SEither{l, r} Inl{a}:
+      names_ok(l, a)
+    case SEither{l, r} Inr{b}:
+      names_ok(r, b)
     case _ _:
       True{}
 
@@ -1762,5 +1931,9 @@ def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
       valid_json(value)
     case SIntIn{+lo, +hi} i:
       int_ok(lo, hi, i)
+    case SEither{l, r} Inl{a}:
+      bounds_ok(l, a)
+    case SEither{l, r} Inr{b}:
+      bounds_ok(r, b)
     case _ _:
       True{}

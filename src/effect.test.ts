@@ -215,3 +215,15 @@ test("proved rides on the InvalidValue annotations", () => {
   const host = leaf(toEffect(s.nat().refine((n) => n > 3, "too small")), 1);
   expect(host.annotations).toEqual({ message: "too small", proved: false });
 });
+
+test("a union round-trips through the adapter", () => {
+  const U = toEffect(s.union(s.nat(), s.str(), s.list(s.bool())));
+  for (const v of [3, "a", [true]]) {
+    const decoded = SchemaParser.decodeUnknownResult(U)(v);
+    expect(decoded._tag).toBe("Success");
+    expect((decoded as any).success).toEqual(v);
+    const encoded = SchemaParser.encodeUnknownResult(U)(v);
+    expect((encoded as any).success).toEqual(v);
+  }
+  expect(leaf(U, {}).annotations).toEqual({ message: "must be a whole number, a string or a list", proved: true });
+});

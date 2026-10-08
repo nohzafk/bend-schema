@@ -1,7 +1,8 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves|json_accept_exact|json_enc_preserves.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves|json_accept_exact|json_enc_preserves|
+// int_le_complete|int_le_sound|sint_meaning|sint_in_meaning|kinds_table|kind_sound|union_exact|union_disjoint.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -86,6 +87,18 @@ const IR = (v: number) => (v >= 0 ? N(v) : `C.RNeg{${-v - 1}n}`);
 const intS = ["C.SInt{}", `C.SIntIn{${I(-3)}, ${I(1)}}`, `C.SIntIn{${I(1)}, ${I(-1)}}`, "C.SList{C.SInt{}}", 'C.SField{"a", C.SInt{}, C.SEnd{}}'];
 const intRaws: R[] = [IR(0), IR(-1), IR(1), IR(-2), IR(-3), IR(-4), IR(2), BAD, BIG, STR, NUL, "C.RMissing{}", list([]), obj([]), TRUE, list([IR(-1), IR(1)]), list([IR(-1), STR]), obj([["a", IR(-2)]]), obj([["a", STR]])];
 for (const sc of intS) for (const r of intRaws) pairs.push([sc, r]);
+// The union: well-formed ones of every kind pairing, nested, under a rule and
+// a wrapper, and ill-formed ones (overlapping kinds, an absent field, s.json())
+// that the generic laws must still cover, since they have no wf premise.
+const E = (l: string, r: string) => `C.SEither{${l}, ${r}}`;
+const TAGGED = 'C.STagged{"t", "a", C.SField{"y", C.SStr{}, C.SEnd{}}, C.STagEnd{"t"}}';
+const unionS = [E(S.nat, S.str), E("C.SInt{}", S.str), E(S.str, S.lnat), E(S.rec, S.nat), E(S.opt, S.str), E(S.str, S.opt),
+  E(S.nat, E(S.str, "C.SBool{}")), E(E(S.nat, S.str), "C.STrue{}"), E(ruled(0), S.str), E(TAGGED, S.nat), E(enumS, tup([S.nat, S.nat])),
+  `C.SStrLen{1n, 2n, ${E(S.str, S.nat)}}`, `C.SList{${E(S.nat, S.str)}}`, `C.SField{"a", ${E(S.nat, S.str)}, C.SEnd{}}`, `C.SOpt{${E(S.nat, S.str)}}`,
+  E("C.SNatIn{0n, 1n}", S.nat), E(`C.SOptional{${S.nat}}`, S.str), E("C.SJson{}", S.nat), E(S.opt, `C.SOpt{${S.str}}`), E(S.str, S.str)];
+const unionRaws: R[] = [N(0), N(3), IR(-1), STR, 'C.RStr{"allow"}', TRUE, FALSE, NUL, BAD, BIG, "C.RMissing{}", list([]), list([N(1)]), list([N(1), N(2)]),
+  list([STR]), list([N(1), STR, NUL]), obj([]), recs[0], obj([["a", STR]]), obj([["t", 'C.RStr{"a"}'], ["y", STR]]), "C.RJson{C.JNull{}}"];
+for (const sc of unionS) for (const r of unionRaws) pairs.push([sc, r]);
 const law = process.env.LAW;
 const instances: { name: string; claim: string }[] = [];
 // a strict object: the core against a count of unknown keys written here
@@ -457,5 +470,57 @@ for (const [nm, r] of intKinds.filter(([, , ok]) => !ok)) if (!law || law === "s
   instances.push({ name: `sint_in_meaning_other_${nm}`, claim: `{C.conforms(~H.r_any, C.SIntIn{${I(-2)}, ${I(2)}}, ${r}, None{}) == False{} : Bool}` });
   instances.push({ name: `sint_in_meaning_other_wide_${nm}`, claim: `{C.conforms(~H.no_rule, C.SIntIn{${I(-1000)}, ${I(1000)}}, ${r}, None{}) == H.int_in_spec(${I(-1000)}, ${I(1000)}, H.raw_int_spec(${r})) : Bool}` });
 }
+
+// The union's own laws. A schema list wide enough to reach every row of the
+// kind table, and every kind.
+const kinds = ["C.KNum{}", "C.KStr{}", "C.KBool{}", "C.KList{}", "C.KObj{}", "C.KNull{}", "C.KAbsent{}", "C.KJson{}", "C.KOther{}"];
+const tableS = [...new Set([S.nat, S.str, S.opt, S.lnat, S.rec, "C.SNatIn{0n, 1n}", "C.SInt{}", `C.SIntIn{${I(-1)}, ${I(1)}}`, enumS, "C.SBool{}", "C.STrue{}",
+  tup([]), tup([S.nat]), "C.SEnd{}", TAGGED, 'C.STagEnd{"t"}', target, "C.SVEnd{}", "C.SJson{}", `C.SOptional{${S.nat}}`, `C.SStrLen{1n, 2n, ${S.str}}`,
+  `C.SListLen{0n, 2n, ${S.lnat}}`, ruled(0), `C.SStrict{${S.rec}}`, ...unionS])];
+tableS.forEach((sc, si) => kinds.forEach((k, ki) => {
+  if (!law || law === "kinds_table") instances.push({ name: `kinds_table_${si}_${ki}`, claim: `{C.has_kind(${sc}, ${k}) == H.in_kinds(${k}, H.kinds_spec(${sc})) : Bool}` });
+}));
+// The table at literals, read off D2 here rather than off either function.
+const expectKinds: [string, number[]][] = [[S.nat, [0]], [S.str, [1]], [S.opt, [5, 0]], [S.lnat, [3]], [S.rec, [4]], [enumS, [1]], ["C.STrue{}", [2]],
+  ["C.SJson{}", [7]], [`C.SOptional{${S.nat}}`, [6, 0]], [E(S.nat, E(S.str, "C.SBool{}")), [0, 1, 2]], [E(S.opt, S.str), [5, 0, 1]], [TAGGED, [4]], [tup([]), [3]]];
+expectKinds.forEach(([sc, ks], si) => kinds.forEach((k, ki) => {
+  if (!law || law === "kinds_table") instances.push({ name: `kinds_table_expected_${si}_${ki}`, claim: `{C.has_kind(${sc}, ${k}) == ${ks.includes(ki) ? "True{}" : "False{}"} : Bool}` });
+}));
+pairs.forEach(([sc, r], i) => { for (const rl of ["no_rule", "r_any"]) {
+  if (!law || law === "kind_sound") instances.push({ name: `kind_sound_${rl}_${i}`, claim: `{Bool.or(Bool.not(C.conforms(~H.${rl}, ${sc}, ${r}, None{})), C.has_kind(${sc}, C.kind_of(${r}))) == True{} : Bool}` });
+} });
+// union_exact and union_disjoint hold under wf; that wf really holds of the
+// well-formed ones (and refuses the rest) is checked too, or both would be
+// vacuous.
+const altS = [S.nat, S.str, S.opt, S.lnat, S.rec, "C.SNatIn{0n, 1n}", "C.SInt{}", enumS, "C.STrue{}", "C.SBool{}", tup([S.nat]), TAGGED, ruled(0), `C.SStrict{${S.rec}}`,
+  `C.SOptional{${S.nat}}`, "C.SJson{}", E(S.str, "C.SBool{}"), `C.SOpt{${S.str}}`];
+const kindsOf = (a: string): number[] => expectKinds.find(([s]) => s === a)?.[1] ?? ({ [S.nat]: [0], "C.SNatIn{0n, 1n}": [0], "C.SInt{}": [0], "C.SBool{}": [2], [tup([S.nat])]: [3], [ruled(0)]: [0], [`C.SStrict{${S.rec}}`]: [4], [E(S.str, "C.SBool{}")]: [1, 2], [`C.SOpt{${S.str}}`]: [5, 1] } as Record<string, number[]>)[a]!;
+altS.forEach((a, ai) => altS.forEach((b, bi) => {
+  const u = E(a, b);
+  const ka = kindsOf(a), kb = kindsOf(b);
+  const wfOk = !ka.some((k) => kb.includes(k)) && ![...ka, ...kb].some((k) => k === 6 || k === 7);
+  if (!law || law === "union_exact" || law === "union_disjoint") instances.push({ name: `union_wf_${ai}_${bi}`, claim: `{C.wf(${u}) == ${wfOk ? "True{}" : "False{}"} : Bool}` });
+  unionRaws.forEach((r, ri) => { for (const rl of ["no_rule", "r_any"]) {
+    const lc = `C.conforms(~H.${rl}, ${a}, ${r}, None{})`, rc = `C.conforms(~H.${rl}, ${b}, ${r}, None{})`;
+    if (!law || law === "union_exact") instances.push({ name: `union_exact_${rl}_${ai}_${bi}_${ri}`, claim: `{Bool.or(Bool.not(C.wf(${u})), H.bool_eq(C.conforms(~H.${rl}, ${u}, ${r}, None{}), Bool.or(${lc}, ${rc}))) == True{} : Bool}` });
+    if (!law || law === "union_disjoint") instances.push({ name: `union_disjoint_${rl}_${ai}_${bi}_${ri}`, claim: `{Bool.or(Bool.not(C.wf(${u})), Bool.not(Bool.and(${lc}, ${rc}))) == True{} : Bool}` });
+  } });
+}));
+
+// Which reason a union reports. err_eq compares two reports by value; the
+// NoAlternative reasons are written out here from D2's table, not from no_alt.
+const NA = (ks: number[]) => `C.NoAlternative{${[0, 1, 2, 3, 4, 5].map((k) => (ks.includes(k) ? "True{}" : "False{}")).join(", ")}}`;
+altS.forEach((a, ai) => altS.forEach((b, bi) => unionRaws.forEach((r, ri) => {
+  const u = E(a, b), ka = kindsOf(a), kb = kindsOf(b);
+  const k = r.startsWith("C.RNum") || r.startsWith("C.RNeg") ? 0 : r.startsWith("C.RStr") ? 1 : r.startsWith("C.RBool") ? 2 : r.startsWith("C.RNil") || r.startsWith("C.RCons") ? 3
+    : r.startsWith("C.REnd") || r.startsWith("C.RKey") ? 4 : r === NUL ? 5 : r === "C.RMissing{}" ? 6 : r.startsWith("C.RJson") ? 7 : 8;
+  const chk = (s: string) => `C.check(~H.no_rule, ${s}, ${r}, None{})`;
+  if (ka.includes(k)) { if (!law || law === "union_reports_alternative") instances.push({ name: `union_reports_${ai}_${bi}_${ri}`, claim: `{H.err_eq(${chk(u)}, ${chk(a)}) == True{} : Bool}` }); }
+  else if (kb.includes(k)) { if (!law || law === "union_reports_right") instances.push({ name: `union_reports_right_${ai}_${bi}_${ri}`, claim: `{H.err_eq(${chk(u)}, ${chk(b)}) == True{} : Bool}` }); }
+  else if (!kb.includes(k) && (!law || law === "union_no_alternative")) {
+    const why = r === "C.RMissing{}" ? "C.Missing{}" : r === BIG ? "C.TooLarge{}" : NA([...ka, ...kb]);
+    instances.push({ name: `union_no_alt_${ai}_${bi}_${ri}`, claim: `{H.err_eq(${chk(u)}, Some{C.Err{[], ${why}}}) == True{} : Bool}` });
+  }
+})));
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };

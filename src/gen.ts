@@ -75,6 +75,8 @@ export function printNode(x: Node): string {
       return ctor("SVariant", [q(x.name as string), printNode(x.s as Node), printNode(x.rest as Node)]);
     case "STagged":
       return ctor("STagged", [q(x.key as string), q(x.name as string), printNode(x.s as Node), printNode(x.rest as Node)]);
+    case "SEither":
+      return ctor("SEither", [printNode(x.l as Node), printNode(x.r as Node)]);
     case "STagEnd":
       return ctor("STagEnd", [q(x.key as string)]);
     default:

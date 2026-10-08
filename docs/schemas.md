@@ -87,6 +87,24 @@ const Payment = s.oneKey({
 
 An object with none of the keys, or with two, is an error.
 
+**Union by kind**: `s.union(a, b, ...)` takes two or more schemas and reads
+the value as it is, with no tag. The alternatives must take different JSON
+kinds (number, string, boolean, list, object, null), so the value's kind says
+which one reads it.
+
+```ts
+const Id = s.union(s.nat(), s.str());
+// number | string
+```
+
+A value of a kind no alternative takes is an error naming the kinds, for
+example `must be a whole number or a string`. A value of a kind one alternative
+takes is reported by that alternative. Two alternatives that take the same
+kind (two objects, `s.str()` and an enum, `s.nat()` and `s.int()`), an
+`.optional()` alternative, an `s.json()` alternative, and a `.nullable()` union
+that already has a nullable alternative are refused when the schema is first
+used. For several objects, use `s.tagged` or `s.oneKey`.
+
 ## Custom rules
 
 `.refine(fn, message)` adds a check the built-in schemas cannot express.
@@ -137,6 +155,7 @@ Common messages:
 | `must have 1 to 10 elements` | list outside `.len()` |
 | `is not one of the allowed names` | enum or unknown tag |
 | `is not a key this object allows` | extra key in a strict object |
+| `must be a whole number or a string` (the kinds a union takes) | `s.union` value of a kind no alternative takes |
 | `must have one of its keys` | `oneKey` object with none of the keys |
 | `is a second key, where only one is allowed` | `oneKey` object with two keys |
 | `too large` | value is over the size limit |
@@ -158,5 +177,6 @@ Some schemas cannot round-trip, so `parse`, `check` and `encode` throw on
 first use:
 
 - the same key twice in one object or union;
+- a `s.union` whose alternatives take the same JSON kind, or one of which is `.optional()` or `s.json()`;
 - `.nullable().nullable()`;
 - `.optional()` anywhere except directly on an object field.

@@ -13,6 +13,15 @@ def int_eq(a: C.Int, b: C.Int) -> Bool:
     case _ _:
       False{}
 
+def bool_eq(a: Bool, b: Bool) -> Bool:
+  match a b:
+    case True{} True{}:
+      True{}
+    case False{} False{}:
+      True{}
+    case _ _:
+      False{}
+
 def why_eq(x: C.Why, y: C.Why) -> Bool:
   match x y:
     case C.Missing{} C.Missing{}:
@@ -53,8 +62,32 @@ def why_eq(x: C.Why, y: C.Why) -> Bool:
       True{}
     case C.NotInt{} C.NotInt{}:
       True{}
+    case C.NotBool{} C.NotBool{}:
+      True{}
+    case C.NotJson{} C.NotJson{}:
+      True{}
+    case C.LengthNotIn{a, b} C.LengthNotIn{c, d}:
+      Bool.and(Nat.is_eq(a, c), Nat.is_eq(b, d))
+    case C.NotIn{a, b} C.NotIn{c, d}:
+      Bool.and(Nat.is_eq(a, c), Nat.is_eq(b, d))
+    case C.CountNotIn{a, b} C.CountNotIn{c, d}:
+      Bool.and(Nat.is_eq(a, c), Nat.is_eq(b, d))
     case C.IntNotIn{a, b} C.IntNotIn{c, d}:
       Bool.and(int_eq(a, c), int_eq(b, d))
+    case C.NoAlternative{a1, a2, a3, a4, a5, a6} C.NoAlternative{b1, b2, b3, b4, b5, b6}:
+      Bool.and(bool_eq(a1, b1), Bool.and(bool_eq(a2, b2), Bool.and(bool_eq(a3, b3), Bool.and(bool_eq(a4, b4), Bool.and(bool_eq(a5, b5), bool_eq(a6, b6))))))
+    case _ _:
+      False{}
+
+def path_is(x: List<&2, C.Step>, y: List<&2, C.Step>) -> Bool:
+  C.path_eq(x, y)
+
+def err_eq(x: Maybe<&2, C.Err>, y: Maybe<&2, C.Err>) -> Bool:
+  match x y:
+    case None{} None{}:
+      True{}
+    case Some{C.Err{p, w}} Some{C.Err{q, v}}:
+      Bool.and(path_is(p, q), why_eq(w, v))
     case _ _:
       False{}
 
@@ -316,3 +349,64 @@ def is_int_spec(m: Maybe<&2, C.Int>) -> Bool:
       False{}
     case Some{i}:
       True{}
+
+# The union's kind table, as LAWS.bend states it.
+def in_kinds(+k: C.JKind, ks: List<&2, C.JKind>) -> Bool:
+  match ks:
+    case Nil{}:
+      False{}
+    case x <> rest:
+      Bool.or(C.kind_eq(x, k), in_kinds(k, rest))
+
+def kinds_spec(s: C.Schema) -> List<&2, C.JKind>:
+  match s:
+    case C.SNat{}:
+      [C.KNum{}]
+    case C.SNatIn{lo, hi}:
+      [C.KNum{}]
+    case C.SInt{}:
+      [C.KNum{}]
+    case C.SIntIn{lo, hi}:
+      [C.KNum{}]
+    case C.SStr{}:
+      [C.KStr{}]
+    case C.SEnum{names}:
+      [C.KStr{}]
+    case C.SBool{}:
+      [C.KBool{}]
+    case C.STrue{}:
+      [C.KBool{}]
+    case C.SList{e}:
+      [C.KList{}]
+    case C.STuple{ts, rest}:
+      [C.KList{}]
+    case C.STEnd{}:
+      [C.KList{}]
+    case C.SField{n, fs, rest}:
+      [C.KObj{}]
+    case C.SEnd{}:
+      [C.KObj{}]
+    case C.STagged{key, n, cs, rest}:
+      [C.KObj{}]
+    case C.STagEnd{key}:
+      [C.KObj{}]
+    case C.SVariant{n, vs, rest}:
+      [C.KObj{}]
+    case C.SVEnd{}:
+      [C.KObj{}]
+    case C.SJson{}:
+      [C.KJson{}]
+    case C.SOpt{i}:
+      C.KNull{} <> kinds_spec(i)
+    case C.SOptional{i}:
+      C.KAbsent{} <> kinds_spec(i)
+    case C.SStrLen{lo, hi, s2}:
+      kinds_spec(s2)
+    case C.SListLen{lo, hi, s2}:
+      kinds_spec(s2)
+    case C.SRule{s2, tag}:
+      kinds_spec(s2)
+    case C.SStrict{s2}:
+      kinds_spec(s2)
+    case C.SEither{l, r}:
+      List.append(&2, C.JKind, kinds_spec(l), kinds_spec(r))
