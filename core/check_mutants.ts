@@ -28,6 +28,21 @@ import { type Mutant, runMutants } from "bend-falsify";
 const EXACT = "check finds nothing exactly when the value conforms";
 
 const MUTANTS: Mutant[] = [
+  // Acceptance counters bind both approved law parameters. Validation stays
+  // unchanged; each proof failure must name the acceptance law itself.
+  ...[
+    { to: "      True{}", r: "C.RJson{C.JNumber{C.NumberBits{2146435072, 0}}}", rule: "C.no_rule", why: "SJson ignores validity and accepts infinity" },
+    { to: "      True{}", r: 'C.RJson{C.JObject{[C.JMember{"a", C.JNull{}}, C.JMember{"a", C.JNull{}}]}}', rule: "C.no_rule", why: "SJson ignores validity and accepts repeated names" },
+    { to: "      False{}", r: "C.RJson{C.JNull{}}", rule: "C.no_rule", why: "SJson rejects valid JSON null" },
+    { to: "      valid_json(value)\n    case SJson{} RTooBig{}:\n      True{}", r: "C.RTooBig{}", rule: "C.no_rule", why: "SJson admits a size marker" },
+    { to: "      valid_json(value)\n    case SJson{} RBool{b}:\n      True{}", r: "C.RBool{True{}}", rule: "C.no_rule", why: "SJson admits a non-RJson boolean" },
+    { to: "      +v = value\n      Bool.and(valid_json(v), Maybe.is_none(&2, Err, rule(0n, RJson{v})))", r: "C.RJson{C.JNull{}}", rule: "(t => r => Some{C.Err{Nil{}, C.NotNat{}}})", why: "SJson wrongly invokes a refusing caller rule" },
+  ].map(({ to, r, rule, why }): Mutant => ({
+    law: "json_accept_exact", section: "json_accept_exact",
+    with: ["number_spec: finite binary64 exponent", "json_valid_spec"],
+    from: "      valid_json(value)", nth: 1, to,
+    at: { rule, r }, why, failsIn: "Laws.json_accept_exact",
+  })),
   // Decoder preservation is independent of validation. Every counter is the
   // approved law at r, and failure must be in that law's own universal proof.
   { law: "json_dec_preserves", section: "json_dec_preserves",

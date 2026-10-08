@@ -244,6 +244,14 @@ def json_spec(v: C.Json) -> Bool:
     case C.JObject{C.JMember{key, val} <> +tail}:
       Bool.and(json_spec(val), Bool.and(Nat.is_eq(occurs(key, tail), 0n), json_spec(C.JObject{tail})))
 
+# Exact copy of LAWS.raw_json_spec: only RJson contains a JSON value.
+def raw_json_spec(r: C.Raw) -> Bool:
+  match r:
+    case C.RJson{v}:
+      json_spec(v)
+    case _:
+      False{}
+
 # Exact copy of LAWS.raw_json_value: decoding is independent of validity.
 def raw_json_value(r: C.Raw) -> Maybe<&2, C.Json>:
   match r:

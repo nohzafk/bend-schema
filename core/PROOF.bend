@@ -5040,6 +5040,37 @@ def Laws.json_valid_spec(v):
       %Laws.json_valid_spec(C.JObject{tail}) : {Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), C.valid_json(C.JObject{tail}))) == Bool.and(C.valid_json(val), Bool.and(Bool.not(C.key_in(key, tail)), _)) : Bool}
       {==}
 
+# ---- json_accept_exact ----
+
+# Every Raw and every caller rule, without assumptions. Only RJson can
+# conform; its payload uses the already proved independent JSON specification.
+def Laws.json_accept_exact(rule, r):
+  match r:
+    case C.RNum{n}:
+      {==}
+    case C.RBool{b}:
+      {==}
+    case C.RNull{}:
+      {==}
+    case C.RStr{s}:
+      {==}
+    case C.RBad{}:
+      {==}
+    case C.RTooBig{}:
+      {==}
+    case C.RMissing{}:
+      {==}
+    case C.RNil{}:
+      {==}
+    case C.RCons{head, tail}:
+      {==}
+    case C.REnd{}:
+      {==}
+    case C.RKey{key, val, rest}:
+      {==}
+    case C.RJson{value}:
+      Laws.json_valid_spec(value)
+
 # ---- json_dec_preserves ----
 
 # Every Raw, without validity assumptions: the RJson payload is returned

@@ -1,7 +1,7 @@
 // Literal instances of the laws, for the falsifier (bend-falsify). One LAW
 // value checks one law: LAW=exact|accurate|enum_accepts|enum_admits|variant|
 // strict|tuple|tagged|too_large|rules|sbool_meaning|snat_in_meaning|
-// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves.
+// sstr_len_meaning|soptional_meaning|slist_len_meaning|unnamed_key|number_spec|json_valid_spec|json_dec_preserves|json_accept_exact.
 //   bunx bend-falsify spec.ts
 // CORE=<path as C> and HELPERS=<file> point it at a mutated copy (the control).
 // The two generic laws on small schemas and values built around them, with
@@ -352,6 +352,18 @@ for (const [name, r] of jsonDecCases) if (!law || law === "json_dec_preserves") 
   instances.push({ name: `json_dec_preserves_${name}`, claim: `{C.dec(C.SJson{}, ${r}) == H.raw_json_value(${r}) : Maybe<&2, C.Json>}` });
   const expected = r.startsWith("C.RJson{") ? `Some{${r.slice(8, -1)}}` : "None{}";
   instances.push({ name: `json_dec_expected_${name}`, claim: `{H.raw_json_value(${r}) == ${expected} : Maybe<&2, C.Json>}` });
+}
+
+// json_accept_exact: all Raw constructors under both an accepting rule and a
+// rule that refuses JSON. Both readings use the independent frozen spec.
+const jsonAcceptCases: [string, R, boolean][] = [
+  ...jsonDecCases.filter(([, r]) => !r.startsWith("C.RJson{")).map(([name, r]): [string, R, boolean] => [name, r, false]),
+  ...jsonCases.map(([name, v, valid]): [string, R, boolean] => [`json_${name}`, `C.RJson{${v}}`, valid]),
+];
+for (const rule of ["no_rule", "r_any"]) for (const [name, r, valid] of jsonAcceptCases) if (!law || law === "json_accept_exact") {
+  instances.push({ name: `json_accept_exact_${rule}_${name}`, claim: `{C.conforms(~H.${rule}, C.SJson{}, ${r}, None{}) == H.raw_json_spec(${r}) : Bool}` });
+  instances.push({ name: `json_accept_expected_${rule}_${name}`, claim: `{C.conforms(~H.${rule}, C.SJson{}, ${r}, None{}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+  instances.push({ name: `json_accept_spec_expected_${rule}_${name}`, claim: `{H.raw_json_spec(${r}) == ${valid ? "True{}" : "False{}"} : Bool}` });
 }
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };
