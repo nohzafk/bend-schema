@@ -4,6 +4,15 @@ import ../core.bend as C
 def nat_eq(+a: Nat, +b: Nat) -> Bool:
   Nat.is_eq(a, b)
 
+def int_eq(a: C.Int, b: C.Int) -> Bool:
+  match a b:
+    case C.IPos{m} C.IPos{n}:
+      Nat.is_eq(m, n)
+    case C.INeg{m} C.INeg{n}:
+      Nat.is_eq(m, n)
+    case _ _:
+      False{}
+
 def why_eq(x: C.Why, y: C.Why) -> Bool:
   match x y:
     case C.Missing{} C.Missing{}:
@@ -42,6 +51,10 @@ def why_eq(x: C.Why, y: C.Why) -> Bool:
       True{}
     case C.TooLarge{} C.TooLarge{}:
       True{}
+    case C.NotInt{} C.NotInt{}:
+      True{}
+    case C.IntNotIn{a, b} C.IntNotIn{c, d}:
+      Bool.and(int_eq(a, c), int_eq(b, d))
     case _ _:
       False{}
 
@@ -259,3 +272,47 @@ def raw_json_value(r: C.Raw) -> Maybe<&2, C.Json>:
       Some{v}
     case _:
       None{}
+
+# ---- the integer specifications, copied from LAWS.bend ----
+#
+# The falsifier imports no open laws, so the helper defs the SInt laws read
+# are written here as well; core/LAWS.bend is the text they follow.
+
+def int_succ(i: C.Int) -> C.Int:
+  match i:
+    case C.IPos{n}:
+      C.IPos{1n+n}
+    case C.INeg{0n}:
+      C.IPos{0n}
+    case C.INeg{1n+n}:
+      C.INeg{n}
+
+def int_add(k: Nat, a: C.Int) -> C.Int:
+  match k:
+    case 0n:
+      a
+    case 1n+j:
+      int_add(j, int_succ(a))
+
+def raw_int_spec(r: C.Raw) -> Maybe<&2, C.Int>:
+  match r:
+    case C.RNum{n}:
+      Some{C.IPos{n}}
+    case C.RNeg{n}:
+      Some{C.INeg{n}}
+    case _:
+      None{}
+
+def int_in_spec(+lo: C.Int, +hi: C.Int, m: Maybe<&2, C.Int>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+i}:
+      Bool.and(C.int_le(lo, i), C.int_le(i, hi))
+
+def is_int_spec(m: Maybe<&2, C.Int>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{i}:
+      True{}

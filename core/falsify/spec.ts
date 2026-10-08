@@ -75,6 +75,17 @@ const tupVals: R[] = [list([]), list([N(1)]), list([N(1), N(2)]), list([N(1), N(
 for (const t of tuples) for (const r of tupVals) { pairs.push([t, r]); pairs.push([`C.SList{${t}}`, list([r, r])]); }
 const tupSS = [[], [S.nat], [S.nat, S.nat], [S.nat, S.opt, S.rec], [ruled(0), S.nat], [S.nat, tup([S.nat, S.nat])]];
 const lst = (xs: string[]) => "[" + xs.join(", ") + "]";
+// Integers, as this file knows them: v >= 0 is IPos{v}, v < 0 is INeg{-v-1}
+// (so -1 is INeg{0n}). The laws on SInt and SIntIn are checked against bounds
+// and orders computed here, never read off the core.
+const I = (v: number) => (v >= 0 ? `C.IPos{${v}n}` : `C.INeg{${-v - 1}n}`);
+const tag = (v: number) => (v < 0 ? `m${-v}` : `${v}`); // a name cannot hold a minus sign
+const IR = (v: number) => (v >= 0 ? N(v) : `C.RNeg{${-v - 1}n}`);
+// check and conforms on the new schemas must agree, and check's report must be
+// there, over every kind of raw value.
+const intS = ["C.SInt{}", `C.SIntIn{${I(-3)}, ${I(1)}}`, `C.SIntIn{${I(1)}, ${I(-1)}}`, "C.SList{C.SInt{}}", 'C.SField{"a", C.SInt{}, C.SEnd{}}'];
+const intRaws: R[] = [IR(0), IR(-1), IR(1), IR(-2), IR(-3), IR(-4), IR(2), BAD, BIG, STR, NUL, "C.RMissing{}", list([]), obj([]), TRUE, list([IR(-1), IR(1)]), list([IR(-1), STR]), obj([["a", IR(-2)]]), obj([["a", STR]])];
+for (const sc of intS) for (const r of intRaws) pairs.push([sc, r]);
 const law = process.env.LAW;
 const instances: { name: string; claim: string }[] = [];
 // a strict object: the core against a count of unknown keys written here
@@ -387,6 +398,64 @@ for (const [name, v, valid] of jsonEncCases) if (!law || law === "json_enc_prese
   instances.push({ name: `json_enc_validation_${name}`, claim: `{C.conforms(~C.no_rule, C.SJson{}, ${encoded}, None{}) == H.json_spec(${v}) : Bool}` });
   instances.push({ name: `json_enc_expected_${name}`, claim: `{C.conforms(~C.no_rule, C.SJson{}, ${encoded}, None{}) == ${valid ? "True{}" : "False{}"} : Bool}` });
   instances.push({ name: `json_enc_spec_expected_${name}`, claim: `{H.json_spec(${v}) == ${valid ? "True{}" : "False{}"} : Bool}` });
+}
+
+// ---- SInt: a whole number of either sign ----
+//
+// The four laws at literals. Edge cases come first, since the checker stops at
+// the first failing instance: 0, -1 (INeg{0n}), then the integers on either
+// side of zero. -1 is INeg{0n}, -2 is INeg{1n}: an offset read as -n instead
+// of -(n+1) is wrong at -1 and -2 first.
+const ints = [0, -1, 1, -2, 2, -3, 3, -4, 4];
+const walk = [0, 1, 2, 3, 4, 5];
+
+// int_le_complete: every number reached from a by k steps of +1 is at least a.
+// The reached number is computed here (a + k) as well as by the walk.
+for (const a of ints) for (const k of walk) if (!law || law === "int_le_complete") {
+  instances.push({ name: `int_le_complete_${tag(a)}_${k}`, claim: `{C.int_le(${I(a)}, H.int_add(${k}n, ${I(a)})) == True{} : Bool}` });
+  instances.push({ name: `int_le_complete_sum_${tag(a)}_${k}`, claim: `{H.int_add(${k}n, ${I(a)}) == ${I(a + k)} : C.Int}` });
+}
+
+// int_le_sound: a number at least a is reached from a by steps of +1 -- so a
+// number below a is not at least a. The distance is computed here. Both
+// readings: the reachable pairs are reached in exactly b - a steps, and int_le
+// holds of them; the unreachable pairs (b below a) are refused by int_le.
+for (const a of ints) for (const b of ints) if (!law || law === "int_le_sound") {
+  if (a <= b) {
+    instances.push({ name: `int_le_sound_reach_${tag(a)}_${tag(b)}`, claim: `{H.int_add(${b - a}n, ${I(a)}) == ${I(b)} : C.Int}` });
+    instances.push({ name: `int_le_sound_le_${tag(a)}_${tag(b)}`, claim: `{C.int_le(${I(a)}, ${I(b)}) == True{} : Bool}` });
+  } else {
+    instances.push({ name: `int_le_sound_below_${tag(a)}_${tag(b)}`, claim: `{C.int_le(${I(a)}, ${I(b)}) == False{} : Bool}` });
+  }
+}
+
+// sint_meaning: SInt accepts a whole number of either sign and nothing else.
+// No rule is read at an SInt, so a rule that refuses everything stands in too.
+const intKinds: [string, R, boolean][] = [
+  ["zero", IR(0), true], ["minus_one", IR(-1), true], ["one", IR(1), true], ["minus_two", IR(-2), true], ["minus_big", IR(-1000), true],
+  ["bad", BAD, false], ["too_big", BIG, false], ["missing", "C.RMissing{}", false], ["null", NUL, false], ["string", STR, false],
+  ["true", TRUE, false], ["false", FALSE, false], ["nil", list([]), false], ["cons", list([IR(-1)]), false], ["end", obj([]), false],
+  ["key", obj([["a", IR(-1)]]), false], ["json", "C.RJson{C.JNull{}}", false],
+];
+for (const rl of ["no_rule", "r_any"]) for (const [nm, r, ok] of intKinds) if (!law || law === "sint_meaning") {
+  instances.push({ name: `sint_meaning_${rl}_${nm}`, claim: `{C.conforms(~H.${rl}, C.SInt{}, ${r}, None{}) == H.is_int_spec(H.raw_int_spec(${r})) : Bool}` });
+  instances.push({ name: `sint_meaning_expected_${rl}_${nm}`, claim: `{C.conforms(~H.${rl}, C.SInt{}, ${r}, None{}) == ${ok ? "True{}" : "False{}"} : Bool}` });
+}
+
+// sint_in_meaning: SIntIn{lo, hi} accepts an integer from lo to hi, both ends
+// included. lo == hi, lo > hi (an empty range, not an error), and bounds that
+// straddle zero come first; every integer from -4 to 4 is tried at each.
+const intBounds: [number, number][] = [[0, 0], [-1, -1], [-1, 0], [0, -1], [-2, 1], [1, -2], [-3, -3], [2, 2], [1, 3], [-4, -2], [-4, 4]];
+intBounds.forEach(([lo, hi], bi) => ints.forEach((v) => {
+  if (law && law !== "sint_in_meaning") return;
+  const ok = lo <= v && v <= hi;
+  const sc = `C.SIntIn{${I(lo)}, ${I(hi)}}`;
+  instances.push({ name: `sint_in_meaning_${bi}_${tag(v)}`, claim: `{C.conforms(~H.no_rule, ${sc}, ${IR(v)}, None{}) == H.int_in_spec(${I(lo)}, ${I(hi)}, H.raw_int_spec(${IR(v)})) : Bool}` });
+  instances.push({ name: `sint_in_meaning_expected_${bi}_${tag(v)}`, claim: `{C.conforms(~H.no_rule, ${sc}, ${IR(v)}, None{}) == ${ok ? "True{}" : "False{}"} : Bool}` });
+}));
+for (const [nm, r] of intKinds.filter(([, , ok]) => !ok)) if (!law || law === "sint_in_meaning") {
+  instances.push({ name: `sint_in_meaning_other_${nm}`, claim: `{C.conforms(~H.r_any, C.SIntIn{${I(-2)}, ${I(2)}}, ${r}, None{}) == False{} : Bool}` });
+  instances.push({ name: `sint_in_meaning_other_wide_${nm}`, claim: `{C.conforms(~H.no_rule, C.SIntIn{${I(-1000)}, ${I(1000)}}, ${r}, None{}) == H.int_in_spec(${I(-1000)}, ${I(1000)}, H.raw_int_spec(${r})) : Bool}` });
 }
 
 export default { imports: [process.env.CORE ?? "../core.bend as C", `./${process.env.HELPERS ?? "helpers.bend"} as H`], instances };
