@@ -5,6 +5,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "ajv": "8.20.0",
     "bend-emit": "0.3.4",
     "bend-falsify": "github:nohzafk/bend-falsify#a50873f",
     "effect": "4.0.1",
@@ -20,7 +21,8 @@
     ".": "./src/index.ts",
     "./codec": "./src/codec.ts",
     "./gen": "./src/gen.ts",
-    "./effect": "./src/effect.ts"
+    "./effect": "./src/effect.ts",
+    "./json-schema": "./src/json-schema.ts"
   },
   "bin": {
     "bend-schema": "./src/gen-cli.ts"
@@ -37,6 +39,7 @@
     "src/index.ts",
     "src/codec.ts",
     "src/effect.ts",
+    "src/json-schema.ts",
     "src/gen.ts",
     "src/gen-cli.ts",
     "core/core.bend",

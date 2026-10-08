@@ -133,15 +133,47 @@ Both directions are synchronous and require no Effect services.
   fields, tagged unions, refinements and the existing size limits still apply.
   Effect parse options do not replace bend-schema's validation rules.
 - **Representation:** the encoded type is `unknown`, as with `schema.encode`.
-  The Effect AST uses an opaque declaration, not a generated structural schema;
-  it does not expose the Bend shape for JSON Schema generation. No Bend datatype
-  parser or source generator is involved.
+  The Effect AST uses an opaque declaration, not a generated structural schema,
+  so Effect's own `Schema.toJsonSchemaDocument` sees `{}`. For a JSON Schema,
+  use `bend-schema/json-schema` (below). No Bend datatype parser or source
+  generator is involved.
 - **Failures:** thrown schema configuration errors and thrown refinement
   callbacks remain programming errors, not validation issues. Exceptions from
   `encode` become Effect validation issues with the exception's message.
 
 Effect is an optional peer dependency (`^4.0.1`); tests pin `4.0.1`.
 Effect v3 and v4 prereleases are not supported by this adapter.
+
+## JSON Schema
+
+`toJsonSchema` writes a JSON Schema (draft 2020-12) document for the JSON a
+schema accepts, for client authors and tools that read JSON Schema:
+
+```ts
+import { toJsonSchema } from "bend-schema/json-schema";
+
+const doc = toJsonSchema(s.object({ id: s.nat(), name: s.str().optional() }));
+// { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object",
+//   properties: { id: { type: "integer", minimum: 0, maximum: 281474976710655 },
+//                 name: { type: "string" } },
+//   required: ["id"], additionalProperties: true }
+```
+
+- **Never stricter than `parse`.** Every value `parse` accepts passes the
+  document. Three things JSON Schema cannot state are left out, and there the
+  document is looser: `.refine()` predicates, the size and depth limits, and
+  a key repeated within one object. `parse` stays the authority.
+- **Exact elsewhere.** Without `.refine()` and inside the limits, a JSON value
+  passes the document exactly when `parse` accepts it. The tests check this
+  against ajv on random schemas and values; it is tested, not proved.
+- **Mapping.** `nat`, `int` and `.in()` are bounded `integer`s; `.len()` is
+  `minLength`/`maxLength` (both count code points) or `minItems`/`maxItems`;
+  a tuple is `prefixItems` with no further items; `.strict()` is
+  `additionalProperties: false`; `tagged` and `oneKey` are `oneOf`; `s.json()`
+  is `{}`.
+- **ajv and `__proto__`.** ajv 8 skips a `properties` entry named
+  `__proto__`, so it does not check a field of that name. The document itself
+  names it.
 
 ## Examples
 
