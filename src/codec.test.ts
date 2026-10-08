@@ -306,8 +306,8 @@ describe("encode applies the same limits (W3.c)", () => {
     throwsSize(() => s.list(s.nat()).encode(zeros(BUDGET + 1)), "bend-schema: encode: the value: too large");
     throwsSize(() => s.list(s.nat()).encode(zeros(1_000_000)), "bend-schema: encode: the value: too large");
     throwsSize(() => nestSchema(DEPTH_MAX + 1).encode(nest(DEPTH_MAX + 1) as never), "too large");
-    throwsSize(() => s.json().encode(nest(DEPTH_MAX + 1) as never), "bend-schema: encode: the JSON value: too large");
-    throwsSize(() => s.json().encode(zeros(BUDGET + 1) as never), "bend-schema: encode: the JSON value: too large");
+    throwsSize(() => s.json().encode(nest(DEPTH_MAX + 1) as never), "bend-schema: encode: the value: too large");
+    throwsSize(() => s.json().encode(zeros(BUDGET + 1) as never), "bend-schema: encode: the value: too large");
     // at the limits it writes
     expect(() => s.list(s.nat()).encode(zeros(BUDGET))).not.toThrow();
     expect(() => nestSchema(DEPTH_MAX).encode(nest(DEPTH_MAX) as never)).not.toThrow();
@@ -331,7 +331,7 @@ describe("encode applies the same limits (W3.c)", () => {
     }
     // s.json() positions share the value's one budget
     const t = performance.now();
-    throwsSize(() => s.list(s.json()).encode(Array(100).fill(zeros(BUDGET - 1)) as never), "the JSON value: too large");
+    throwsSize(() => s.list(s.json()).encode(Array(100).fill(zeros(BUDGET - 1)) as never), "bend-schema: encode: [0]: too large");
     expect(performance.now() - t).toBeLessThan(500);
   });
 
@@ -342,6 +342,66 @@ describe("encode applies the same limits (W3.c)", () => {
     expect(performance.now() - t).toBeLessThan(500);
   });
 
+  test("a tagged value's unwritten properties cost nothing, however many", () => {
+    const o: Record<string, unknown> = { t: "a" };
+    for (let i = 0; i < 20000; i++) o["k" + i] = i;
+    const t = performance.now();
+    const out = s.list(s.tagged("t", { a: s.object({}) })).encode(Array(50000).fill(o) as never);
+    expect((out as unknown[]).length).toBe(50000);
+    expect(performance.now() - t).toBeLessThan(1000);
+  });
+
+  test("the tag key counts toward the budget", () => {
+    // each element writes one key, its tag: BUDGET/2 elements + BUDGET/2 keys
+    const tg = s.list(s.tagged("t", { a: s.object({}) }));
+    expect(() => tg.encode(Array(BUDGET / 2).fill({ t: "a" }) as never)).not.toThrow();
+    throwsSize(() => tg.encode(Array(BUDGET / 2 + 1).fill({ t: "a" }) as never), "too large");
+  });
+
+  test("an optional field left undefined is not counted", () => {
+    const o = s.list(s.object({ a: s.nat().optional() }));
+    expect(() => o.encode(Array(BUDGET).fill({}) as never)).not.toThrow();
+    throwsSize(() => o.encode(Array(BUDGET / 2 + 1).fill({ a: 1 }) as never), "too large");
+  });
+
+  test("an s.json() position shares the budget with its typed siblings, and is named", () => {
+    const tp = s.tuple(s.list(s.nat()), s.json());
+    // 2 (tuple) + 50000 + 49998 = 100000
+    expect(() => tp.encode([zeros(50000), zeros(49998)] as never)).not.toThrow();
+    expect(tp.parse([zeros(50000), zeros(49998)]).ok).toBe(true);
+    throwsSize(() => tp.encode([zeros(50000), zeros(49999)] as never), "bend-schema: encode: [1]: too large");
+    expect(tp.parse([zeros(50000), zeros(49999)]).ok).toBe(false);
+  });
+
+  test("depth through tagged and oneKey: 128 levels encode and parse, 129 do not", () => {
+    const deepTagged = (d: number): { schema: any; value: any } => {
+      let schema: any = s.tagged("t", { a: s.object({}) });
+      let value: any = { t: "a" };
+      for (let i = 1; i < d; i++) {
+        schema = s.tagged("t", { a: s.object({ c: schema }) });
+        value = { t: "a", c: value };
+      }
+      return { schema, value };
+    };
+    const deepOneKey = (d: number): { schema: any; value: any } => {
+      let schema: any = s.oneKey({ k: s.nat() });
+      let value: any = { k: 1 };
+      for (let i = 1; i < d; i++) {
+        schema = s.oneKey({ k: schema });
+        value = { k: value };
+      }
+      return { schema, value };
+    };
+    for (const mk of [deepTagged, deepOneKey]) {
+      const at = mk(DEPTH_MAX);
+      expect(issue(at.schema.parse(at.value))).toBe("ok");
+      expect(() => at.schema.encode(at.value)).not.toThrow();
+      const past = mk(DEPTH_MAX + 1);
+      expect(issue(past.schema.parse(past.value))).toContain("too large");
+      throwsSize(() => past.schema.encode(past.value), "too large");
+    }
+  });
+
   test("the size error names where it was hit", () => {
     throwsSize(() => s.object({ a: s.list(s.nat()) }).encode({ a: zeros(BUDGET + 1) }), "bend-schema: encode: a: too large");
   });
@@ -349,7 +409,7 @@ describe("encode applies the same limits (W3.c)", () => {
   test("a cycle at an s.json() position is not JSON on encode too", () => {
     const cyc: unknown[] = [];
     cyc.push(cyc);
-    throwsSize(() => s.json().encode(cyc as never), "bend-schema: encode: the JSON value: must be a JSON value");
+    throwsSize(() => s.json().encode(cyc as never), "bend-schema: encode: the value: must be a JSON value");
   });
 });
 

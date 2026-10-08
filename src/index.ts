@@ -427,7 +427,7 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v, lim);
     case "true": return unit;
-    case "json": return jsonFromRaw(toJsonRaw(v, lim, lim.depth));
+    case "json": return jsonFromRaw(toJsonRaw(v, lim, lim.depth), lim);
     case "nullable": return v === null ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v, lim) };
     case "optional": return v === undefined ? { $: "None" } : { $: "Some", value: toMeaning(k.inner, v, lim) };
     case "listLen": return toMeaning(k.inner, v, lim);
@@ -460,19 +460,21 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
     case "tagged": {
       const i = k.cases.findIndex(([n]) => v[k.key] === n);
       if (i < 0) throw new Error(`bend-schema: encode: unknown tag ${String(v[k.key])}`);
-      const { [k.key]: _, ...rest } = v;
-      // The tag key is written beside the case's own fields, in the same object.
+      // The tag key is written beside the case's own fields, in the same
+      // object. The case is an object schema that reads only the fields it
+      // names, and wf refuses one naming the tag key, so it is given v itself:
+      // copying v's other properties would cost work no limit counts.
       enter(lim, 1);
-      return inj(i, toMeaning(k.cases[i]![1], rest, lim));
+      return inj(i, toMeaning(k.cases[i]![1], v, lim));
     }
   }
 }
 
-function jsonFromRaw(raw: core.Raw): CoreJson {
+function jsonFromRaw(raw: core.Raw, lim: Limit): CoreJson {
   if (raw.$ === "RJson") return raw.value;
-  // The same two reasons parse gives for an s.json() position.
+  // The same two reasons parse gives for an s.json() position, at its path.
   const why = raw.$ === "RTooBig" ? "too large" : "must be a JSON value";
-  throw new Error(`bend-schema: encode: the JSON value: ${why}`);
+  throw new Error(`bend-schema: encode: ${new Issue([...lim.path], why, true).text()}`);
 }
 
 const inj = (i: number, m: M): M => (i === 0 ? { $: "Inl", value: m } : { $: "Inr", value: inj(i - 1, m) });
