@@ -19,7 +19,7 @@ bun add bend-schema
 From a Bend file there is no install step: import the checker from the hub.
 
 ```bend
-import bend-schema-lib@0.3.0.0/core.bend as S
+import bend-schema-lib@0.4.1.0/core.bend as S
 ```
 
 Use it with [Bun](https://bun.sh). The package ships TypeScript source, and
