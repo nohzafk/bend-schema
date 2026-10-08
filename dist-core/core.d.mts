@@ -118,7 +118,7 @@ export declare function is_keyed(s: Schema): boolean;
 export declare function fresh_t(k: string, n: string, s: Schema): boolean;
 export declare function wf(s: Schema): boolean;
 
-declare const core: {
+declare const be$default: {
   "finite_number"(bits: NumberBits): boolean;
   "valid_json"(value: Json): boolean;
   "pick_raw"(b: boolean, x: Raw, y: Raw): Raw;
@@ -219,4 +219,4 @@ declare const core: {
   "fresh_t"(k: string, n: string, s: Schema): boolean;
   "wf"(s: Schema): boolean;
 };
-export default core;
+export default be$default;
