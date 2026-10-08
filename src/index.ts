@@ -8,13 +8,13 @@
 
 import * as core from "../dist-core/core.mjs";
 import type { BendList, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
-import { BUDGET, DEPTH_MAX, toJsonRaw, toRaw, whyText } from "./codec";
+import { BUDGET, DEPTH_MAX, INT_MIN, NAT_MAX, intNumber, intOf, toJsonRaw, toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
 // bend-emit cannot write as a TS signature; they are untyped here.
 const { enc, dec } = core as unknown as { enc: (s: Node, m: unknown) => core.Raw; dec: (s: Node, r: core.Raw) => core.BendMaybe<unknown> };
 
-export { BUDGET, DEPTH_MAX, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
+export { BUDGET, DEPTH_MAX, INT_MIN, KEYS_MAX, NAT_MAX, nat, toRaw } from "./codec";
 export type { Raw } from "../dist-core/core.mjs";
 
 /** JSON values exposed by the builder are ordinary JavaScript values. */
@@ -52,6 +52,8 @@ export type Result<T> = { ok: true; value: T } | { ok: false; error: Issue };
 type Kind =
   | { k: "nat" }
   | { k: "natIn"; lo: number; hi: number }
+  | { k: "int" }
+  | { k: "intIn"; lo: number; hi: number }
   | { k: "str" }
   | { k: "strLen"; lo: number; hi: number; inner: Schema<string> }
   | { k: "bool" }
@@ -157,6 +159,13 @@ export class NatSchema extends Schema<number> {
   }
 }
 
+export class IntSchema extends Schema<number> {
+  /** lo <= n <= hi, both ends included; either may be negative. */
+  in(lo: number, hi: number): IntSchema {
+    return new IntSchema({ k: "intIn", lo: bound(lo), hi: bound(hi) }, this.refines);
+  }
+}
+
 export class StrSchema extends Schema<string> {
   /** lo <= length <= hi, both ends included. */
   len(lo: number, hi: number): StrSchema {
@@ -176,6 +185,20 @@ export class ObjectSchema<T> extends Schema<T> {
   strict(): ObjectSchema<T> {
     return new ObjectSchema<T>({ k: "strict", obj: this });
   }
+}
+
+// An integer bound: one SInt can hold, so that the schema says what it means.
+function bound(n: number): number {
+  if (intOf(n) === null) throw new Error(`bend-schema: an integer bound must be a whole number from ${INT_MIN} to ${NAT_MAX}, got ${n}`);
+  return n;
+}
+
+// A value written at an SInt. One SInt cannot hold is a host's mistake its type
+// cannot rule out, like a bound broken, so encode refuses it.
+function intMeaning(v: number): core.Int {
+  const i = typeof v === "number" ? intOf(v) : null;
+  if (i === null) throw new Error(`bend-schema: encode: ${String(v)} is not a whole number from ${INT_MIN} to ${NAT_MAX}`);
+  return i;
 }
 
 function whole(n: number): number {
@@ -198,6 +221,7 @@ export type Infer<X> = X extends Schema<infer T> ? T : never;
 
 export const s = {
   nat: () => new NatSchema({ k: "nat" }),
+  int: () => new IntSchema({ k: "int" }),
   str: () => new StrSchema({ k: "str" }),
   bool: () => new Schema<boolean>({ k: "bool" }),
   true: () => new Schema<true>({ k: "true" }),
@@ -222,6 +246,8 @@ function toNode(x: Schema<any>): Node {
   switch (k.k) {
     case "nat": return { $: "SNat" };
     case "natIn": return { $: "SNatIn", lo: BigInt(k.lo), hi: BigInt(k.hi) };
+    case "int": return { $: "SInt" };
+    case "intIn": return { $: "SIntIn", lo: intOf(k.lo)!, hi: intOf(k.hi)! };
     case "str": return { $: "SStr" };
     case "strLen": return { $: "SStrLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
     case "bool": return { $: "SBool" };
@@ -374,6 +400,7 @@ function toJs(x: Schema<any>, m: M): unknown {
   const k = x.kind;
   switch (k.k) {
     case "nat": case "natIn": return Number(m);
+    case "int": case "intIn": return intNumber(m);
     case "str": case "bool": case "enum": return m;
     case "strLen": return toJs(k.inner, m);
     case "true": return true;
@@ -424,6 +451,7 @@ function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
   const k = x.kind;
   switch (k.k) {
     case "nat": case "natIn": return BigInt(whole(v));
+    case "int": case "intIn": return intMeaning(v);
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v, lim);
     case "true": return unit;
@@ -489,6 +517,7 @@ function put(out: Record<string, unknown>, n: string, x: unknown): void {
 function rawToJs(r: core.Raw): unknown {
   switch (r.$) {
     case "RNum": return Number(r.n);
+    case "RNeg": return -Number(r.n) - 1;
     case "RBool": return r.b;
     case "RNull": return null;
     case "RStr": return r.s;

@@ -1,9 +1,10 @@
 // The universal codec: any JS value, as the schema check takes it.
 //
 // It knows no schema, so it decides nothing about shapes: a whole number from 0
-// to the runtime's Nat bound (2^48-1) is RNum, a boolean RBool, null RNull, a
+// to the runtime's Nat bound (2^48-1) is RNum, a whole number from -(2^48-1)
+// to -1 is RNeg{n} with n = -v-1, a boolean RBool, null RNull, a
 // string RStr, an array a chain of RCons, a plain object a chain of RKey in its
-// own key order, and anything else (a fraction, a negative, NaN, undefined, a
+// own key order, and anything else (a fraction, a number past either bound, NaN, undefined, a
 // Date or any other non-plain object) is RBad, for check to report where it
 // sits. Every rule about shapes is the proved core's (LAWS.bend).
 //
@@ -15,7 +16,7 @@
 // that node's path. Nothing here is a rule about values: a size is
 // not a shape, and a host cannot choose the sizes it is sent.
 
-import type { BendList, BendMaybe, Err, Json, JMember, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
+import type { BendList, BendMaybe, Err, Int, Json, JMember, NumberBits, Raw, Step, Why } from "../dist-core/core.mjs";
 
 // The largest Nat the runtime holds: bend's own Nat.add(Nat.mul(65535,
 // 4294967295 + 1), 4294967295). A number past it is not a Nat at all, so it
@@ -24,6 +25,21 @@ export const NAT_MAX = 2 ** 48 - 1;
 
 // One rule, two ways out: the runtime holds v as a Nat, or it does not.
 const natFit = (v: number): boolean => Number.isSafeInteger(v) && v >= 0 && v <= NAT_MAX;
+
+// The smallest integer SInt reads: the negatives mirror the Nat bound, RNeg{n}
+// holding -(n+1) for n from 0 to NAT_MAX-1.
+export const INT_MIN = -NAT_MAX;
+const negFit = (v: number): boolean => Number.isSafeInteger(v) && v < 0 && v >= INT_MIN;
+
+/** A JS integer as the core's Int, or null when SInt cannot hold it. */
+export function intOf(v: number): Int | null {
+  if (natFit(v)) return { $: "IPos", n: BigInt(v) };
+  if (negFit(v)) return { $: "INeg", n: BigInt(-v - 1) };
+  return null;
+}
+
+/** The core's Int as a JS number. */
+export const intNumber = (i: Int): number => (i.$ === "IPos" ? Number(i.n) : -Number(i.n) - 1);
 
 // `nat(name, v)` is v when the runtime can hold it as a Nat, and an Error
 // otherwise. It is toRaw's RNum rule, thrown instead of reported: a host that
@@ -93,7 +109,7 @@ export function toRaw(v: unknown): Raw {
   let depth = 0;
   const build = (v: unknown): Raw => {
     if (v === null) return { $: "RNull" };
-    if (typeof v === "number") return natFit(v) ? { $: "RNum", n: BigInt(v) } : { $: "RBad" };
+    if (typeof v === "number") return natFit(v) ? { $: "RNum", n: BigInt(v) } : negFit(v) ? { $: "RNeg", n: BigInt(-v - 1) } : { $: "RBad" };
     if (typeof v === "boolean") return { $: "RBool", b: v };
     if (typeof v === "string") return { $: "RStr", s: v };
     if (Array.isArray(v)) {
@@ -263,6 +279,10 @@ export function whyText(w: Why): string {
       return `must be from ${w.lo} to ${w.hi}`;
     case "NotJson":
       return "must be a JSON value";
+    case "NotInt":
+      return `must be a whole number from ${INT_MIN} to ${NAT_MAX}`;
+    case "IntNotIn":
+      return `must be from ${intNumber(w.lo)} to ${intNumber(w.hi)}`;
     case "TooLarge":
       return "too large";
   }

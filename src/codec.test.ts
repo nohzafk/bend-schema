@@ -70,7 +70,7 @@ describe("the JSON host codec", () => {
 import { describe, expect, test } from "bun:test";
 import * as kernel from "../dist-core/core.mjs";
 import { check0 as check, conforms0, type BendList, type BendMaybe, type Raw, type Schema } from "../dist-core/core.mjs";
-import { BUDGET, DEPTH_MAX, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
+import { BUDGET, DEPTH_MAX, INT_MIN, KEYS_MAX, NAT_MAX, errText, nat as hostNat, toJsonRaw, toRaw } from "./codec";
 import { s } from "./index";
 import { SHAPES, unbudgeted as before, type Case } from "./measure_budget";
 
@@ -126,11 +126,20 @@ function atBudget(shape: (n: number) => Case): { scale: number; c: Case } {
 describe("the codec decides nothing about shapes", () => {
   test("numbers the Nat cannot hold are RBad, for check to place", () => {
     expect(toRaw(1.5)).toEqual({ $: "RBad" });
-    expect(toRaw(-1)).toEqual({ $: "RBad" });
+    expect(toRaw(-1.5)).toEqual({ $: "RBad" });
     expect(toRaw(2 ** 48)).toEqual({ $: "RBad" });
+    expect(toRaw(-(2 ** 48))).toEqual({ $: "RBad" });
     expect(toRaw(true)).toEqual({ $: "RBool", b: true });
     expect(toRaw(undefined)).toEqual({ $: "RBad" });
     expect(toRaw(2 ** 48 - 1)).toEqual({ $: "RNum", n: 2n ** 48n - 1n });
+  });
+
+  test("a negative whole number is RNeg{n}, n = -v-1, down to INT_MIN", () => {
+    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0n });
+    expect(toRaw(-32700)).toEqual({ $: "RNeg", n: 32699n });
+    expect(toRaw(INT_MIN)).toEqual({ $: "RNeg", n: 2n ** 48n - 2n });
+    expect(toRaw(INT_MIN - 1)).toEqual({ $: "RBad" });
+    expect(toRaw(-0)).toEqual({ $: "RNum", n: 0n });
   });
 });
 
@@ -531,15 +540,18 @@ describe("the host-side Nat guard", () => {
   // or a refusal. A host that writes a number into the core's input needs the
   // refusal before it builds anything, and the message must name the field,
   // the bound and the value.
-  test("it returns the value where toRaw says RNum, and refuses where it says RBad", () => {
+  test("it returns the value where toRaw says RNum, and refuses everything else", () => {
     for (const v of [0, 1, 2 ** 48 - 1, NAT_MAX]) {
       expect(hostNat("units", v)).toBe(v);
       expect(toRaw(v)).toEqual({ $: "RNum", n: BigInt(v) });
     }
-    for (const v of [2 ** 48, -1, 1.5, NaN, Infinity, 2 ** 53]) {
+    for (const v of [2 ** 48, 1.5, NaN, Infinity, 2 ** 53]) {
       expect(toRaw(v)).toEqual({ $: "RBad" });
       expect(() => hostNat("units", v)).toThrow();
     }
+    // a negative is an integer, not a Nat
+    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0n });
+    expect(() => hostNat("units", -1)).toThrow();
   });
 
   test("NAT_MAX is the largest the runtime holds, and the refusal names all three", () => {

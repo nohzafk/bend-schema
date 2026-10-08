@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { s, type Infer, type Json } from "./index.ts";
+import { INT_MIN, NAT_MAX, s, type Infer, type Json } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -229,3 +229,68 @@ function _optTypes() {
   const y: Infer<typeof O> = { a: 1, b: "z" };
   return [x, y];
 }
+
+describe("int", () => {
+  // JSON-RPC's error codes: the reason s.int() exists.
+  const Code = s.int().in(-32768, -32000);
+  const Resp = s.object({ code: s.int(), message: s.str(), data: s.json().optional() });
+
+  test("accepts a whole number of either sign, and reads it back", () => {
+    for (const v of [0, 1, -1, -32700, INT_MIN, NAT_MAX]) expect(s.int().parse(v)).toEqual({ ok: true, value: v });
+    expect(s.int().parse(-0)).toEqual({ ok: true, value: 0 });
+    expect(Resp.parse({ code: -32601, message: "Method not found" })).toEqual({ ok: true, value: { code: -32601, message: "Method not found" } });
+  });
+
+  test("refuses a fraction, a number past either bound, and anything not a number", () => {
+    for (const v of [1.5, -0.5, INT_MIN - 1, NAT_MAX + 1, NaN, Infinity, "1", null, true]) {
+      const e = s.int().check(v);
+      expect(e?.message).toBe(`must be a whole number from ${INT_MIN} to ${NAT_MAX}`);
+      expect(e?.proved).toBe(true);
+    }
+    expect(s.int().check(undefined)?.message).toBe(`must be a whole number from ${INT_MIN} to ${NAT_MAX}`);
+    expect(s.object({ code: s.int() }).check({})?.message).toBe("missing");
+  });
+
+  test("a range has both ends included, either of them negative", () => {
+    for (const v of [-32768, -32700, -32000]) expect(Code.parse(v).ok).toBe(true);
+    for (const v of [-32769, -31999, 0, 32700]) {
+      expect(Code.check(v)?.message).toBe("must be from -32768 to -32000");
+    }
+    expect(s.int().in(-2, 3).parse(3).ok).toBe(true);
+    expect(s.int().in(-2, 3).parse(-3).ok).toBe(false);
+    // lo past hi is an empty range, not an error
+    expect(s.int().in(1, -1).parse(0).ok).toBe(false);
+  });
+
+  test("the paths and the reason are the core's", () => {
+    const e = s.object({ error: s.object({ code: Code }) }).check({ error: { code: 1 } })!;
+    expect(e.path).toEqual(["error", "code"]);
+    expect(e.text()).toBe("error.code: must be from -32768 to -32000");
+  });
+
+  test("SNat still refuses a negative, as before", () => {
+    expect(s.nat().check(-1)?.message).toBe(`must be a whole number from 0 to ${NAT_MAX}`);
+  });
+
+  test("encode then parse is the identity, and encode refuses what SInt cannot hold", () => {
+    for (const v of [0, -1, 7, -32603, INT_MIN, NAT_MAX]) {
+      expect(s.int().encode(v)).toBe(v);
+      expect(s.int().parse(s.int().encode(v))).toEqual({ ok: true, value: v });
+    }
+    expect(Resp.encode({ code: -32700, message: "Parse error" })).toEqual({ code: -32700, message: "Parse error" });
+    for (const v of [1.5, NaN, INT_MIN - 1, NAT_MAX + 1]) expect(() => s.int().encode(v)).toThrow();
+    expect(() => Code.encode(5)).toThrow("must be from -32768 to -32000");
+  });
+
+  test("a bound must be one SInt can hold", () => {
+    expect(() => s.int().in(-1.5, 3)).toThrow();
+    expect(() => s.int().in(INT_MIN - 1, 0)).toThrow();
+    expect(() => s.int().in(INT_MIN, NAT_MAX)).not.toThrow();
+  });
+
+  test("a refinement keeps the builder's methods", () => {
+    const Even = s.int().refine((n) => n % 2 === 0, "must be even").in(-10, 10);
+    expect(Even.check(-3)?.message).toBe("must be even");
+    expect(Even.check(-12)?.message).toBe("must be from -10 to 10");
+  });
+});

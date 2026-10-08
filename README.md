@@ -64,6 +64,7 @@ own `.refine()` function, which runs only after the proved check passes.
 | Builder | Accepts |
 |---|---|
 | `s.nat()`, `.in(lo, hi)` | integer 0 to 2^48-1 |
+| `s.int()`, `.in(lo, hi)` | integer -(2^48-1) to 2^48-1 |
 | `s.str()`, `.len(lo, hi)` | string |
 | `s.bool()`, `s.true()` | boolean, or only `true` |
 | `s.enum([...])` | one of the given strings |

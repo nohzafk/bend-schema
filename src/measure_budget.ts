@@ -127,7 +127,10 @@ export const SHAPES: Record<string, (n: number) => Case> = {
 export function unbudgeted(v: unknown): Raw {
   const NAT_MAX = 2 ** 48 - 1;
   if (v === null) return { $: "RNull" };
-  if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 && v <= NAT_MAX ? { $: "RNum", n: BigInt(v) } : { $: "RBad" };
+  if (typeof v === "number") {
+    if (!Number.isSafeInteger(v) || Math.abs(v) > NAT_MAX) return { $: "RBad" };
+    return v >= 0 ? { $: "RNum", n: BigInt(v) } : { $: "RNeg", n: BigInt(-v - 1) };
+  }
   if (typeof v === "boolean") return { $: "RBool", b: v };
   if (typeof v === "string") return { $: "RStr", s: v };
   if (Array.isArray(v)) return v.reduceRight<Raw>((tail, h) => ({ $: "RCons", head: unbudgeted(h), tail }), { $: "RNil" });

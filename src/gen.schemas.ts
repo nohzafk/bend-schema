@@ -20,6 +20,8 @@ export const Every = s.object({
     named: s.str().len(1, 32),
     seats: s.nat(),
     workers: s.nat().in(1, 64),
+    offset: s.int(),
+    code: s.int().in(-32768, -32000),
     active: s.bool(),
     always: s.true(),
     anything: s.json(),

@@ -12,6 +12,8 @@ import { s, type Infer } from "bend-schema";
 ```ts
 s.nat()              // integer from 0 to 2^48-1
 s.nat().in(1, 500)   // integer from 1 to 500, both included
+s.int()              // integer from -(2^48-1) to 2^48-1
+s.int().in(-32768, -32000)  // integer in that range, both included
 s.str()              // any string
 s.str().len(1, 64)   // string of 1 to 64 characters
 s.bool()             // true or false
@@ -19,8 +21,10 @@ s.true()             // only true
 s.enum(["free", "pro"])  // one of these strings; TS type "free" | "pro"
 ```
 
-There are no negative numbers and no fractions. Store money as whole cents,
-and use a string for anything else.
+`s.nat()` has no negative numbers; `s.int()` has them, for a field such as a
+JSON-RPC error `code`. Neither has fractions. Store money as whole cents, and
+use a string for anything else; a value whose numbers the schema does not own
+goes in `s.json()`.
 
 ## Objects
 

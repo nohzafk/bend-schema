@@ -6,7 +6,7 @@ import { emit, printNode } from "./gen.ts";
 import { Every, schemas } from "./gen.schemas.ts";
 
 const FORMS = [
-  "SStrict{", "SField{", "SEnd{}", "SStr{}", "SStrLen{", "SNat{}", "SNatIn{", "SBool{}",
+  "SStrict{", "SField{", "SEnd{}", "SStr{}", "SStrLen{", "SNat{}", "SNatIn{", "SInt{}", "SIntIn{S.INeg{32767n}, S.INeg{31999n}}", "SBool{}",
   "STrue{}", "SJson{}", "SEnum{", "SOpt{", "SList{", "STuple{", "STEnd{}", "SVariant{", "SVEnd{}",
   "STagged{", "STagEnd{",
 ];
