@@ -2,7 +2,7 @@
 // None of this is proved, so every constructor is round-tripped here.
 
 import { describe, expect, test } from "bun:test";
-import { INT_MIN, NAT_MAX, s, type Infer, type Json } from "./index.ts";
+import { INT_MIN, Issue, NAT_MAX, issueSchema, s, type Infer, type Json } from "./index.ts";
 
 const Plan = s.object({
     name: s.str().len(1, 20),
@@ -293,5 +293,41 @@ describe("int", () => {
     const Even = s.int().refine((n) => n % 2 === 0, "must be even").in(-10, 10);
     expect(Even.check(-3)?.message).toBe("must be even");
     expect(Even.check(-12)?.message).toBe("must be from -10 to 10");
+  });
+});
+
+describe("the wire form of an Issue", () => {
+  const wire = (i: Issue | null) => JSON.parse(JSON.stringify(i));
+  const Deep = s.object({ params: s.tuple(s.str(), s.list(s.object({ n: s.nat() }))) });
+
+  test("toJSON is exactly path, message and proved", () => {
+    const e = Deep.check({ params: ["a", [{ n: 1 }, { n: "x" }]] })!;
+    expect(e.toJSON()).toEqual({ path: ["params", 1, 1, "n"], message: e.message, proved: true });
+    expect(Object.keys(wire(e))).toEqual(["path", "message", "proved"]);
+    expect(wire(e)).toEqual(e.toJSON());
+    expect(e.toJSON().path).not.toBe(e.path);
+  });
+
+  test("it round-trips through issueSchema, proved or not", () => {
+    const refined = s.object({ r: s.nat().refine((n) => n > 3, "too small") }).check({ r: 1 })!;
+    const top = s.str().check(5)!;
+    for (const e of [Deep.check({ params: ["a", [{ n: -1 }]] })!, refined, top]) {
+      const r = issueSchema.parse(wire(e));
+      expect(r).toEqual({ ok: true, value: e.toJSON() });
+      expect(issueSchema.encode(e.toJSON())).toEqual(wire(e));
+    }
+    expect(refined.proved).toBe(false);
+    expect(top.path).toEqual([]);
+  });
+
+  test("issueSchema refuses what toJSON never writes, and ignores a later field", () => {
+    const ok = { path: ["a", 0], message: "m", proved: true };
+    expect(issueSchema.check(ok)).toBeNull();
+    expect(issueSchema.parse({ ...ok, code: 7 })).toEqual({ ok: true, value: ok });
+    for (const p of [[-1], [1.5], [null], [true], [["a"]], [{ k: 1 }]]) {
+      expect(issueSchema.check({ ...ok, path: p })?.message).toBe("each path part must be a string or a whole number");
+    }
+    expect(issueSchema.check({ path: [], message: "m" })?.path).toEqual(["proved"]);
+    expect(issueSchema.check({ path: [], message: 1, proved: true })?.path).toEqual(["message"]);
   });
 });

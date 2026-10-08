@@ -59,6 +59,32 @@ An error has a `path`, a `message`, and `proved`. `proved: true` means the
 error came from the verified core. `proved: false` means it came from your
 own `.refine()` function, which runs only after the proved check passes.
 
+### Errors on the wire
+
+`error.toJSON()` is the error as JSON, and `JSON.stringify(error)` writes the
+same thing:
+
+```json
+{ "path": ["params", 1, "n"], "message": "must be a whole number from 0 to 281474976710655", "proved": true }
+```
+
+- `path` lists object keys (strings) and list indices (whole numbers), outer
+  first. An empty path means the value itself.
+- The field names and their types are stable: a change to them is a major
+  version. **The `message` text is not stable.** It is written for people, so
+  do not branch on it.
+- `issueSchema` is the schema of this form, so the receiver can check it like
+  any other value. It is not strict: a field added later does not break an
+  older reader. That each path part is a string or a whole number is a
+  `.refine()`, so that part is not proved.
+
+For example, as the `data` of a JSON-RPC "Invalid params" error:
+
+```ts
+const r = Params.parse(msg.params);
+if (!r.ok) return { jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "Invalid params", data: r.error.toJSON() } };
+```
+
 ## Schemas
 
 | Builder | Accepts |
@@ -128,7 +154,8 @@ Both directions are synchronous and require no Effect services.
 
 - **Errors:** the first parse error keeps its path and reason in an Effect
   `SchemaIssue.Pointer` and `InvalidValue`. Effect adds surrounding field paths
-  when the codec is nested. The bend-schema `proved` flag is not carried over.
+  when the codec is nested. `proved` is on the `InvalidValue` annotations, next
+  to `message`. Effect's own formatters print only the path and the message.
 - **Semantics:** unknown keys are dropped unless the object is strict. Optional
   fields, tagged unions, refinements and the existing size limits still apply.
   Effect parse options do not replace bend-schema's validation rules.

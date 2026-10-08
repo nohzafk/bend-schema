@@ -197,3 +197,21 @@ test("root entry runs in an isolated directory with Effect absent", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// The InvalidValue leaf under a failure: Composite and Pointer nodes wrap it.
+function leaf(schema: S.Codec<unknown, unknown>, input: unknown): SchemaIssue.InvalidValue {
+  const result = SchemaParser.decodeUnknownResult(schema)(input);
+  if (result._tag !== "Failure") throw new Error("expected decode failure");
+  const walk = (i: any): any =>
+    i._tag === "InvalidValue" ? i : [i.issue, ...(i.issues ?? [])].filter(Boolean).map(walk).find(Boolean);
+  const found = walk(result.failure);
+  if (!found) throw new Error("no InvalidValue leaf");
+  return found;
+}
+
+test("proved rides on the InvalidValue annotations", () => {
+  const core = leaf(toEffect(s.object({ a: s.nat() })), { a: "x" });
+  expect(core.annotations).toEqual({ message: "must be a whole number from 0 to 281474976710655", proved: true });
+  const host = leaf(toEffect(s.nat().refine((n) => n > 3, "too small")), 1);
+  expect(host.annotations).toEqual({ message: "too small", proved: false });
+});

@@ -43,7 +43,16 @@ export class Issue {
   toString(): string {
     return this.text();
   }
+
+  /** The wire form: exactly path, message and proved. `issueSchema` reads it
+   * back. Field names and types are stable; the message text is not. */
+  toJSON(): IssueJson {
+    return { path: [...this.path], message: this.message, proved: this.proved };
+  }
 }
+
+/** An Issue as JSON, for example the `data` of a JSON-RPC error. */
+export type IssueJson = { path: PathPart[]; message: string; proved: boolean };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: Issue };
 
@@ -235,6 +244,16 @@ export const s = {
   tagged: <K extends string, S extends Record<string, ObjectSchema<any>>>(key: K, cases: S) =>
     new Schema<TaggedUnion<K, S>>({ k: "tagged", key, cases: Object.entries(cases) }),
 };
+
+/** The schema of `Issue.toJSON()`. Not strict, so a later field does not break
+ * an older reader. That each path part is a key or an index is a refinement:
+ * bend-schema has no proved string-or-number union yet. */
+export const issueSchema = s
+  .object({ path: s.list(s.json()), message: s.str(), proved: s.bool() })
+  .refine(
+    (x) => x.path.every((p) => typeof p === "string" || (typeof p === "number" && Number.isSafeInteger(p) && p >= 0)),
+    "each path part must be a string or a whole number",
+  ) as unknown as Schema<IssueJson>;
 
 // `s.Infer<typeof x>` reads as `Infer<typeof x>`.
 export declare namespace s {

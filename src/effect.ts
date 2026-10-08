@@ -14,7 +14,7 @@ export function toEffect<T>(schema: Schema<T>): S.decodeTo<
       ? Effect.succeed(result.value)
       : Effect.fail(new SchemaIssue.Pointer(
           result.error.path,
-          new SchemaIssue.InvalidValue({ message: result.error.message }),
+          new SchemaIssue.InvalidValue({ message: result.error.message, proved: result.error.proved }),
         ));
   });
 

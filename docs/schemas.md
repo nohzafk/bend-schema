@@ -122,6 +122,9 @@ if (r.ok) {
 - `check` returns the error, or `null`.
 - Only the **first** error is reported: depth first, in document order.
 - `error.text(name)` formats the error as one line; `name` names the value.
+- `error.toJSON()` is `{ path, message, proved }`, and `issueSchema` is its
+  schema. The field names are stable; the message text is not. See the README,
+  "Errors on the wire".
 
 Common messages:
 
