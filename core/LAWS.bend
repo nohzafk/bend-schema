@@ -57,6 +57,13 @@ import ./core.bend as C
 #                   enc wraps a JSON value unchanged; the result conforms
 #                   exactly when the value is valid.
 #
+#   int_le_complete, int_le_sound
+#                   int_le(a, b) exactly when b is reached from a by steps of
+#                   +1: the comparison SIntIn reads, pinned without comparing.
+#   sint_meaning    SInt accepts a whole number of either sign and nothing else.
+#   sint_in_meaning SIntIn{lo, hi} accepts an integer from lo to hi, both ends
+#                   included, and nothing that is not an integer.
+#
 # bounds_meaning died with SBounds: the bounded list is billing's rule now,
 # and its meaning is billing's law.
 #
@@ -484,3 +491,85 @@ law json_dec_preserves:
 law json_enc_preserves:
   for +v: C.Json
   {C.enc(C.SJson{}, v) == C.RJson{v} : C.Raw} & {C.conforms(~C.no_rule, C.SJson{}, C.enc(C.SJson{}, v), None{}) == json_spec(v) : Bool}
+
+# ---- SInt: a whole number of either sign ----
+#
+# SInt accepts a whole number of either sign that the codec could hold: RNum
+# for 0 and up, RNeg{n} for -(n+1). SIntIn{lo, hi} accepts one from lo to hi,
+# both ends included; lo past hi is an empty range. Both read int_le, so
+# int_le is pinned first, by a second reading of a <= b that does not compare
+# at all: b is reached from a by k steps of +1 (int_add), for some k. A
+# comparison with a flipped sign, an off-by-one at the negatives, or an INeg
+# offset read as -n instead of -(n+1) is not a model of the pair.
+
+def int_succ(i: C.Int) -> C.Int:
+  match i:
+    case C.IPos{n}:
+      C.IPos{1n+n}
+    case C.INeg{0n}:
+      C.IPos{0n}
+    case C.INeg{1n+n}:
+      C.INeg{n}
+
+def int_add(k: Nat, a: C.Int) -> C.Int:
+  match k:
+    case 0n:
+      a
+    case 1n+j:
+      int_add(j, int_succ(a))
+
+def Reaches(a: C.Int, b: C.Int) -> Type:
+  &k: Nat -> {int_add(k, a) == b : C.Int}
+
+# What a raw value holds as an integer, read independently of the core.
+def raw_int_spec(r: C.Raw) -> Maybe<&2, C.Int>:
+  match r:
+    case C.RNum{n}:
+      Some{C.IPos{n}}
+    case C.RNeg{n}:
+      Some{C.INeg{n}}
+    case _:
+      None{}
+
+def int_in_spec(+lo: C.Int, +hi: C.Int, m: Maybe<&2, C.Int>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+i}:
+      Bool.and(C.int_le(lo, i), C.int_le(i, hi))
+
+def is_int_spec(m: Maybe<&2, C.Int>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{i}:
+      True{}
+
+# Every number reached from a by steps of +1 is at least a.
+law int_le_complete:
+  for +k: Nat
+  for +a: C.Int
+  {C.int_le(a, int_add(k, a)) == True{} : Bool}
+
+# A number at least a is reached from a by steps of +1: here is how many.
+law int_le_sound:
+  for +a: C.Int
+  for +b: C.Int
+  for h: {C.int_le(a, b) == True{} : Bool}
+  Reaches(a, b)
+
+# SInt accepts a whole number of either sign and nothing else: not a fraction
+# or a number past the bound (RBad), not a size marker, not a missing value.
+law sint_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +r: C.Raw
+  {C.conforms(~rule, C.SInt{}, r, None{}) == is_int_spec(raw_int_spec(r)) : Bool}
+
+# SIntIn{lo, hi} accepts an integer from lo to hi, both ends included, and
+# nothing that is not an integer.
+law sint_in_meaning:
+  for ~rule: Nat -> C.Raw -> Maybe<&2, C.Err>
+  for +lo: C.Int
+  for +hi: C.Int
+  for +r: C.Raw
+  {C.conforms(~rule, C.SIntIn{lo, hi}, r, None{}) == int_in_spec(lo, hi, raw_int_spec(r)) : Bool}

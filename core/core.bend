@@ -4,7 +4,7 @@ import Base
 #
 # The host turns any JSON value into a Raw with one universal codec that knows
 # no schema: numbers that are whole and within the runtime's Nat become RNum,
-# every other number, boolean or unsupported value becomes RBad. A list or an
+# negative whole numbers within the same bound become RNeg, every other number, boolean or unsupported value becomes RBad. A list or an
 # object past the codec's budget becomes one RTooBig, in its place: the codec
 # counts elements and keys so that these walks never receive a value the
 # runtime cannot carry, and a size becomes an error (TooLarge, at the node's
@@ -46,6 +46,12 @@ type Json is Data:
 type JMember is Data:
   JMember{key: String, value: Json}
 
+# A whole number of either sign: IPos{n} is n, INeg{n} is -(n+1), so every
+# integer has exactly one form (there is no -0).
+type Int is Data:
+  IPos{n: Nat}
+  INeg{n: Nat}
+
 type Raw is Data:
   RNum{n: Nat}
   RBool{b: Bool}
@@ -59,6 +65,7 @@ type Raw is Data:
   REnd{}
   RKey{key: String, val: Raw, rest: Raw}
   RJson{value: Json}
+  RNeg{n: Nat}
 
 type Schema is Data:
   SNat{}
@@ -83,6 +90,8 @@ type Schema is Data:
   SOptional{inner: Schema}
   SListLen{lo: Nat, hi: Nat, s: Schema}
   SJson{}
+  SInt{}
+  SIntIn{lo: Int, hi: Int}
 
 # A step of a path. Positions count what was passed on the way, so that
 # following a path never compares two names: AtIndex{i} is element i of a
@@ -119,6 +128,8 @@ type Why is Data:
   TooLarge{}
   CountNotIn{lo: Nat, hi: Nat}
   NotJson{}
+  NotInt{}
+  IntNotIn{lo: Int, hi: Int}
 
 type Err is Data:
   Err{path: List<&2, Step>, why: Why}
@@ -289,6 +300,30 @@ def str_len_ok(+lo: Nat, +hi: Nat, +x: String) -> Bool:
 def num_ok(+lo: Nat, +hi: Nat, +n: Nat) -> Bool:
   Bool.and(Nat.is_le(lo, n), Nat.is_le(n, hi))
 
+# a <= b on integers. A negative is below every non-negative, and between two
+# negatives the larger offset is the smaller number.
+def int_le(a: Int, b: Int) -> Bool:
+  match a b:
+    case IPos{m} IPos{n}:
+      Nat.is_le(m, n)
+    case IPos{m} INeg{n}:
+      False{}
+    case INeg{m} IPos{n}:
+      True{}
+    case INeg{m} INeg{n}:
+      Nat.is_le(n, m)
+
+def int_ok(+lo: Int, +hi: Int, +i: Int) -> Bool:
+  Bool.and(int_le(lo, i), int_le(i, hi))
+
+# How an integer is written: a non-negative as RNum, a negative as RNeg.
+def int_raw(i: Int) -> Raw:
+  match i:
+    case IPos{n}:
+      RNum{n}
+    case INeg{n}:
+      RNeg{n}
+
 # r is a string whose length is in the bounds: what conforms reads at an
 # SStrLen, and what len_err refuses exactly when it fails.
 def len_ok(+lo: Nat, +hi: Nat, r: Raw) -> Bool:
@@ -446,6 +481,14 @@ def conforms(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Mayb
       Bool.and(conforms(~rule, e, h, None{}), conforms(~rule, SList{e}, t, None{}))
     case SJson{} RJson{value}:
       valid_json(value)
+    case SInt{} RNum{n}:
+      True{}
+    case SInt{} RNeg{n}:
+      True{}
+    case SIntIn{+lo, +hi} RNum{+n}:
+      int_ok(lo, hi, IPos{n})
+    case SIntIn{+lo, +hi} RNeg{+n}:
+      int_ok(lo, hi, INeg{n})
     case SField{+name, fs, rest} REnd{}:
       Bool.and(conforms(~rule, fs, RMissing{}, None{}), conforms(~rule, rest, REnd{}, None{}))
     case SField{+name, fs, rest} RKey{+k, +v, +o}:
@@ -672,6 +715,18 @@ def check(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<&
       in_err(valid_json(value), NotJson{})
     case SJson{} x:
       here(missing_or(x, NotJson{}))
+    case SInt{} RNum{n}:
+      None{}
+    case SInt{} RNeg{n}:
+      None{}
+    case SInt{} x:
+      here(missing_or(x, NotInt{}))
+    case SIntIn{+lo, +hi} RNum{+n}:
+      in_err(int_ok(lo, hi, IPos{n}), IntNotIn{lo, hi})
+    case SIntIn{+lo, +hi} RNeg{+n}:
+      in_err(int_ok(lo, hi, INeg{n}), IntNotIn{lo, hi})
+    case SIntIn{lo_, hi_} x:
+      here(missing_or(x, NotInt{}))
     case SList{e} x:
       here(missing_or(x, NotList{}))
     case SField{+name, fs, rest} REnd{}:
@@ -756,6 +811,34 @@ def nat_in_defect(+lo: Nat, +hi: Nat, r: Raw, p: List<&2, Step>) -> Maybe<&2, Wh
       None{}
     case x Nil{}:
       Some{missing_or(x, NotNat{})}
+    case x st <> q:
+      None{}
+
+# The same two reasons at an SInt and an SIntIn: a number of either sign is not
+# the defect, and its bound is the defect only where the path ends.
+def int_defect(r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
+  match r p:
+    case RNum{n} _:
+      None{}
+    case RNeg{n} _:
+      None{}
+    case x Nil{}:
+      Some{missing_or(x, NotInt{})}
+    case x st <> q:
+      None{}
+
+def int_in_defect(+lo: Int, +hi: Int, r: Raw, p: List<&2, Step>) -> Maybe<&2, Why>:
+  match r p:
+    case RNum{+n} Nil{}:
+      guard(Bool.not(int_ok(lo, hi, IPos{n})), Some{IntNotIn{lo, hi}})
+    case RNeg{+n} Nil{}:
+      guard(Bool.not(int_ok(lo, hi, INeg{n})), Some{IntNotIn{lo, hi}})
+    case RNum{n} st <> q:
+      None{}
+    case RNeg{n} st <> q:
+      None{}
+    case x Nil{}:
+      Some{missing_or(x, NotInt{})}
     case x st <> q:
       None{}
 
@@ -946,6 +1029,10 @@ def defect(~rule: Nat -> Raw -> Maybe<&2, Err>, s: Schema, r: Raw, +prev: Maybe<
       guard(Bool.not(valid_json(value)), at_end(NotJson{}, q))
     case SJson{} x q:
       at_end(missing_or(x, NotJson{}), q)
+    case SInt{} x q:
+      int_defect(x, q)
+    case SIntIn{+lo, +hi} x q:
+      int_in_defect(lo, hi, x, q)
     case SNat{} x q:
       nat_defect(x, q)
     case SStr{} x q:
@@ -1213,6 +1300,10 @@ def Meaning(s: Schema) -> Data:
       Unit
     case SJson{}:
       Json
+    case SInt{}:
+      Int
+    case SIntIn{lo, hi}:
+      Int
 
 def enc(s: Schema, x: Meaning(s)) -> Raw:
   match s x:
@@ -1270,6 +1361,10 @@ def enc(s: Schema, x: Meaning(s)) -> Raw:
       RNil{}
     case SJson{} value:
       RJson{value}
+    case SInt{} i:
+      int_raw(i)
+    case SIntIn{lo_, hi_} i:
+      int_raw(i)
 
 def lcons(-A: Data, h: Maybe<&2, A>, t: Maybe<&2, List<&2, A>>) -> Maybe<&2, List<&2, A>>:
   match h t:
@@ -1373,6 +1468,14 @@ def dec(s: Schema, r: Raw) -> Maybe<&2, Meaning(s)>:
       Some{Unit{}}
     case SJson{} RJson{value}:
       Some{value}
+    case SInt{} RNum{n}:
+      Some{IPos{n}}
+    case SInt{} RNeg{n}:
+      Some{INeg{n}}
+    case SIntIn{lo_, hi_} RNum{n}:
+      Some{IPos{n}}
+    case SIntIn{lo_, hi_} RNeg{n}:
+      Some{INeg{n}}
     case _ _:
       None{}
 
@@ -1657,5 +1760,7 @@ def bounds_ok(s: Schema, x: Meaning(s)) -> Bool:
       Bool.and(bounds_ok(ts, a), bounds_ok(rest, b))
     case SJson{} value:
       valid_json(value)
+    case SIntIn{+lo, +hi} i:
+      int_ok(lo, hi, i)
     case _ _:
       True{}
