@@ -338,10 +338,12 @@ function $lookup$(_name_0, _r_0) {
     const _k_0 = _r_0["key"];
     const _v_0 = _r_0["val"];
     const _rest_0 = _r_0["rest"];
-    {
-      const be$t0 = ($String$eq$(_k_0, _name_0));
-      be$stk.push((be$r) => ($pick_raw$(be$t0, _v_0, (be$r))));
-      const be$a1 = _rest_0; _r_0 = be$a1; continue;
+    if (($String$eq$(_k_0, _name_0))) {
+      return be$unwind(be$stk, _v_0);
+    } else {
+      {
+        const be$a1 = _rest_0; _r_0 = be$a1; continue;
+      }
     }
   } else {
     return be$unwind(be$stk, be$N$RMissing);
@@ -454,10 +456,13 @@ function $drop_key$(_k_0, _r_0) {
     const _j_0 = _r_0["key"];
     const _v_0 = _r_0["val"];
     const _o_0 = _r_0["rest"];
-    {
-      const be$t0 = ($String$eq$(_j_0, _k_0));
-      be$stk.push((be$r) => ($pick_raw$(be$t0, _o_0, new be$C$RKey$key$val$rest(_j_0, _v_0, (be$r)))));
-      const be$a1 = _o_0; _r_0 = be$a1; continue;
+    if (($String$eq$(_j_0, _k_0))) {
+      return be$unwind(be$stk, _o_0);
+    } else {
+      {
+        be$stk.push((be$r) => (new be$C$RKey$key$val$rest(_j_0, _v_0, (be$r))));
+        const be$a1 = _o_0; _r_0 = be$a1; continue;
+      }
     }
   } else {
     return be$unwind(be$stk, _r_0);
@@ -1005,10 +1010,13 @@ function $dup_err$(_s_0, _r_0) {
   if (_s_0.$ === "SVariant") {
     const _n_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
-    {
-      const be$t0 = ($is_missing$(($lookup$(_n_0, _r_0))));
-      be$stk.push((be$r) => ($pick_err$(be$t0, ($later_f$((be$r))), new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtField$skip$name(0, _n_0), be$N$Nil), be$N$TwoVariants)))));
-      const be$a0 = _rest_0; _s_0 = be$a0; continue;
+    if (($is_missing$(($lookup$(_n_0, _r_0))))) {
+      {
+        be$stk.push((be$r) => (($later_f$((be$r)))));
+        const be$a0 = _rest_0; _s_0 = be$a0; continue;
+      }
+    } else {
+      return be$unwind(be$stk, new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtField$skip$name(0, _n_0), be$N$Nil), be$N$TwoVariants)));
     }
   } else {
     return be$unwind(be$stk, be$N$None);
@@ -1022,10 +1030,12 @@ function $extra_err$(_ns_0, _r_0) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
-    {
-      const be$t0 = ($in_names$(_k_0, _ns_0));
-      be$stk.push((be$r) => ($pick_err$(be$t0, (be$r), new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtKey$key(_k_0), be$N$Nil), be$N$UnknownKey)))));
-      const be$a1 = _o_0; _r_0 = be$a1; continue;
+    if (($in_names$(_k_0, _ns_0))) {
+      {
+        const be$a1 = _o_0; _r_0 = be$a1; continue;
+      }
+    } else {
+      return be$unwind(be$stk, new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtKey$key(_k_0), be$N$Nil), be$N$UnknownKey)));
     }
   } else {
     return be$unwind(be$stk, be$N$None);
@@ -1468,7 +1478,11 @@ function $tag_key_defect$(_b_0, _k_0, _p_0) {
           const _j_0 = _t_0["name"];
           const _t_2 = _p_0["tail"];
           if (_t_2.$ === "Nil") {
-            return $pick_why$(($String$eq$(_j_0, _k_0)), new be$C$Some$value(new be$C$RepeatedKey$key(_k_0)), be$N$None);
+            if (($String$eq$(_j_0, _k_0))) {
+              return new be$C$Some$value(new be$C$RepeatedKey$key(_k_0));
+            } else {
+              return be$N$None;
+            }
           } else {
             return be$N$None;
           }
@@ -1945,17 +1959,23 @@ function $dec$($0, $1) {
         continue;
       } else if (_s_0.$ === "SOpt") {
         const _i_0 = _s_0["inner"];
-        {
-          const be$t0 = ($nullish$(_r_0));
-          be$stk.push((be$r) => ($pick_m$(be$t0, new be$C$Some$value(be$N$None), ($opt_some$((be$r))))));
-          const be$a0 = _i_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+        if (($nullish$(_r_0))) {
+          return be$unwind(be$stk, new be$C$Some$value(be$N$None));
+        } else {
+          {
+            be$stk.push((be$r) => (($opt_some$((be$r)))));
+            const be$a0 = _i_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+          }
         }
       } else if (_s_0.$ === "SOptional") {
         const _i_1 = _s_0["inner"];
-        {
-          const be$t0 = ($is_missing$(_r_0));
-          be$stk.push((be$r) => ($pick_m$(be$t0, new be$C$Some$value(be$N$None), ($opt_some$((be$r))))));
-          const be$a0 = _i_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+        if (($is_missing$(_r_0))) {
+          return be$unwind(be$stk, new be$C$Some$value(be$N$None));
+        } else {
+          {
+            be$stk.push((be$r) => (($opt_some$((be$r)))));
+            const be$a0 = _i_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+          }
         }
       } else if (_s_0.$ === "SList") {
         const _e_0 = _s_0["elem"];
@@ -1998,11 +2018,16 @@ function $dec$($0, $1) {
         const _n_3 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        {
-          const be$t0 = ($is_tag$(_k_0, _n_3, _r_0));
-          const be$t1 = ($map_inl$(($dec$(_cs_0, ($drop_key$(_k_0, _r_0))))));
-          be$stk.push((be$r) => ($pick_m$(be$t0, be$t1, ($map_inr$((be$r))))));
-          const be$a0 = _rest_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+        if (($is_tag$(_k_0, _n_3, _r_0))) {
+          {
+            be$stk.push((be$r) => (($map_inl$((be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_0, _r_0)); $0 = be$a0; $1 = be$a1; continue;
+          }
+        } else {
+          {
+            be$stk.push((be$r) => (($map_inr$((be$r)))));
+            const be$a0 = _rest_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+          }
         }
       } else if (_s_0.$ === "STrue") {
         if (_r_0.$ === "RBool") {
@@ -2029,11 +2054,16 @@ function $dec$($0, $1) {
         const _n_4 = _s_0["name"];
         const _vs_0 = _s_0["s"];
         const _rest_2 = _s_0["rest"];
-        {
-          const be$t0 = ($is_missing$(($lookup$(_n_4, _r_0))));
-          const be$t1 = ($map_inr$(($dec$(_rest_2, _r_0))));
-          be$stk.push((be$r) => ($pick_m$(be$t0, be$t1, ($map_inl$((be$r))))));
-          const be$a0 = _vs_0; const be$a1 = ($lookup$(_n_4, _r_0)); $0 = be$a0; $1 = be$a1; continue;
+        if (($is_missing$(($lookup$(_n_4, _r_0))))) {
+          {
+            be$stk.push((be$r) => (($map_inr$((be$r)))));
+            const be$a0 = _rest_2; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+          }
+        } else {
+          {
+            be$stk.push((be$r) => (($map_inl$((be$r)))));
+            const be$a0 = _vs_0; const be$a1 = ($lookup$(_n_4, _r_0)); $0 = be$a0; $1 = be$a1; continue;
+          }
         }
       } else if (_s_0.$ === "STuple") {
         const _ts_0 = _s_0["s"];
@@ -2085,12 +2115,20 @@ function $dec$($0, $1) {
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        {
-          const be$t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
-          const be$t1 = ($map_inl$(($dec$(_l_0, _r_0))));
-          const be$t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
-          be$stk.push((be$r) => ($pick_m$(be$t0, be$t1, ($pick_m$(be$t2, ($map_inr$((be$r))), be$N$None)))));
-          const be$a0 = _r_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+          {
+            be$stk.push((be$r) => (($map_inl$((be$r)))));
+            const be$a0 = _l_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+          }
+        } else {
+          if (($has_kind$(_r_1, ($kind_of$(_r_0))))) {
+            {
+              be$stk.push((be$r) => (($map_inr$((be$r)))));
+              const be$a0 = _r_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
+            }
+          } else {
+            return be$unwind(be$stk, be$N$None);
+          }
         }
       } else {
         return be$unwind(be$stk, be$N$None);
@@ -2930,11 +2968,16 @@ function $check$1260$($0, $1, $2) {
         const _n_6 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        {
-          const be$t0 = ($is_tag$(_k_2, _n_6, _r_0));
-          const be$t1 = ($first$(($key_err$(($key_once$(_k_2, _r_0)), _k_2)), ($check$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), be$N$None))));
-          be$stk.push((be$r) => ($pick_err$(be$t0, be$t1, (be$r))));
-          const be$a0 = _rest_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+        if (($is_tag$(_k_2, _n_6, _r_0))) {
+          {
+            const be$t0 = ($key_err$(($key_once$(_k_2, _r_0)), _k_2));
+            be$stk.push((be$r) => (($first$(be$t0, (be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
+        } else {
+          {
+            const be$a0 = _rest_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
         }
       } else if (_s_0.$ === "STagEnd") {
         const _k_3 = _s_0["key"];
@@ -2973,12 +3016,17 @@ function $check$1260$($0, $1, $2) {
           const _k_4 = _r_0["key"];
           const _v_2 = _r_0["val"];
           const _o_2 = _r_0["rest"];
-          {
-            const be$t0 = ($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))));
-            const be$t1 = ($later_f$(($check$1260$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2), be$N$None))));
-            const be$t2 = ($key_err$(($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))), _name_1));
-            be$stk.push((be$r) => ($pick_err$(be$t0, be$t1, ($first$(be$t2, ($first$(($under$(new be$C$AtField$skip$name(0, _name_1), (be$r))), ($later_f$(($dup_err$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))))))))))));
-            const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          if (($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
+            {
+              be$stk.push((be$r) => (($later_f$((be$r)))));
+              const be$a0 = _rest_2; const be$a1 = new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            }
+          } else {
+            {
+              const be$t0 = ($key_err$(($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))), _name_1));
+              be$stk.push((be$r) => (($first$(be$t0, ($first$(($under$(new be$C$AtField$skip$name(0, _name_1), (be$r))), ($later_f$(($dup_err$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))))));
+              const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            }
           }
         } else {
           return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotObject))));
@@ -3018,12 +3066,18 @@ function $check$1260$($0, $1, $2) {
       } else {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        {
-          const be$t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
-          const be$t1 = ($check$1260$(_l_0, _r_0, _prev_0));
-          const be$t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
-          be$stk.push((be$r) => ($pick_err$(be$t0, be$t1, ($pick_err$(be$t2, (be$r), ($here$(($missing_or$(_r_0, ($no_alt$(new be$C$SEither$l$r(_l_0, _r_1))))))))))));
-          const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+          {
+            const be$a0 = _l_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
+        } else {
+          if (($has_kind$(_r_1, ($kind_of$(_r_0))))) {
+            {
+              const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            }
+          } else {
+            return be$unwind(be$stk, ($here$(($missing_or$(_r_0, ($no_alt$(new be$C$SEither$l$r(_l_0, _r_1))))))));
+          }
         }
       }
     }
@@ -3183,11 +3237,16 @@ function $conforms$1260$($0, $1, $2) {
         const _n_6 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        {
-          const be$t0 = ($is_tag$(_k_2, _n_6, _r_0));
-          const be$t1 = ($Bool$and$(($key_once$(_k_2, _r_0)), ($conforms$1260$(_cs_0, ($drop_key$(_k_2, _r_0)), be$N$None))));
-          be$stk.push((be$r) => ($pick_bool$(be$t0, be$t1, (be$r))));
-          const be$a0 = _rest_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+        if (($is_tag$(_k_2, _n_6, _r_0))) {
+          {
+            const be$t0 = ($key_once$(_k_2, _r_0));
+            be$stk.push((be$r) => (($Bool$and$(be$t0, (be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
+        } else {
+          {
+            const be$a0 = _rest_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
         }
       } else if (_s_0.$ === "STagEnd") {
         return be$unwind(be$stk, false);
@@ -3225,12 +3284,16 @@ function $conforms$1260$($0, $1, $2) {
           const _k_4 = _r_0["key"];
           const _v_2 = _r_0["val"];
           const _o_2 = _r_0["rest"];
-          {
-            const be$t0 = ($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))));
-            const be$t1 = ($conforms$1260$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2), be$N$None));
-            const be$t2 = ($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)));
-            be$stk.push((be$r) => ($pick_bool$(be$t0, be$t1, ($Bool$and$(be$t2, ($Bool$and$((be$r), ($none_present$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))))))))));
-            const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          if (($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
+            {
+              const be$a0 = _rest_2; const be$a1 = new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            }
+          } else {
+            {
+              const be$t0 = ($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)));
+              be$stk.push((be$r) => (($Bool$and$(be$t0, ($Bool$and$((be$r), ($none_present$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))));
+              const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            }
           }
         } else {
           return be$unwind(be$stk, false);
@@ -3258,12 +3321,16 @@ function $conforms$1260$($0, $1, $2) {
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        {
-          const be$t0 = ($has_kind$(_l_0, ($kind_of$(_r_0))));
-          const be$t1 = ($conforms$1260$(_l_0, _r_0, _prev_0));
-          const be$t2 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
-          be$stk.push((be$r) => ($pick_bool$(be$t0, be$t1, ($Bool$and$(be$t2, (be$r))))));
-          const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+          {
+            const be$a0 = _l_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
+        } else {
+          {
+            const be$t0 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
+            be$stk.push((be$r) => (($Bool$and$(be$t0, (be$r)))));
+            const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+          }
         }
       } else {
         return be$unwind(be$stk, false);

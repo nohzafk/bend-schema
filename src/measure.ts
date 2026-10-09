@@ -140,6 +140,26 @@ export function unbudgeted(v: unknown): Raw {
   return { $: "RBad" };
 }
 
+// A tagged union of `cases` cases, each the 3-field record, and a value of the
+// first case: the walk should cost one case's check however long the chain.
+export function taggedFirst(cases: number): { schema: Schema; raw: Raw } {
+  let schema: Schema = { $: "STagEnd", key: "t" };
+  for (let i = cases - 1; i >= 0; i--) schema = { $: "STagged", key: "t", name: "c" + i, s: record(3).schema, rest: schema };
+  return { schema, raw: toRaw({ t: "c0", ...record(3).obj }) };
+}
+
+// Microseconds per call of check0 and dec on that value, over `reps` calls.
+export function perValue(cases: number, reps = 20_000): { check0: number; dec: number } {
+  const { schema, raw } = taggedFirst(cases);
+  const per = (f: () => unknown) => {
+    for (let i = 0; i < 1000; i++) f();
+    const t = performance.now();
+    for (let i = 0; i < reps; i++) f();
+    return ((performance.now() - t) * 1000) / reps;
+  };
+  return { check0: per(() => check0(schema, raw)), dec: per(() => dec(schema, raw)) };
+}
+
 const ms = (f: () => unknown): number => {
   const t = performance.now();
   f();
@@ -188,6 +208,14 @@ if (import.meta.main) {
     const p = ms(() => (parsed = s.json().parse(obj)));
     const e = ms(() => s.json().encode(parsed.value));
     console.log(String(k).padEnd(12) + t.toFixed(0).padStart(11) + ((t / k) * 1000).toFixed(2).padStart(11) + p.toFixed(0).padStart(12) + e.toFixed(0).padStart(12));
+  }
+
+  // A tagged union costs the case that matches, not the chain: the value is
+  // the first case's, so the time per value is flat in the number of cases.
+  console.log("\ntagged union, value of the first case: microseconds per value\n" + "cases".padEnd(12) + "check0".padStart(11) + "dec".padStart(11));
+  for (const n of [1, 2, 4, 9, 18]) {
+    const t = perValue(n);
+    console.log(String(n).padEnd(12) + t.check0.toFixed(1).padStart(11) + t.dec.toFixed(1).padStart(11));
   }
 
   // The worst case through the public API, which is what a host calls: a list
