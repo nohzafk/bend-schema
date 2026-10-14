@@ -27,6 +27,11 @@ export const NAT_MAX = 2 ** 48 - 1;
 // One rule, two ways out: the runtime holds v as a Nat, or it does not.
 const natFit = (v: number): boolean => Number.isSafeInteger(v) && v >= 0 && v <= NAT_MAX;
 
+// -0 passes natFit, and bend's own check on a Nat argument lets it through
+// too (-0 >= 0), so it would reach the core and come back as -0. Every Nat
+// the host hands the core goes through this, which makes it 0.
+export const natOf = (v: number): number => v + 0;
+
 // The smallest integer SInt reads: the negatives mirror the Nat bound, RNeg{n}
 // holding -(n+1) for n from 0 to NAT_MAX-1.
 export const INT_MIN = -NAT_MAX;
@@ -34,8 +39,8 @@ const negFit = (v: number): boolean => Number.isSafeInteger(v) && v < 0 && v >= 
 
 /** A JS integer as the core's Int, or null when SInt cannot hold it. */
 export function intOf(v: number): Int | null {
-  if (natFit(v)) return { $: "IPos", n: BigInt(v) };
-  if (negFit(v)) return { $: "INeg", n: BigInt(-v - 1) };
+  if (natFit(v)) return { $: "IPos", n: natOf(v) };
+  if (negFit(v)) return { $: "INeg", n: -v - 1 };
   return null;
 }
 
@@ -65,10 +70,10 @@ export function nat(name: string, v: number): number {
 // schema: the core finds each field by a scan of the object, so one object
 // costs fields x keys lookups, and the sender controls only the keys; an
 // s.json() position is one pass over its value. Measured with
-// `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2, Apple M3 Max,
-// one run each): one object of 1,000,000 keys checks in about 0.85 s against a
-// 16-field schema and 0.33 s through s.json(); a flat list of 1,000,000
-// numbers in 0.19 s. A limit on width would only restate the host's body-size
+// `bun src/measure.ts` (bend 2.0.37, bend-emit 0.3.9, bun 1.4.3, Apple M3 Max,
+// one run each): one object of 1,000,000 keys checks in about 0.63 s against a
+// 16-field schema and 0.48 s through s.json(); a flat list of 1,000,000
+// numbers parses in 0.24 s. A limit on width would only restate the host's body-size
 // limit, so there is none.
 export const DEPTH_MAX = 128;
 
@@ -76,7 +81,7 @@ export function toRaw(v: unknown): Raw {
   let depth = 0;
   const build = (v: unknown): Raw => {
     if (v === null) return { $: "RNull" };
-    if (typeof v === "number") return natFit(v) ? { $: "RNum", n: BigInt(v) } : negFit(v) ? { $: "RNeg", n: BigInt(-v - 1) } : { $: "RBad" };
+    if (typeof v === "number") return natFit(v) ? { $: "RNum", n: natOf(v) } : negFit(v) ? { $: "RNeg", n: -v - 1 } : { $: "RBad" };
     if (typeof v === "boolean") return { $: "RBool", b: v };
     if (typeof v === "string") return { $: "RStr", s: v };
     if (Array.isArray(v)) {
@@ -177,7 +182,7 @@ export function toJsonRaw(v: unknown, depth0 = 0): Raw {
   return result.$ === "RBad" || result.$ === "RTooBig" ? result : { $: "RJson", value: result as Json };
 }
 
-export const NONE: BendMaybe<bigint> = { $: "None" };
+export const NONE: BendMaybe<number> = { $: "None" };
 
 function steps(p: BendList<Step>): Step[] {
   const out: Step[] = [];

@@ -8,7 +8,7 @@
 
 import * as core from "../dist-core/core.mjs";
 import type { BendList, Json as CoreJson, Schema as Node, Step } from "../dist-core/core.mjs";
-import { DEPTH_MAX, INT_MIN, NAT_MAX, intNumber, intOf, toJsonRaw, toRaw, whyText } from "./codec";
+import { DEPTH_MAX, INT_MIN, NAT_MAX, intNumber, intOf, natOf, toJsonRaw, toRaw, whyText } from "./codec";
 
 // enc and dec return a type computed from the schema (Meaning(s)), which
 // bend-emit cannot write as a TS signature; they are untyped here.
@@ -215,7 +215,7 @@ function intMeaning(v: number): core.Int {
 
 function whole(n: number): number {
   if (!Number.isSafeInteger(n) || n < 0) throw new Error(`bend-schema: a bound must be a whole number >= 0, got ${n}`);
-  return n;
+  return natOf(n);
 }
 
 type Shape = Record<string, Schema<any>>;
@@ -270,17 +270,17 @@ function toNode(x: Schema<any>): Node {
   const k = x.kind;
   switch (k.k) {
     case "nat": return { $: "SNat" };
-    case "natIn": return { $: "SNatIn", lo: BigInt(k.lo), hi: BigInt(k.hi) };
+    case "natIn": return { $: "SNatIn", lo: k.lo, hi: k.hi };
     case "int": return { $: "SInt" };
     case "intIn": return { $: "SIntIn", lo: intOf(k.lo)!, hi: intOf(k.hi)! };
     case "str": return { $: "SStr" };
-    case "strLen": return { $: "SStrLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
+    case "strLen": return { $: "SStrLen", lo: k.lo, hi: k.hi, s: toNode(k.inner) };
     case "bool": return { $: "SBool" };
     case "true": return { $: "STrue" };
     case "json": return { $: "SJson" };
     case "nullable": return { $: "SOpt", inner: toNode(k.inner) };
     case "optional": return { $: "SOptional", inner: toNode(k.inner) };
-    case "listLen": return { $: "SListLen", lo: BigInt(k.lo), hi: BigInt(k.hi), s: toNode(k.inner) };
+    case "listLen": return { $: "SListLen", lo: k.lo, hi: k.hi, s: toNode(k.inner) };
     case "list": return { $: "SList", elem: toNode(k.elem) };
     case "tuple": return k.items.reduceRight<Node>((rest, it) => ({ $: "STuple", s: toNode(it), rest }), { $: "STEnd" });
     case "object": return k.fields.reduceRight<Node>((rest, [name, f]) => ({ $: "SField", name, s: toNode(f), rest }), { $: "SEnd" });
@@ -530,7 +530,7 @@ function inside<R>(lim: Limit, f: () => R): R {
 function toMeaning(x: Schema<any>, v: any, lim: Limit): M {
   const k = x.kind;
   switch (k.k) {
-    case "nat": case "natIn": return BigInt(whole(v));
+    case "nat": case "natIn": return whole(v);
     case "int": case "intIn": return intMeaning(v);
     case "str": case "bool": case "enum": return v;
     case "strLen": return toMeaning(k.inner, v, lim);

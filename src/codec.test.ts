@@ -120,15 +120,15 @@ describe("the codec decides nothing about shapes", () => {
     expect(toRaw(-(2 ** 48))).toEqual({ $: "RBad" });
     expect(toRaw(true)).toEqual({ $: "RBool", b: true });
     expect(toRaw(undefined)).toEqual({ $: "RBad" });
-    expect(toRaw(2 ** 48 - 1)).toEqual({ $: "RNum", n: 2n ** 48n - 1n });
+    expect(toRaw(2 ** 48 - 1)).toEqual({ $: "RNum", n: 2 ** 48 - 1 });
   });
 
   test("a negative whole number is RNeg{n}, n = -v-1, down to INT_MIN", () => {
-    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0n });
-    expect(toRaw(-32700)).toEqual({ $: "RNeg", n: 32699n });
-    expect(toRaw(INT_MIN)).toEqual({ $: "RNeg", n: 2n ** 48n - 2n });
+    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0 });
+    expect(toRaw(-32700)).toEqual({ $: "RNeg", n: 32699 });
+    expect(toRaw(INT_MIN)).toEqual({ $: "RNeg", n: 2 ** 48 - 2 });
     expect(toRaw(INT_MIN - 1)).toEqual({ $: "RBad" });
-    expect(toRaw(-0)).toEqual({ $: "RNum", n: 0n });
+    expect(toRaw(-0)).toEqual({ $: "RNum", n: 0 });
   });
 });
 
@@ -358,8 +358,8 @@ describe("the check at run time", () => {
 // is the run-time side: the reason a value is refused, and what enc writes.
 describe("a bound a host can write", () => {
   const bool: Schema = { $: "SBool" };
-  const inSix: Schema = { $: "SNatIn", lo: 1n, hi: 6n };
-  const three: Schema = { $: "SStrLen", lo: 1n, hi: 3n, s: { $: "SStr" } };
+  const inSix: Schema = { $: "SNatIn", lo: 1, hi: 6 };
+  const three: Schema = { $: "SStrLen", lo: 1, hi: 3, s: { $: "SStr" } };
   const names = (...ns: string[]): Schema => {
     let l: BendList<string> = { $: "Nil" };
     for (let i = ns.length - 1; i >= 0; i--) l = { $: "Con", head: ns[i], tail: l };
@@ -390,13 +390,13 @@ describe("a bound a host can write", () => {
   });
 
   test("lo past hi is an empty range, not an error: nothing is in bounds", () => {
-    const none: Schema = { $: "SNatIn", lo: 3n, hi: 1n };
+    const none: Schema = { $: "SNatIn", lo: 3, hi: 1 };
     expect(conforms0(none, toRaw(0))).toBe(false);
     expect(conforms0(none, toRaw(1))).toBe(false);
     expect(conforms0(none, toRaw(2))).toBe(false);
     expect(first(none, 2)).toBe("the value: must be from 3 to 1");
     // and the same for a string
-    const noLength: Schema = { $: "SStrLen", lo: 2n, hi: 1n, s: { $: "SStr" } };
+    const noLength: Schema = { $: "SStrLen", lo: 2, hi: 1, s: { $: "SStr" } };
     expect(conforms0(noLength, toRaw("a"))).toBe(false);
     expect(first(noLength, "a")).toBe("the value: must be 2 to 1 characters long");
   });
@@ -410,7 +410,7 @@ describe("a bound a host can write", () => {
     // the shape comes first, as at every kind
     expect(first(three, 1)).toBe("the value: must be a string");
     // the schema it wraps is checked too
-    const named: Schema = { $: "SStrLen", lo: 2n, hi: 2n, s: names("ab", "cd") };
+    const named: Schema = { $: "SStrLen", lo: 2, hi: 2, s: names("ab", "cd") };
     expect(first(named, "ab")).toBe(null);
     expect(first(named, "cd")).toBe(null);
     expect(first(named, "ef")).toBe("the value: is not one of the allowed names");
@@ -421,16 +421,10 @@ describe("a bound a host can write", () => {
   test("the three constructors round-trip through enc and dec", () => {
     expect(dec(bool, enc(bool, true))).toEqual({ $: "Some", value: true });
     expect(dec(bool, enc(bool, false))).toEqual({ $: "Some", value: false });
-    // A Nat is a number on this side of the door -- nat(name, v), NAT_MAX and
-    // toJs all take one, and only the wire (Raw) holds a BigInt -- so the round
-    // trip is stated over a number, and it is exact.
+    // A Nat is a number on both sides of the door -- nat(name, v), NAT_MAX,
+    // toJs and the wire (Raw) all hold one -- so the round trip is stated over
+    // a number, and it is exact.
     expect(dec(inSix, enc(inSix, 6))).toEqual({ $: "Some", value: 6 });
-    // A Nat that went in as a BigInt comes back as a number, and this line says
-    // so: dec's return type is the type family Meaning(s), which bend's marshal
-    // has no type to convert by, so the runtime's own value leaves unchanged
-    // (bendlang/bend#1150). The value is exact either way -- a Nat is at most
-    // 2^48-1 < 2^53 -- and when upstream converts it, this line is what fails.
-    expect(dec(inSix, enc(inSix, 6n))).toEqual({ $: "Some", value: 6 });
     expect(dec(three, enc(three, "abc"))).toEqual({ $: "Some", value: "abc" });
   });
 
@@ -453,14 +447,14 @@ describe("the host-side Nat guard", () => {
   test("it returns the value where toRaw says RNum, and refuses everything else", () => {
     for (const v of [0, 1, 2 ** 48 - 1, NAT_MAX]) {
       expect(hostNat("units", v)).toBe(v);
-      expect(toRaw(v)).toEqual({ $: "RNum", n: BigInt(v) });
+      expect(toRaw(v)).toEqual({ $: "RNum", n: v });
     }
     for (const v of [2 ** 48, 1.5, NaN, Infinity, 2 ** 53]) {
       expect(toRaw(v)).toEqual({ $: "RBad" });
       expect(() => hostNat("units", v)).toThrow();
     }
     // a negative is an integer, not a Nat
-    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0n });
+    expect(toRaw(-1)).toEqual({ $: "RNeg", n: 0 });
     expect(() => hostNat("units", -1)).toThrow();
   });
 

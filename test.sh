@@ -129,7 +129,7 @@ echo "== 5. the facts this core rests on =="
 #
 # The hub pins bend-mathlib to the one bend it checks on, so the version in
 # PROOF.bend is not free to move: 0.7.1.0 is from the 2.0.34 line, it checks
-# under this package's bend (2.0.36), and it fails to check under 2.0.32. Raise
+# under this package's bend (2.0.37), and it fails to check under 2.0.32. Raise
 # it only with the bend in BEND_VERSION.
 echo "  bend-mathlib@0.7.1.0, from the hub"
 

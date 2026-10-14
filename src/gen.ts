@@ -19,7 +19,7 @@ import type { BendList, Int, Schema as Node } from "../dist-core/core.mjs";
 import type { Schema } from "./index";
 
 const q = (s: string) => JSON.stringify(s);
-const n = (x: bigint | number) => `${x}n`;
+const n = (x: number) => `${x}n`;
 const int = (i: Int) => `S.${i.$}{${n(i.n)}}`;
 const ctor = (name: string, args: string[]) =>
   args.length ? `S.${name}{${args.join(", ")}}` : `S.${name}{}`;
@@ -48,13 +48,13 @@ export function printNode(x: Node): string {
     case "SVEnd":
       return ctor(x.$, []);
     case "SNatIn":
-      return ctor("SNatIn", [n(x.lo as bigint), n(x.hi as bigint)]);
+      return ctor("SNatIn", [n(x.lo as number), n(x.hi as number)]);
     case "SInt":
       return ctor("SInt", []);
     case "SIntIn":
       return ctor("SIntIn", [int(x.lo as Int), int(x.hi as Int)]);
     case "SStrLen":
-      return ctor("SStrLen", [n(x.lo as bigint), n(x.hi as bigint), printNode(x.s as Node)]);
+      return ctor("SStrLen", [n(x.lo as number), n(x.hi as number), printNode(x.s as Node)]);
     case "SOpt":
       return ctor("SOpt", [printNode(x.inner as Node)]);
     case "SOptional":
@@ -62,7 +62,7 @@ export function printNode(x: Node): string {
     case "SList":
       return ctor("SList", [printNode(x.elem as Node)]);
     case "SListLen":
-      return ctor("SListLen", [n(x.lo as bigint), n(x.hi as bigint), printNode(x.s as Node)]);
+      return ctor("SListLen", [n(x.lo as number), n(x.hi as number), printNode(x.s as Node)]);
     case "SStrict":
       return ctor("SStrict", [printNode(x.s as Node)]);
     case "SField":

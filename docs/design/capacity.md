@@ -56,21 +56,21 @@ give this:
 3. An `s.json()` value is checked in one pass (`valid_json`): every number
    must be finite, and nothing else is looked for.
 
-Measured with `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2,
+Measured with `bun src/measure.ts` (bend 2.0.37, bend-emit 0.3.9, bun 1.4.3,
 macOS arm64, Apple M3 Max, one run each):
 
 | keys in one object | check against 16 fields | `s.json()` parse |
 |---|---|---|
-| 1,000 | 4 ms | 9 ms |
-| 10,000 | 30 ms | 8 ms |
-| 100,000 | 79 ms | 35 ms |
-| 1,000,000 | 847 ms | 325 ms |
+| 1,000 | 1 ms | 2 ms |
+| 10,000 | 5 ms | 4 ms |
+| 100,000 | 49 ms | 42 ms |
+| 1,000,000 | 631 ms | 479 ms |
 
 Ten times the keys cost about ten times the time. A flat list of 1,000,000
-numbers checks in 0.19 s.
+numbers parses in 0.24 s.
 
 A schema with many fields costs more per key: a list of 256-key objects against
-256 fields takes 1.7 s per 100,000 counted elements and keys (2.3 s with
+256 fields takes 1.0 s per 100,000 counted elements and keys (1.5 s with
 `.strict()`). The developer chose those fields, so this is not a cost the sender
 can impose.
 

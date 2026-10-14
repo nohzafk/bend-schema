@@ -144,12 +144,8 @@ function nat_chk(n) {
   return n;
 }
 
-function nat_host(n) {
-  const int = typeof n === "bigint" || Number.isInteger(n);
-  if (int && n >= 0 && n <= 2 ** 53) {
-    return Number(n);
-  }
-  return { [Symbol.toPrimitive]() { throw "bend: a Nat past the largest immediate 2^48-1"; } };
+function nat_in(n) {
+  return Number.isInteger(n) && n >= 0 && n <= 2 ** 53 ? n : nat_chk(1 / 0);
 }
 
 function f32_show(x) {
@@ -254,7 +250,7 @@ function run_loop(r) {
 
 function run_lib(f, n) {
   return (...a) => a.length < n ? run_lib((...b) => f(...a, ...b), n - a.length)
-    : f(...a);
+    : run_loop(f(...a));
 }
 
 // Effect
@@ -3423,495 +3419,117 @@ function $String$cmp$rec$(_h1b_0, _h2b_0, _rr_0) {
   const _r_0 = _rr_0["snd"];
   return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd((_h1b_0 + _t1b_0), (_h2b_0 + _t2b_0)), _r_0);
 }
-
-function $0m0(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "RNum": at = at[key] = {...v, "n": nat_host(v["n"])}; return top[0];
-      case "RBool": at[key] = v; return top[0];
-      case "RNull": at[key] = v; return top[0];
-      case "RStr": at[key] = v; return top[0];
-      case "RBad": at[key] = v; return top[0];
-      case "RTooBig": at[key] = v; return top[0];
-      case "RMissing": at[key] = v; return top[0];
-      case "RNil": at[key] = v; return top[0];
-      case "RCons": at = at[key] = {...v, "head": $0m0(v["head"])}; key = "tail"; v = v[key]; continue;
-      case "REnd": at[key] = v; return top[0];
-      case "RKey": at = at[key] = {...v, "val": $0m0(v["val"])}; key = "rest"; v = v[key]; continue;
-      case "RJson": at[key] = v; return top[0];
-      case "RNeg": at = at[key] = {...v, "n": nat_host(v["n"])}; return top[0];
-      default: throw "bend: Raw has no tag " + v?.$ + " (its tags: RNum, RBool, RNull, RStr, RBad, RTooBig, RMissing, RNil, RCons, REnd, RKey, RJson, RNeg); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m1(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "RNum": at = at[key] = {...v, "n": BigInt(v["n"])}; return top[0];
-      case "RBool": at[key] = v; return top[0];
-      case "RNull": at[key] = v; return top[0];
-      case "RStr": at[key] = v; return top[0];
-      case "RBad": at[key] = v; return top[0];
-      case "RTooBig": at[key] = v; return top[0];
-      case "RMissing": at[key] = v; return top[0];
-      case "RNil": at[key] = v; return top[0];
-      case "RCons": at = at[key] = {...v, "head": $0m1(v["head"])}; key = "tail"; v = v[key]; continue;
-      case "REnd": at[key] = v; return top[0];
-      case "RKey": at = at[key] = {...v, "val": $0m1(v["val"])}; key = "rest"; v = v[key]; continue;
-      case "RJson": at[key] = v; return top[0];
-      case "RNeg": at = at[key] = {...v, "n": BigInt(v["n"])}; return top[0];
-      default: throw "bend: Raw has no tag " + v?.$ + " (its tags: RNum, RBool, RNull, RStr, RBad, RTooBig, RMissing, RNil, RCons, REnd, RKey, RJson, RNeg); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m3(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "IPos": at = at[key] = {...v, "n": nat_host(v["n"])}; return top[0];
-      case "INeg": at = at[key] = {...v, "n": nat_host(v["n"])}; return top[0];
-      default: throw "bend: Int has no tag " + v?.$ + " (its tags: IPos, INeg); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m2(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "SNat": at[key] = v; return top[0];
-      case "SNatIn": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; return top[0];
-      case "SStr": at[key] = v; return top[0];
-      case "SStrLen": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; key = "s"; v = v[key]; continue;
-      case "SOpt": at = at[key] = {...v}; key = "inner"; v = v[key]; continue;
-      case "SList": at = at[key] = {...v}; key = "elem"; v = v[key]; continue;
-      case "SField": at = at[key] = {...v, "s": $0m2(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "SEnd": at[key] = v; return top[0];
-      case "SRule": at = at[key] = {...v, "tag": nat_host(v["tag"])}; key = "s"; v = v[key]; continue;
-      case "SStrict": at = at[key] = {...v}; key = "s"; v = v[key]; continue;
-      case "STagged": at = at[key] = {...v, "s": $0m2(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "STagEnd": at[key] = v; return top[0];
-      case "SBool": at[key] = v; return top[0];
-      case "STrue": at[key] = v; return top[0];
-      case "SEnum": at[key] = v; return top[0];
-      case "SVariant": at = at[key] = {...v, "s": $0m2(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "SVEnd": at[key] = v; return top[0];
-      case "STuple": at = at[key] = {...v, "s": $0m2(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "STEnd": at[key] = v; return top[0];
-      case "SOptional": at = at[key] = {...v}; key = "inner"; v = v[key]; continue;
-      case "SListLen": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; key = "s"; v = v[key]; continue;
-      case "SJson": at[key] = v; return top[0];
-      case "SInt": at[key] = v; return top[0];
-      case "SIntIn": at = at[key] = {...v, "lo": $0m3(v["lo"]), "hi": $0m3(v["hi"])}; return top[0];
-      case "SEither": at = at[key] = {...v, "l": $0m2(v["l"])}; key = "r"; v = v[key]; continue;
-      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn, SEither); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m5(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "IPos": at = at[key] = {...v, "n": BigInt(v["n"])}; return top[0];
-      case "INeg": at = at[key] = {...v, "n": BigInt(v["n"])}; return top[0];
-      default: throw "bend: Int has no tag " + v?.$ + " (its tags: IPos, INeg); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m4(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "SNat": at[key] = v; return top[0];
-      case "SNatIn": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; return top[0];
-      case "SStr": at[key] = v; return top[0];
-      case "SStrLen": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; key = "s"; v = v[key]; continue;
-      case "SOpt": at = at[key] = {...v}; key = "inner"; v = v[key]; continue;
-      case "SList": at = at[key] = {...v}; key = "elem"; v = v[key]; continue;
-      case "SField": at = at[key] = {...v, "s": $0m4(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "SEnd": at[key] = v; return top[0];
-      case "SRule": at = at[key] = {...v, "tag": BigInt(v["tag"])}; key = "s"; v = v[key]; continue;
-      case "SStrict": at = at[key] = {...v}; key = "s"; v = v[key]; continue;
-      case "STagged": at = at[key] = {...v, "s": $0m4(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "STagEnd": at[key] = v; return top[0];
-      case "SBool": at[key] = v; return top[0];
-      case "STrue": at[key] = v; return top[0];
-      case "SEnum": at[key] = v; return top[0];
-      case "SVariant": at = at[key] = {...v, "s": $0m4(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "SVEnd": at[key] = v; return top[0];
-      case "STuple": at = at[key] = {...v, "s": $0m4(v["s"])}; key = "rest"; v = v[key]; continue;
-      case "STEnd": at[key] = v; return top[0];
-      case "SOptional": at = at[key] = {...v}; key = "inner"; v = v[key]; continue;
-      case "SListLen": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; key = "s"; v = v[key]; continue;
-      case "SJson": at[key] = v; return top[0];
-      case "SInt": at[key] = v; return top[0];
-      case "SIntIn": at = at[key] = {...v, "lo": $0m5(v["lo"]), "hi": $0m5(v["hi"])}; return top[0];
-      case "SEither": at = at[key] = {...v, "l": $0m4(v["l"])}; key = "r"; v = v[key]; continue;
-      default: throw "bend: Schema has no tag " + v?.$ + " (its tags: SNat, SNatIn, SStr, SStrLen, SOpt, SList, SField, SEnd, SRule, SStrict, STagged, STagEnd, SBool, STrue, SEnum, SVariant, SVEnd, STuple, STEnd, SOptional, SListLen, SJson, SInt, SIntIn, SEither); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m6(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Missing": at[key] = v; return top[0];
-      case "NotNat": at[key] = v; return top[0];
-      case "NotString": at[key] = v; return top[0];
-      case "NotBool": at[key] = v; return top[0];
-      case "NotList": at[key] = v; return top[0];
-      case "NotObject": at[key] = v; return top[0];
-      case "NoElements": at[key] = v; return top[0];
-      case "OpenNotLast": at[key] = v; return top[0];
-      case "LastNotOpen": at[key] = v; return top[0];
-      case "NotIncreasing": at = at[key] = {...v, "prev": nat_host(v["prev"]), "got": nat_host(v["got"])}; return top[0];
-      case "NotTrue": at[key] = v; return top[0];
-      case "NotOneOf": at[key] = v; return top[0];
-      case "NoVariant": at[key] = v; return top[0];
-      case "TwoVariants": at[key] = v; return top[0];
-      case "TooShort": at[key] = v; return top[0];
-      case "TooLong": at[key] = v; return top[0];
-      case "LengthNotIn": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; return top[0];
-      case "NotIn": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; return top[0];
-      case "UnknownKey": at[key] = v; return top[0];
-      case "RepeatedKey": at[key] = v; return top[0];
-      case "TooLarge": at[key] = v; return top[0];
-      case "CountNotIn": at = at[key] = {...v, "lo": nat_host(v["lo"]), "hi": nat_host(v["hi"])}; return top[0];
-      case "NotJson": at[key] = v; return top[0];
-      case "NotInt": at[key] = v; return top[0];
-      case "IntNotIn": at = at[key] = {...v, "lo": $0m3(v["lo"]), "hi": $0m3(v["hi"])}; return top[0];
-      case "NoAlternative": at[key] = v; return top[0];
-      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn, NoAlternative); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m7(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Missing": at[key] = v; return top[0];
-      case "NotNat": at[key] = v; return top[0];
-      case "NotString": at[key] = v; return top[0];
-      case "NotBool": at[key] = v; return top[0];
-      case "NotList": at[key] = v; return top[0];
-      case "NotObject": at[key] = v; return top[0];
-      case "NoElements": at[key] = v; return top[0];
-      case "OpenNotLast": at[key] = v; return top[0];
-      case "LastNotOpen": at[key] = v; return top[0];
-      case "NotIncreasing": at = at[key] = {...v, "prev": BigInt(v["prev"]), "got": BigInt(v["got"])}; return top[0];
-      case "NotTrue": at[key] = v; return top[0];
-      case "NotOneOf": at[key] = v; return top[0];
-      case "NoVariant": at[key] = v; return top[0];
-      case "TwoVariants": at[key] = v; return top[0];
-      case "TooShort": at[key] = v; return top[0];
-      case "TooLong": at[key] = v; return top[0];
-      case "LengthNotIn": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; return top[0];
-      case "NotIn": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; return top[0];
-      case "UnknownKey": at[key] = v; return top[0];
-      case "RepeatedKey": at[key] = v; return top[0];
-      case "TooLarge": at[key] = v; return top[0];
-      case "CountNotIn": at = at[key] = {...v, "lo": BigInt(v["lo"]), "hi": BigInt(v["hi"])}; return top[0];
-      case "NotJson": at[key] = v; return top[0];
-      case "NotInt": at[key] = v; return top[0];
-      case "IntNotIn": at = at[key] = {...v, "lo": $0m5(v["lo"]), "hi": $0m5(v["hi"])}; return top[0];
-      case "NoAlternative": at[key] = v; return top[0];
-      default: throw "bend: Why has no tag " + v?.$ + " (its tags: Missing, NotNat, NotString, NotBool, NotList, NotObject, NoElements, OpenNotLast, LastNotOpen, NotIncreasing, NotTrue, NotOneOf, NoVariant, TwoVariants, TooShort, TooLong, LengthNotIn, NotIn, UnknownKey, RepeatedKey, TooLarge, CountNotIn, NotJson, NotInt, IntNotIn, NoAlternative); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m11(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "AtIndex": at = at[key] = {...v, "i": BigInt(v["i"])}; return top[0];
-      case "AtField": at = at[key] = {...v, "skip": BigInt(v["skip"])}; return top[0];
-      case "BoundAt": at = at[key] = {...v, "i": BigInt(v["i"])}; return top[0];
-      case "AtKey": at[key] = v; return top[0];
-      default: throw "bend: Step has no tag " + v?.$ + " (its tags: AtIndex, AtField, BoundAt, AtKey); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m10(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Nil": at[key] = v; return top[0];
-      case "Con": at = at[key] = {...v, "head": $0m11(v["head"])}; key = "tail"; v = v[key]; continue;
-      default: throw "bend: List has no tag " + v?.$ + " (its tags: Nil, Con); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m9(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Err": at = at[key] = {...v, "path": $0m10(v["path"]), "why": $0m7(v["why"])}; return top[0];
-      default: throw "bend: Err has no tag " + v?.$ + " (its tags: Err); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m8(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "None": at[key] = v; return top[0];
-      case "Some": at = at[key] = {...v, "value": $0m9(v["value"])}; return top[0];
-      default: throw "bend: Maybe has no tag " + v?.$ + " (its tags: None, Some); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m12(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "AtIndex": at = at[key] = {...v, "i": nat_host(v["i"])}; return top[0];
-      case "AtField": at = at[key] = {...v, "skip": nat_host(v["skip"])}; return top[0];
-      case "BoundAt": at = at[key] = {...v, "i": nat_host(v["i"])}; return top[0];
-      case "AtKey": at[key] = v; return top[0];
-      default: throw "bend: Step has no tag " + v?.$ + " (its tags: AtIndex, AtField, BoundAt, AtKey); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m15(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Nil": at[key] = v; return top[0];
-      case "Con": at = at[key] = {...v, "head": $0m12(v["head"])}; key = "tail"; v = v[key]; continue;
-      default: throw "bend: List has no tag " + v?.$ + " (its tags: Nil, Con); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m14(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Err": at = at[key] = {...v, "path": $0m15(v["path"]), "why": $0m6(v["why"])}; return top[0];
-      default: throw "bend: Err has no tag " + v?.$ + " (its tags: Err); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m13(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "None": at[key] = v; return top[0];
-      case "Some": at = at[key] = {...v, "value": $0m14(v["value"])}; return top[0];
-      default: throw "bend: Maybe has no tag " + v?.$ + " (its tags: None, Some); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m16(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "None": at[key] = v; return top[0];
-      case "Some": at = at[key] = {...v, "value": $0m6(v["value"])}; return top[0];
-      default: throw "bend: Maybe has no tag " + v?.$ + " (its tags: None, Some); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m17(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "None": at[key] = v; return top[0];
-      case "Some": at = at[key] = {...v, "value": $0m7(v["value"])}; return top[0];
-      default: throw "bend: Maybe has no tag " + v?.$ + " (its tags: None, Some); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m18(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Nil": at[key] = v; return top[0];
-      case "Con": at = at[key] = {...v, "head": $0m2(v["head"])}; key = "tail"; v = v[key]; continue;
-      default: throw "bend: List has no tag " + v?.$ + " (its tags: Nil, Con); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
-
-function $0m19(v) {
-  const top = [v];
-  for (let at = top, key = 0;;) {
-    switch (v.$) {
-      case "Nil": at[key] = v; return top[0];
-      case "Con": at = at[key] = {...v, "head": $0m4(v["head"])}; key = "tail"; v = v[key]; continue;
-      default: throw "bend: List has no tag " + v?.$ + " (its tags: Nil, Con); a tag names its constructor as the"
-      + " loading file sees it, which a later version will make the same"
-      + " everywhere (#1105)";
-    }
-  }
-}
 const be$default = {
-  "finite_number": run_lib((a0) => { const r = (run_loop($finite_number$((a0)))); (a0); return r; }, 1),
-  "valid_json": run_lib((a0) => { const r = (run_loop($valid_json$((a0)))); (a0); return r; }, 1),
-  "pick_raw": run_lib((a0, a1, a2) => { const r = $0m1(run_loop($pick_raw$((a0), $0m0(a1), $0m0(a2)))); (a0); $0m1(a1); $0m1(a2); return r; }, 3),
-  "lookup": run_lib((a0, a1) => { const r = $0m1(run_loop($lookup$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "pick_bool": run_lib((a0, a1, a2) => { const r = (run_loop($pick_bool$((a0), (a1), (a2)))); (a0); (a1); (a2); return r; }, 3),
-  "is_rnil": run_lib((a0) => { const r = (run_loop($is_rnil$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "is_missing": run_lib((a0) => { const r = (run_loop($is_missing$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "in_names": run_lib((a0, a1) => { const r = (run_loop($in_names$((a0), (a1)))); (a0); (a1); return r; }, 2),
-  "none_present": run_lib((a0, a1) => { const r = (run_loop($none_present$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "key_names": run_lib((a0) => { const r = (run_loop($key_names$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "no_extra": run_lib((a0, a1) => { const r = (run_loop($no_extra$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "drop_key": run_lib((a0, a1) => { const r = $0m1(run_loop($drop_key$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "is_str": run_lib((a0, a1) => { const r = (run_loop($is_str$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "is_tag": run_lib((a0, a1, a2) => { const r = (run_loop($is_tag$((a0), (a1), $0m0(a2)))); (a0); (a1); $0m1(a2); return r; }, 3),
-  "in_err": run_lib((a0, a1) => { const r = $0m8(run_loop($in_err$((a0), $0m6(a1)))); (a0); $0m7(a1); return r; }, 2),
-  "str_len_ok": run_lib((a0, a1, a2) => { const r = (run_loop($str_len_ok$(nat_host(a0), nat_host(a1), (a2)))); BigInt(a0); BigInt(a1); (a2); return r; }, 3),
-  "num_ok": run_lib((a0, a1, a2) => { const r = (run_loop($num_ok$(nat_host(a0), nat_host(a1), nat_host(a2)))); BigInt(a0); BigInt(a1); BigInt(a2); return r; }, 3),
-  "int_le": run_lib((a0, a1) => { const r = (run_loop($int_le$($0m3(a0), $0m3(a1)))); $0m5(a0); $0m5(a1); return r; }, 2),
-  "int_ok": run_lib((a0, a1, a2) => { const r = (run_loop($int_ok$($0m3(a0), $0m3(a1), $0m3(a2)))); $0m5(a0); $0m5(a1); $0m5(a2); return r; }, 3),
-  "int_raw": run_lib((a0) => { const r = $0m1(run_loop($int_raw$($0m3(a0)))); $0m5(a0); return r; }, 1),
-  "len_ok": run_lib((a0, a1, a2) => { const r = (run_loop($len_ok$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "str_len_in": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($str_len_in$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "nat_in": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($nat_in$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "is_bool": run_lib((a0) => { const r = (run_loop($is_bool$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "raw_list": run_lib((a0) => { const r = (run_loop($raw_list$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "raw_len": run_lib((a0) => { const r = BigInt(run_loop($raw_len$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "count_ok": run_lib((a0, a1, a2) => { const r = (run_loop($count_ok$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "list_len_ok": run_lib((a0, a1, a2) => { const r = (run_loop($list_len_ok$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "has_key": run_lib((a0, a1) => { const r = (run_loop($has_key$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "key_once_at": run_lib((a0, a1, a2) => { const r = (run_loop($key_once_at$($0m0(a0), (a1), (a2)))); $0m1(a0); (a1); (a2); return r; }, 3),
-  "key_once": run_lib((a0, a1) => { const r = (run_loop($key_once$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "key_err": run_lib((a0, a1) => { const r = $0m8(run_loop($key_err$((a0), (a1)))); (a0); (a1); return r; }, 2),
-  "kind_eq": run_lib((a0, a1) => { const r = (run_loop($kind_eq$((a0), (a1)))); (a0); (a1); return r; }, 2),
-  "kind_of": run_lib((a0) => { const r = (run_loop($kind_of$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "has_kind": run_lib((a0, a1) => { const r = (run_loop($has_kind$($0m2(a0), (a1)))); $0m4(a0); (a1); return r; }, 2),
-  "apart": run_lib((a0, a1, a2) => { const r = (run_loop($apart$($0m2(a0), $0m2(a1), (a2)))); $0m4(a0); $0m4(a1); (a2); return r; }, 3),
-  "disjoint": run_lib((a0, a1) => { const r = (run_loop($disjoint$($0m2(a0), $0m2(a1)))); $0m4(a0); $0m4(a1); return r; }, 2),
-  "alt_ok": run_lib((a0) => { const r = (run_loop($alt_ok$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "no_alt": run_lib((a0) => { const r = $0m7(run_loop($no_alt$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "here": run_lib((a0) => { const r = $0m8(run_loop($here$($0m6(a0)))); $0m7(a0); return r; }, 1),
-  "under": run_lib((a0, a1) => { const r = $0m8(run_loop($under$($0m12(a0), $0m13(a1)))); $0m11(a0); $0m8(a1); return r; }, 2),
-  "len_err": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($len_err$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "later_l_path": run_lib((a0) => { const r = $0m10(run_loop($later_l_path$($0m15(a0)))); $0m10(a0); return r; }, 1),
-  "later_l": run_lib((a0) => { const r = $0m8(run_loop($later_l$($0m13(a0)))); $0m8(a0); return r; }, 1),
-  "later_i_path": run_lib((a0) => { const r = $0m10(run_loop($later_i_path$($0m15(a0)))); $0m10(a0); return r; }, 1),
-  "later_i": run_lib((a0) => { const r = $0m8(run_loop($later_i$($0m13(a0)))); $0m8(a0); return r; }, 1),
-  "later_f_path": run_lib((a0) => { const r = $0m10(run_loop($later_f_path$($0m15(a0)))); $0m10(a0); return r; }, 1),
-  "later_f": run_lib((a0) => { const r = $0m8(run_loop($later_f$($0m13(a0)))); $0m8(a0); return r; }, 1),
-  "first": run_lib((a0, a1) => { const r = $0m8(run_loop($first$($0m13(a0), $0m13(a1)))); $0m8(a0); $0m8(a1); return r; }, 2),
-  "missing_or": run_lib((a0, a1) => { const r = $0m7(run_loop($missing_or$($0m0(a0), $0m6(a1)))); $0m1(a0); $0m7(a1); return r; }, 2),
-  "pick_err": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($pick_err$((a0), $0m13(a1), $0m13(a2)))); (a0); $0m8(a1); $0m8(a2); return r; }, 3),
-  "true_err": run_lib((a0) => { const r = $0m8(run_loop($true_err$((a0)))); (a0); return r; }, 1),
-  "enum_err": run_lib((a0) => { const r = $0m8(run_loop($enum_err$((a0)))); (a0); return r; }, 1),
-  "dup_err": run_lib((a0, a1) => { const r = $0m8(run_loop($dup_err$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "extra_err": run_lib((a0, a1) => { const r = $0m8(run_loop($extra_err$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "tag_err": run_lib((a0, a1) => { const r = $0m8(run_loop($tag_err$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "count_err": run_lib((a0, a1, a2) => { const r = $0m8(run_loop($count_err$(nat_host(a0), nat_host(a1), $0m0(a2)))); BigInt(a0); BigInt(a1); $0m1(a2); return r; }, 3),
-  "guard": run_lib((a0, a1) => { const r = $0m17(run_loop($guard$((a0), $0m16(a1)))); (a0); $0m17(a1); return r; }, 2),
-  "nat_in_defect": run_lib((a0, a1, a2, a3) => { const r = $0m17(run_loop($nat_in_defect$(nat_host(a0), nat_host(a1), $0m0(a2), $0m15(a3)))); BigInt(a0); BigInt(a1); $0m1(a2); $0m10(a3); return r; }, 4),
-  "int_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($int_defect$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "int_in_defect": run_lib((a0, a1, a2, a3) => { const r = $0m17(run_loop($int_in_defect$($0m3(a0), $0m3(a1), $0m0(a2), $0m15(a3)))); $0m5(a0); $0m5(a1); $0m1(a2); $0m10(a3); return r; }, 4),
-  "bool_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($bool_defect$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "no_rule": run_lib((a0, a1) => { const r = $0m8(run_loop($no_rule$(nat_host(a0), $0m0(a1)))); BigInt(a0); $0m1(a1); return r; }, 2),
-  "first_why": run_lib((a0, a1) => { const r = $0m17(run_loop($first_why$($0m16(a0), $0m16(a1)))); $0m17(a0); $0m17(a1); return r; }, 2),
-  "step_eq": run_lib((a0, a1) => { const r = (run_loop($step_eq$($0m12(a0), $0m12(a1)))); $0m11(a0); $0m11(a1); return r; }, 2),
-  "path_eq": run_lib((a0, a1) => { const r = (run_loop($path_eq$($0m15(a0), $0m15(a1)))); $0m10(a0); $0m10(a1); return r; }, 2),
-  "rule_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($rule_defect$($0m13(a0), $0m15(a1)))); $0m8(a0); $0m10(a1); return r; }, 2),
-  "not_list": run_lib((a0, a1) => { const r = $0m17(run_loop($not_list$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "not_object": run_lib((a0, a1) => { const r = $0m17(run_loop($not_object$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "nat_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($nat_defect$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "str_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($str_defect$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "pick_why": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($pick_why$((a0), $0m16(a1), $0m16(a2)))); (a0); $0m17(a1); $0m17(a2); return r; }, 3),
-  "true_defect": run_lib((a0, a1) => { const r = $0m17(run_loop($true_defect$($0m0(a0), $0m15(a1)))); $0m1(a0); $0m10(a1); return r; }, 2),
-  "enum_defect": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($enum_defect$((a0), $0m0(a1), $0m15(a2)))); (a0); $0m1(a1); $0m10(a2); return r; }, 3),
-  "no_variant": run_lib((a0) => { const r = $0m17(run_loop($no_variant$($0m15(a0)))); $0m10(a0); return r; }, 1),
-  "dup_defect": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($dup_defect$($0m2(a0), $0m0(a1), $0m15(a2)))); $0m4(a0); $0m1(a1); $0m10(a2); return r; }, 3),
-  "at_end": run_lib((a0, a1) => { const r = $0m17(run_loop($at_end$($0m6(a0), $0m15(a1)))); $0m7(a0); $0m10(a1); return r; }, 2),
-  "extra_defect": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($extra_defect$((a0), $0m0(a1), $0m15(a2)))); (a0); $0m1(a1); $0m10(a2); return r; }, 3),
-  "tag_defect": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($tag_defect$((a0), $0m0(a1), $0m15(a2)))); (a0); $0m1(a1); $0m10(a2); return r; }, 3),
-  "tag_key_defect": run_lib((a0, a1, a2) => { const r = $0m17(run_loop($tag_key_defect$((a0), (a1), $0m15(a2)))); (a0); (a1); $0m10(a2); return r; }, 3),
-  "check0": run_lib((a0, a1) => { const r = $0m8(run_loop($check0$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "conforms0": run_lib((a0, a1) => { const r = (run_loop($conforms0$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "is_chain": run_lib((a0) => { const r = (run_loop($is_chain$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "is_object": run_lib((a0) => { const r = (run_loop($is_object$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "one_if_there": run_lib((a0) => { const r = BigInt(run_loop($one_if_there$((a0)))); (a0); return r; }, 1),
-  "count_present": run_lib((a0, a1) => { const r = BigInt(run_loop($count_present$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "tuple_of": run_lib((a0) => { const r = $0m4(run_loop($tuple_of$($0m18(a0)))); $0m19(a0); return r; }, 1),
-  "at_raw": run_lib((a0, a1) => { const r = $0m1(run_loop($at_raw$($0m0(a0), nat_host(a1)))); $0m1(a0); BigInt(a1); return r; }, 2),
-  "count_unknown": run_lib((a0, a1) => { const r = BigInt(run_loop($count_unknown$((a0), $0m0(a1)))); (a0); $0m1(a1); return r; }, 2),
-  "Meaning": run_lib((a0) => { const r = (run_loop($Meaning$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "enc": run_lib((a0, a1) => { const r = $0m1(run_loop($enc$($0m2(a0), (a1)))); $0m4(a0); (a1); return r; }, 2),
-  "lcons": run_lib((a0, a1) => { const r = (run_loop($lcons$((a0), (a1)))); (a0); (a1); return r; }, 2),
-  "both": run_lib((a0, a1) => { const r = (run_loop($both$((a0), (a1)))); (a0); (a1); return r; }, 2),
-  "opt_some": run_lib((a0) => { const r = (run_loop($opt_some$((a0)))); (a0); return r; }, 1),
-  "map_inl": run_lib((a0) => { const r = (run_loop($map_inl$((a0)))); (a0); return r; }, 1),
-  "map_inr": run_lib((a0) => { const r = (run_loop($map_inr$((a0)))); (a0); return r; }, 1),
-  "pick_m": run_lib((a0, a1, a2) => { const r = (run_loop($pick_m$((a0), (a1), (a2)))); (a0); (a1); (a2); return r; }, 3),
-  "true_unit": run_lib((a0) => { const r = (run_loop($true_unit$((a0)))); (a0); return r; }, 1),
-  "nullish": run_lib((a0) => { const r = (run_loop($nullish$($0m0(a0)))); $0m1(a0); return r; }, 1),
-  "dec": run_lib((a0, a1) => { const r = (run_loop($dec$($0m2(a0), $0m0(a1)))); $0m4(a0); $0m1(a1); return r; }, 2),
-  "opt_at": run_lib((a0) => { const r = (run_loop($opt_at$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "nullable": run_lib((a0) => { const r = (run_loop($nullable$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "no_key": run_lib((a0, a1) => { const r = (run_loop($no_key$((a0), $0m2(a1)))); (a0); $0m4(a1); return r; }, 2),
-  "fresh_f": run_lib((a0, a1) => { const r = (run_loop($fresh_f$((a0), $0m2(a1)))); (a0); $0m4(a1); return r; }, 2),
-  "fresh_v": run_lib((a0, a1) => { const r = (run_loop($fresh_v$((a0), $0m2(a1)))); (a0); $0m4(a1); return r; }, 2),
-  "is_keyed": run_lib((a0) => { const r = (run_loop($is_keyed$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "fresh_t": run_lib((a0, a1, a2) => { const r = (run_loop($fresh_t$((a0), (a1), $0m2(a2)))); (a0); (a1); $0m4(a2); return r; }, 3),
-  "wf": run_lib((a0) => { const r = (run_loop($wf$($0m2(a0)))); $0m4(a0); return r; }, 1),
-  "names_ok": run_lib((a0, a1) => { const r = (run_loop($names_ok$($0m2(a0), (a1)))); $0m4(a0); (a1); return r; }, 2),
-  "bounds_ok": run_lib((a0, a1) => { const r = (run_loop($bounds_ok$($0m2(a0), (a1)))); $0m4(a0); (a1); return r; }, 2),
+  "finite_number": run_lib((a0) => $finite_number$(a0), 1),
+  "valid_json": run_lib((a0) => $valid_json$(a0), 1),
+  "pick_raw": run_lib((a0,a1,a2) => $pick_raw$(a0,a1,a2), 3),
+  "lookup": run_lib((a0,a1) => $lookup$(a0,a1), 2),
+  "pick_bool": run_lib((a0,a1,a2) => $pick_bool$(a0,a1,a2), 3),
+  "is_rnil": run_lib((a0) => $is_rnil$(a0), 1),
+  "is_missing": run_lib((a0) => $is_missing$(a0), 1),
+  "in_names": run_lib((a0,a1) => $in_names$(a0,a1), 2),
+  "none_present": run_lib((a0,a1) => $none_present$(a0,a1), 2),
+  "key_names": run_lib((a0) => $key_names$(a0), 1),
+  "no_extra": run_lib((a0,a1) => $no_extra$(a0,a1), 2),
+  "drop_key": run_lib((a0,a1) => $drop_key$(a0,a1), 2),
+  "is_str": run_lib((a0,a1) => $is_str$(a0,a1), 2),
+  "is_tag": run_lib((a0,a1,a2) => $is_tag$(a0,a1,a2), 3),
+  "in_err": run_lib((a0,a1) => $in_err$(a0,a1), 2),
+  "str_len_ok": run_lib((a0,a1,a2) => $str_len_ok$(nat_in(a0),nat_in(a1),a2), 3),
+  "num_ok": run_lib((a0,a1,a2) => $num_ok$(nat_in(a0),nat_in(a1),nat_in(a2)), 3),
+  "int_le": run_lib((a0,a1) => $int_le$(a0,a1), 2),
+  "int_ok": run_lib((a0,a1,a2) => $int_ok$(a0,a1,a2), 3),
+  "int_raw": run_lib((a0) => $int_raw$(a0), 1),
+  "len_ok": run_lib((a0,a1,a2) => $len_ok$(nat_in(a0),nat_in(a1),a2), 3),
+  "str_len_in": run_lib((a0,a1,a2) => $str_len_in$(nat_in(a0),nat_in(a1),a2), 3),
+  "nat_in": run_lib((a0,a1,a2) => $nat_in$(nat_in(a0),nat_in(a1),a2), 3),
+  "is_bool": run_lib((a0) => $is_bool$(a0), 1),
+  "raw_list": run_lib((a0) => $raw_list$(a0), 1),
+  "raw_len": run_lib((a0) => $raw_len$(a0), 1),
+  "count_ok": run_lib((a0,a1,a2) => $count_ok$(nat_in(a0),nat_in(a1),a2), 3),
+  "list_len_ok": run_lib((a0,a1,a2) => $list_len_ok$(nat_in(a0),nat_in(a1),a2), 3),
+  "has_key": run_lib((a0,a1) => $has_key$(a0,a1), 2),
+  "key_once_at": run_lib((a0,a1,a2) => $key_once_at$(a0,a1,a2), 3),
+  "key_once": run_lib((a0,a1) => $key_once$(a0,a1), 2),
+  "key_err": run_lib((a0,a1) => $key_err$(a0,a1), 2),
+  "kind_eq": run_lib((a0,a1) => $kind_eq$(a0,a1), 2),
+  "kind_of": run_lib((a0) => $kind_of$(a0), 1),
+  "has_kind": run_lib((a0,a1) => $has_kind$(a0,a1), 2),
+  "apart": run_lib((a0,a1,a2) => $apart$(a0,a1,a2), 3),
+  "disjoint": run_lib((a0,a1) => $disjoint$(a0,a1), 2),
+  "alt_ok": run_lib((a0) => $alt_ok$(a0), 1),
+  "no_alt": run_lib((a0) => $no_alt$(a0), 1),
+  "here": run_lib((a0) => $here$(a0), 1),
+  "under": run_lib((a0,a1) => $under$(a0,a1), 2),
+  "len_err": run_lib((a0,a1,a2) => $len_err$(nat_in(a0),nat_in(a1),a2), 3),
+  "later_l_path": run_lib((a0) => $later_l_path$(a0), 1),
+  "later_l": run_lib((a0) => $later_l$(a0), 1),
+  "later_i_path": run_lib((a0) => $later_i_path$(a0), 1),
+  "later_i": run_lib((a0) => $later_i$(a0), 1),
+  "later_f_path": run_lib((a0) => $later_f_path$(a0), 1),
+  "later_f": run_lib((a0) => $later_f$(a0), 1),
+  "first": run_lib((a0,a1) => $first$(a0,a1), 2),
+  "missing_or": run_lib((a0,a1) => $missing_or$(a0,a1), 2),
+  "pick_err": run_lib((a0,a1,a2) => $pick_err$(a0,a1,a2), 3),
+  "true_err": run_lib((a0) => $true_err$(a0), 1),
+  "enum_err": run_lib((a0) => $enum_err$(a0), 1),
+  "dup_err": run_lib((a0,a1) => $dup_err$(a0,a1), 2),
+  "extra_err": run_lib((a0,a1) => $extra_err$(a0,a1), 2),
+  "tag_err": run_lib((a0,a1) => $tag_err$(a0,a1), 2),
+  "count_err": run_lib((a0,a1,a2) => $count_err$(nat_in(a0),nat_in(a1),a2), 3),
+  "guard": run_lib((a0,a1) => $guard$(a0,a1), 2),
+  "nat_in_defect": run_lib((a0,a1,a2,a3) => $nat_in_defect$(nat_in(a0),nat_in(a1),a2,a3), 4),
+  "int_defect": run_lib((a0,a1) => $int_defect$(a0,a1), 2),
+  "int_in_defect": run_lib((a0,a1,a2,a3) => $int_in_defect$(a0,a1,a2,a3), 4),
+  "bool_defect": run_lib((a0,a1) => $bool_defect$(a0,a1), 2),
+  "no_rule": run_lib((a0,a1) => $no_rule$(nat_in(a0),a1), 2),
+  "first_why": run_lib((a0,a1) => $first_why$(a0,a1), 2),
+  "step_eq": run_lib((a0,a1) => $step_eq$(a0,a1), 2),
+  "path_eq": run_lib((a0,a1) => $path_eq$(a0,a1), 2),
+  "rule_defect": run_lib((a0,a1) => $rule_defect$(a0,a1), 2),
+  "not_list": run_lib((a0,a1) => $not_list$(a0,a1), 2),
+  "not_object": run_lib((a0,a1) => $not_object$(a0,a1), 2),
+  "nat_defect": run_lib((a0,a1) => $nat_defect$(a0,a1), 2),
+  "str_defect": run_lib((a0,a1) => $str_defect$(a0,a1), 2),
+  "pick_why": run_lib((a0,a1,a2) => $pick_why$(a0,a1,a2), 3),
+  "true_defect": run_lib((a0,a1) => $true_defect$(a0,a1), 2),
+  "enum_defect": run_lib((a0,a1,a2) => $enum_defect$(a0,a1,a2), 3),
+  "no_variant": run_lib((a0) => $no_variant$(a0), 1),
+  "dup_defect": run_lib((a0,a1,a2) => $dup_defect$(a0,a1,a2), 3),
+  "at_end": run_lib((a0,a1) => $at_end$(a0,a1), 2),
+  "extra_defect": run_lib((a0,a1,a2) => $extra_defect$(a0,a1,a2), 3),
+  "tag_defect": run_lib((a0,a1,a2) => $tag_defect$(a0,a1,a2), 3),
+  "tag_key_defect": run_lib((a0,a1,a2) => $tag_key_defect$(a0,a1,a2), 3),
+  "check0": run_lib((a0,a1) => $check0$(a0,a1), 2),
+  "conforms0": run_lib((a0,a1) => $conforms0$(a0,a1), 2),
+  "is_chain": run_lib((a0) => $is_chain$(a0), 1),
+  "is_object": run_lib((a0) => $is_object$(a0), 1),
+  "one_if_there": run_lib((a0) => $one_if_there$(a0), 1),
+  "count_present": run_lib((a0,a1) => $count_present$(a0,a1), 2),
+  "tuple_of": run_lib((a0) => $tuple_of$(a0), 1),
+  "at_raw": run_lib((a0,a1) => $at_raw$(a0,nat_in(a1)), 2),
+  "count_unknown": run_lib((a0,a1) => $count_unknown$(a0,a1), 2),
+  "Meaning": run_lib((a0) => $Meaning$(a0), 1),
+  "enc": run_lib((a0,a1) => $enc$(a0,a1), 2),
+  "lcons": run_lib((a0,a1) => $lcons$(a0,a1), 2),
+  "both": run_lib((a0,a1) => $both$(a0,a1), 2),
+  "opt_some": run_lib((a0) => $opt_some$(a0), 1),
+  "map_inl": run_lib((a0) => $map_inl$(a0), 1),
+  "map_inr": run_lib((a0) => $map_inr$(a0), 1),
+  "pick_m": run_lib((a0,a1,a2) => $pick_m$(a0,a1,a2), 3),
+  "true_unit": run_lib((a0) => $true_unit$(a0), 1),
+  "nullish": run_lib((a0) => $nullish$(a0), 1),
+  "dec": run_lib((a0,a1) => $dec$(a0,a1), 2),
+  "opt_at": run_lib((a0) => $opt_at$(a0), 1),
+  "nullable": run_lib((a0) => $nullable$(a0), 1),
+  "no_key": run_lib((a0,a1) => $no_key$(a0,a1), 2),
+  "fresh_f": run_lib((a0,a1) => $fresh_f$(a0,a1), 2),
+  "fresh_v": run_lib((a0,a1) => $fresh_v$(a0,a1), 2),
+  "is_keyed": run_lib((a0) => $is_keyed$(a0), 1),
+  "fresh_t": run_lib((a0,a1,a2) => $fresh_t$(a0,a1,a2), 3),
+  "wf": run_lib((a0) => $wf$(a0), 1),
+  "names_ok": run_lib((a0,a1) => $names_ok$(a0,a1), 2),
+  "bounds_ok": run_lib((a0,a1) => $bounds_ok$(a0,a1), 2),
 };
 export default be$default;
 const be$0 = be$default["finite_number"];

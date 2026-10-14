@@ -352,17 +352,17 @@ parser.
 
 Why: [docs/design/capacity.md](https://github.com/nohzafk/bend-schema/blob/main/docs/design/capacity.md).
 
-Measured with `bun src/measure.ts` (bend 2.0.36, bend-emit 0.3.5, bun 1.4.2,
+Measured with `bun src/measure.ts` (bend 2.0.37, bend-emit 0.3.9, bun 1.4.3,
 macOS arm64, Apple M3 Max, one run each):
 
 | Value | Schema | parse |
 |---|---|---|
-| flat list of 1,000,000 numbers | `s.list(s.nat())` | 0.19 s |
-| one object of 1,000,000 keys | 16 fields | 0.85 s |
-| one object of 1,000,000 keys | `s.json()` | 0.33 s |
-| 390 objects of 256 keys (100,000 counted) | `s.json()` | 0.04 s |
-| the same | 256 fields | 1.7 s |
-| the same | 256 fields, `.strict()` | 2.3 s |
+| flat list of 1,000,000 numbers | `s.list(s.nat())` | 0.24 s |
+| one object of 1,000,000 keys | 16 fields | 0.63 s |
+| one object of 1,000,000 keys | `s.json()` | 0.48 s |
+| 390 objects of 256 keys (100,000 counted) | `s.json()` | 0.03 s |
+| the same | 256 fields | 1.0 s |
+| the same | 256 fields, `.strict()` | 1.5 s |
 
 A typed schema with many fields costs more than `s.json()`, because each field
 is looked up in each object; you control the number of fields.

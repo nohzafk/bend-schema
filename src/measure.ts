@@ -46,7 +46,7 @@ function record(n: number) {
   const obj: Record<string, number> = {};
   for (let i = n - 1; i >= 0; i--) {
     schema = { $: "SField", name: "k" + i, s: nat, rest: schema };
-    meaning = { $: "Both", a: 0n, b: meaning };
+    meaning = { $: "Both", a: 0, b: meaning };
     obj["k" + i] = 0;
   }
   return { schema, obj, meaning };
@@ -74,7 +74,7 @@ export const SHAPES: Record<string, (n: number) => Case> = {
   "flat list": (n) => ({
     schema: { $: "SList", elem: nat },
     value: Array.from({ length: n }, () => 0),
-    meaning: bList(Array.from({ length: n }, () => 0n)),
+    meaning: bList(Array.from({ length: n }, () => 0)),
     count: n,
   }),
   "flat object": (n) => {
@@ -87,7 +87,7 @@ export const SHAPES: Record<string, (n: number) => Case> = {
     return {
       schema: { $: "SList", elem: { $: "SList", elem: nat } },
       value: Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0)),
-      meaning: bList(Array.from({ length: rows }, () => bList(Array.from({ length: cols }, () => 0n)))),
+      meaning: bList(Array.from({ length: rows }, () => bList(Array.from({ length: cols }, () => 0)))),
       count: rows * (cols + 1),
     };
   },
@@ -103,7 +103,7 @@ export const SHAPES: Record<string, (n: number) => Case> = {
     return {
       schema: { $: "SList", elem: { $: "SField", name: "a", s: inner, rest: end } },
       value: Array.from({ length: rows }, () => ({ a: Array.from({ length: cols }, () => 0) })),
-      meaning: bList(Array.from({ length: rows }, () => ({ $: "Both", a: bList(Array.from({ length: cols }, () => 0n)), b: { $: "Unit" } }))),
+      meaning: bList(Array.from({ length: rows }, () => ({ $: "Both", a: bList(Array.from({ length: cols }, () => 0)), b: { $: "Unit" } }))),
       count: rows * (cols + 2),
     };
   },
@@ -113,7 +113,7 @@ export const SHAPES: Record<string, (n: number) => Case> = {
     const m = Math.max(1, n - (DEPTH_MAX - 1));
     let schema: Schema = { $: "SList", elem: nat };
     let value: unknown = Array.from({ length: m }, () => 0);
-    let meaning: unknown = bList(Array.from({ length: m }, () => 0n));
+    let meaning: unknown = bList(Array.from({ length: m }, () => 0));
     for (let i = 1; i < DEPTH_MAX; i++) {
       schema = { $: "SList", elem: schema };
       value = [value];
@@ -131,7 +131,7 @@ export function unbudgeted(v: unknown): Raw {
   if (v === null) return { $: "RNull" };
   if (typeof v === "number") {
     if (!Number.isSafeInteger(v) || Math.abs(v) > NAT_MAX) return { $: "RBad" };
-    return v >= 0 ? { $: "RNum", n: BigInt(v) } : { $: "RNeg", n: BigInt(-v - 1) };
+    return v >= 0 ? { $: "RNum", n: v } : { $: "RNeg", n: -v - 1 };
   }
   if (typeof v === "boolean") return { $: "RBool", b: v };
   if (typeof v === "string") return { $: "RStr", s: v };
