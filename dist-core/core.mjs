@@ -99,12 +99,12 @@ const be$N$TooShort = new be$C$TooShort();
 class be$C$TooLong { constructor() { this.$ = "TooLong"; } }
 const be$N$TooLong = new be$C$TooLong();
 class be$C$SEither$l$r { constructor(be$a0, be$a1) { this.$ = "SEither"; this.l = be$a0; this.r = be$a1; } }
+class be$C$EQ { constructor() { this.$ = "EQ"; } }
+const be$N$EQ = new be$C$EQ();
 class be$C$LT { constructor() { this.$ = "LT"; } }
 const be$N$LT = new be$C$LT();
 class be$C$GT { constructor() { this.$ = "GT"; } }
 const be$N$GT = new be$C$GT();
-class be$C$EQ { constructor() { this.$ = "EQ"; } }
-const be$N$EQ = new be$C$EQ();
 // bend-emit: fold the pending continuation frames of a looped def, innermost first.
 function be$unwind(be$s, be$r) {
   while (be$s.length > 0) be$r = be$s.pop()(be$r);
@@ -128,8 +128,7 @@ function u32_to_word(x) {
 }
 
 function cmp_new(a, b) {
-  return {$: a < b ? "LT"
-    : a === b ? "EQ" : "GT"};
+  return {$: a < b ? "LT" : a === b ? "EQ" : "GT"};
 }
 
 function nat_divmod(a, b) {
@@ -145,22 +144,18 @@ function nat_chk(n) {
 }
 
 function nat_in(n) {
-  return Number.isInteger(n) && n >= 0 && n <= 2 ** 53 ? n : nat_chk(1 / 0);
+  if (!Number.isInteger(n) || n < 0 || n > 2 ** 53) {
+    throw "bend: expected a Nat host number: an integer from 0 to 2^53";
+  }
+  return n;
 }
 
 function f32_show(x) {
-  if (x !== x) {
-    return "nan";
-  }
-  if (!Number.isFinite(x) || Object.is(x, -0)) {
-    return x < 0 ? "-inf"
-      : x === 0 ? "-0" : "inf";
-  }
-  let s = "x";
-  for (let p = 1; p <= 9 && f32_round(s) !== x; p += 1) {
+  let s = "nan";
+  for (let p = 1; x === x && p <= 9 && f32_round(s) !== x; p += 1) {
     s = String(Number(x.toExponential(p - 1)));
   }
-  return s;
+  return (Object.is(x, -0) ? "-0" : s).replace("Infinity", "inf");
 }
 
 function f32_bits(x) {
@@ -172,7 +167,7 @@ function f32_from_bits(u) {
 }
 
 function f32_read(s) {
-  const re = /^[\t\n\v\f\r ]*[+-]?((\d+\.?\d*|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
+  const re = /^[\t\n\v\f\r ]*[+-]?((\d+(?:\.\d*)?|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
   const v = f32_round(s.replace(/inf\w*/i, "Infinity"));
   return re.test(s) ? new be$C$Some$value(v) : be$N$None;
 }
@@ -196,11 +191,35 @@ const f32_round = function f32_round(s) {
   return Math.sign(d) * (x === y || x > y !== g > f ? f : g);
 };
 
-function char_new(code) {
-  if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
-    throw "bend: " + code + " is not a Unicode scalar value";
+const char_new = function char_new(c) {
+  return c < 55296 || c >= 57344 && c <= 1114111 ? String.fromCodePoint(c) : String.fromCharCode(56320, c >>> 22, c >>> 11 & 2047, c & 2047);
+};
+
+function char_len(s, at = 0) {
+  return s[at] === "\uDC00" ? 4 : s.codePointAt(at) > 0xFFFF ? 2 : 1;
+}
+
+function char_code(s) {
+  return s.length < 4 ? s.codePointAt(0)
+    : (s.charCodeAt(1) << 22 | s.charCodeAt(2) << 11 | s.charCodeAt(3)) >>> 0;
+}
+
+function string_contains(s, p) {
+  // A match must start at a Char boundary, not inside a packed U32 code.
+  for (let at = 0; at <= s.length; at += char_len(s, at)) {
+    if (s.startsWith(p, at)) {
+      return true;
+    }
   }
-  return String.fromCodePoint(code);
+  return false;
+}
+
+function str_out(s) {
+  return s.replace(/\uDC00[^]{3}/gu, "\uFFFD");
+}
+
+function str_in(s) {
+  return s.replace(/\p{Cs}/gu, "\uFFFD");
 }
 
 // Array
@@ -270,13 +289,13 @@ function io_eff(k, run) {
 // Program
 // =======
 
-function $finite_number$(_bits_0) {
+function $finite_number(_bits_0) {
   const _hi_0 = _bits_0["hi"];
   const _x_0 = ((_hi_0 & 2146435072) >>> 0);
-  return $Bool$not$((_x_0 === 2146435072));
+  return $Bool_not((_x_0 === 2146435072));
 }
 
-function $valid_json$(_value_0) {
+function $valid_json(_value_0) {
   const be$stk = [];
   for (;;) {
   if (_value_0.$ === "JNull") {
@@ -285,7 +304,7 @@ function $valid_json$(_value_0) {
     return be$unwind(be$stk, true);
   } else if (_value_0.$ === "JNumber") {
     const _bits_0 = _value_0["value"];
-    return be$unwind(be$stk, $finite_number$(_bits_0));
+    return be$unwind(be$stk, $finite_number(_bits_0));
   } else if (_value_0.$ === "JString") {
     return be$unwind(be$stk, true);
   } else if (_value_0.$ === "JArray") {
@@ -296,8 +315,8 @@ function $valid_json$(_value_0) {
       const _head_0 = _t_0["head"];
       const _tail_0 = _t_0["tail"];
       {
-        const be$t0 = ($valid_json$(_head_0));
-        be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+        const be$t0 = ($valid_json(_head_0));
+        be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
         const be$a0 = new be$C$JArray$values(_tail_0); _value_0 = be$a0; continue;
       }
     }
@@ -310,8 +329,8 @@ function $valid_json$(_value_0) {
       const _val_0 = _t_2["value"];
       const _tail_1 = _t_1["tail"];
       {
-        const be$t0 = ($valid_json$(_val_0));
-        be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+        const be$t0 = ($valid_json(_val_0));
+        be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
         const be$a0 = new be$C$JObject$members(_tail_1); _value_0 = be$a0; continue;
       }
     }
@@ -319,7 +338,7 @@ function $valid_json$(_value_0) {
   }
 }
 
-function $pick_raw$(_b_0, _x_0, _y_0) {
+function $pick_raw(_b_0, _x_0, _y_0) {
   if (_b_0) {
     return _x_0;
   } else {
@@ -327,14 +346,14 @@ function $pick_raw$(_b_0, _x_0, _y_0) {
   }
 }
 
-function $lookup$(_name_0, _r_0) {
+function $lookup(_name_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _v_0 = _r_0["val"];
     const _rest_0 = _r_0["rest"];
-    if (($String$eq$(_k_0, _name_0))) {
+    if (($String_eq(_k_0, _name_0))) {
       return be$unwind(be$stk, _v_0);
     } else {
       {
@@ -347,7 +366,7 @@ function $lookup$(_name_0, _r_0) {
   }
 }
 
-function $pick_bool$(_b_0, _x_0, _y_0) {
+function $pick_bool(_b_0, _x_0, _y_0) {
   if (_b_0) {
     return _x_0;
   } else {
@@ -355,7 +374,7 @@ function $pick_bool$(_b_0, _x_0, _y_0) {
   }
 }
 
-function $is_rnil$(_r_0) {
+function $is_rnil(_r_0) {
   if (_r_0.$ === "RNil") {
     return true;
   } else {
@@ -363,7 +382,7 @@ function $is_rnil$(_r_0) {
   }
 }
 
-function $is_missing$(_v_0) {
+function $is_missing(_v_0) {
   if (_v_0.$ === "RMissing") {
     return true;
   } else {
@@ -371,7 +390,7 @@ function $is_missing$(_v_0) {
   }
 }
 
-function $in_names$(_x_0, _names_0) {
+function $in_names(_x_0, _names_0) {
   const be$stk = [];
   for (;;) {
   if (_names_0.$ === "Nil") {
@@ -379,7 +398,7 @@ function $in_names$(_x_0, _names_0) {
   } else {
     const _n_0 = _names_0["head"];
     const _t_0 = _names_0["tail"];
-    const _x_1 = ($String$eq$(_x_0, _n_0));
+    const _x_1 = ($String_eq(_x_0, _n_0));
     {
       be$stk.push((be$r) => { const _x_2 = (be$r); return (_x_1 || _x_2); });
       const be$a1 = _t_0; _names_0 = be$a1; continue;
@@ -388,15 +407,15 @@ function $in_names$(_x_0, _names_0) {
   }
 }
 
-function $none_present$(_s_0, _r_0) {
+function $none_present(_s_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SVariant") {
     const _n_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
     {
-      const be$t0 = ($is_missing$(($lookup$(_n_0, _r_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($is_missing(($lookup(_n_0, _r_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _rest_0; _s_0 = be$a0; continue;
     }
   } else {
@@ -405,7 +424,7 @@ function $none_present$(_s_0, _r_0) {
   }
 }
 
-function $key_names$(_s_0) {
+function $key_names(_s_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SField") {
@@ -428,15 +447,15 @@ function $key_names$(_s_0) {
   }
 }
 
-function $no_extra$(_ns_0, _r_0) {
+function $no_extra(_ns_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
     {
-      const be$t0 = ($in_names$(_k_0, _ns_0));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($in_names(_k_0, _ns_0));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a1 = _o_0; _r_0 = be$a1; continue;
     }
   } else {
@@ -445,14 +464,14 @@ function $no_extra$(_ns_0, _r_0) {
   }
 }
 
-function $drop_key$(_k_0, _r_0) {
+function $drop_key(_k_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _j_0 = _r_0["key"];
     const _v_0 = _r_0["val"];
     const _o_0 = _r_0["rest"];
-    if (($String$eq$(_j_0, _k_0))) {
+    if (($String_eq(_j_0, _k_0))) {
       return be$unwind(be$stk, _o_0);
     } else {
       {
@@ -466,20 +485,20 @@ function $drop_key$(_k_0, _r_0) {
   }
 }
 
-function $is_str$(_n_0, _v_0) {
+function $is_str(_n_0, _v_0) {
   if (_v_0.$ === "RStr") {
     const _x_0 = _v_0["s"];
-    return $String$eq$(_x_0, _n_0);
+    return $String_eq(_x_0, _n_0);
   } else {
     return false;
   }
 }
 
-function $is_tag$(_k_0, _n_0, _r_0) {
-  return $is_str$(_n_0, ($lookup$(_k_0, _r_0)));
+function $is_tag(_k_0, _n_0, _r_0) {
+  return $is_str(_n_0, ($lookup(_k_0, _r_0)));
 }
 
-function $in_err$(_b_0, _w_0) {
+function $in_err(_b_0, _w_0) {
   if (_b_0) {
     return be$N$None;
   } else {
@@ -487,20 +506,20 @@ function $in_err$(_b_0, _w_0) {
   }
 }
 
-function $str_len_ok$(_lo_0, _hi_0, _x_0) {
-  return $Bool$and$(($Nat$is_le$(_lo_0, [..._x_0].length)), ($Nat$is_le$([..._x_0].length, _hi_0)));
+function $str_len_ok(_lo_0, _hi_0, _x_0) {
+  return $Bool_and(($Nat_is_le(_lo_0, [...str_out(_x_0)].length)), ($Nat_is_le([...str_out(_x_0)].length, _hi_0)));
 }
 
-function $num_ok$(_lo_0, _hi_0, _n_0) {
-  return $Bool$and$(($Nat$is_le$(_lo_0, _n_0)), ($Nat$is_le$(_n_0, _hi_0)));
+function $num_ok(_lo_0, _hi_0, _n_0) {
+  return $Bool_and(($Nat_is_le(_lo_0, _n_0)), ($Nat_is_le(_n_0, _hi_0)));
 }
 
-function $int_le$(_a_0, _b_0) {
+function $int_le(_a_0, _b_0) {
   if (_a_0.$ === "IPos") {
     const _m_0 = _a_0["n"];
     if (_b_0.$ === "IPos") {
       const _n_0 = _b_0["n"];
-      return $Nat$is_le$(_m_0, _n_0);
+      return $Nat_is_le(_m_0, _n_0);
     } else {
       return false;
     }
@@ -510,16 +529,16 @@ function $int_le$(_a_0, _b_0) {
       return true;
     } else {
       const _n_3 = _b_0["n"];
-      return $Nat$is_le$(_n_3, _m_1);
+      return $Nat_is_le(_n_3, _m_1);
     }
   }
 }
 
-function $int_ok$(_lo_0, _hi_0, _i_0) {
-  return $Bool$and$(($int_le$(_lo_0, _i_0)), ($int_le$(_i_0, _hi_0)));
+function $int_ok(_lo_0, _hi_0, _i_0) {
+  return $Bool_and(($int_le(_lo_0, _i_0)), ($int_le(_i_0, _hi_0)));
 }
 
-function $int_raw$(_i_0) {
+function $int_raw(_i_0) {
   if (_i_0.$ === "IPos") {
     const _n_0 = _i_0["n"];
     return new be$C$RNum$n(_n_0);
@@ -529,34 +548,34 @@ function $int_raw$(_i_0) {
   }
 }
 
-function $len_ok$(_lo_0, _hi_0, _r_0) {
+function $len_ok(_lo_0, _hi_0, _r_0) {
   if (_r_0.$ === "RStr") {
     const _x_0 = _r_0["s"];
-    return $str_len_ok$(_lo_0, _hi_0, _x_0);
+    return $str_len_ok(_lo_0, _hi_0, _x_0);
   } else {
     return false;
   }
 }
 
-function $str_len_in$(_lo_0, _hi_0, _r_0) {
+function $str_len_in(_lo_0, _hi_0, _r_0) {
   if (_r_0.$ === "RStr") {
     const _x_0 = _r_0["s"];
-    return $in_err$(($str_len_ok$(_lo_0, _hi_0, _x_0)), new be$C$LengthNotIn$lo$hi(_lo_0, _hi_0));
+    return $in_err(($str_len_ok(_lo_0, _hi_0, _x_0)), new be$C$LengthNotIn$lo$hi(_lo_0, _hi_0));
   } else {
     return be$N$None;
   }
 }
 
-function $nat_in$(_lo_0, _hi_0, _r_0) {
+function $nat_in(_lo_0, _hi_0, _r_0) {
   if (_r_0.$ === "RNum") {
     const _n_0 = _r_0["n"];
-    return $in_err$(($num_ok$(_lo_0, _hi_0, _n_0)), new be$C$NotIn$lo$hi(_lo_0, _hi_0));
+    return $in_err(($num_ok(_lo_0, _hi_0, _n_0)), new be$C$NotIn$lo$hi(_lo_0, _hi_0));
   } else {
     return be$N$None;
   }
 }
 
-function $is_bool$(_r_0) {
+function $is_bool(_r_0) {
   if (_r_0.$ === "RBool") {
     return true;
   } else {
@@ -564,7 +583,7 @@ function $is_bool$(_r_0) {
   }
 }
 
-function $raw_list$($0) {
+function $raw_list($0) {
   for (;;) {
     {
       const _r_0 = $0;
@@ -581,7 +600,7 @@ function $raw_list$($0) {
   }
 }
 
-function $raw_len$(_r_0) {
+function $raw_len(_r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RCons") {
@@ -596,21 +615,21 @@ function $raw_len$(_r_0) {
   }
 }
 
-function $count_ok$(_lo_0, _hi_0, _r_0) {
-  return $Bool$and$(($Nat$is_le$(_lo_0, ($raw_len$(_r_0)))), ($Nat$is_le$(($raw_len$(_r_0)), _hi_0)));
+function $count_ok(_lo_0, _hi_0, _r_0) {
+  return $Bool_and(($Nat_is_le(_lo_0, ($raw_len(_r_0)))), ($Nat_is_le(($raw_len(_r_0)), _hi_0)));
 }
 
-function $list_len_ok$(_lo_0, _hi_0, _r_0) {
-  return $Bool$and$(($raw_list$(_r_0)), ($count_ok$(_lo_0, _hi_0, _r_0)));
+function $list_len_ok(_lo_0, _hi_0, _r_0) {
+  return $Bool_and(($raw_list(_r_0)), ($count_ok(_lo_0, _hi_0, _r_0)));
 }
 
-function $has_key$(_k_0, _r_0) {
+function $has_key(_k_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _j_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
-    const _x_0 = ($String$eq$(_k_0, _j_0));
+    const _x_0 = ($String_eq(_k_0, _j_0));
     {
       be$stk.push((be$r) => { const _x_1 = (be$r); return (_x_0 || _x_1); });
       const be$a1 = _o_0; _r_0 = be$a1; continue;
@@ -621,16 +640,16 @@ function $has_key$(_k_0, _r_0) {
   }
 }
 
-function $key_once_at$(_r_0, _b_0, _name_0) {
+function $key_once_at(_r_0, _b_0, _name_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
-    const _x_0 = ($String$eq$(_k_0, _name_0));
+    const _x_0 = ($String_eq(_k_0, _name_0));
     {
-      const be$t0 = ($Bool$not$(($Bool$and$(_b_0, ($String$eq$(_k_0, _name_0))))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($Bool_and(_b_0, ($String_eq(_k_0, _name_0))))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _o_0; const be$a1 = (_b_0 || _x_0); _r_0 = be$a0; _b_0 = be$a1; continue;
     }
   } else {
@@ -639,11 +658,11 @@ function $key_once_at$(_r_0, _b_0, _name_0) {
   }
 }
 
-function $key_once$(_name_0, _r_0) {
-  return $key_once_at$(_r_0, false, _name_0);
+function $key_once(_name_0, _r_0) {
+  return $key_once_at(_r_0, false, _name_0);
 }
 
-function $key_err$(_b_0, _name_0) {
+function $key_err(_b_0, _name_0) {
   if (_b_0) {
     return be$N$None;
   } else {
@@ -651,7 +670,7 @@ function $key_err$(_b_0, _name_0) {
   }
 }
 
-function $kind_eq$(_a_0, _b_0) {
+function $kind_eq(_a_0, _b_0) {
   if (_a_0.$ === "KNum") {
     if (_b_0.$ === "KNum") {
       return true;
@@ -709,7 +728,7 @@ function $kind_eq$(_a_0, _b_0) {
   }
 }
 
-function $kind_of$(_r_0) {
+function $kind_of(_r_0) {
   if (_r_0.$ === "RNum") {
     return be$N$KNum;
   } else if (_r_0.$ === "RNeg") {
@@ -737,58 +756,58 @@ function $kind_of$(_r_0) {
   }
 }
 
-function $has_kind$($0, $1) {
+function $has_kind($0, $1) {
   const be$stk = [];
   for (;;) {
     {
       const _s_0 = $0;
       const _k_0 = $1;
       if (_s_0.$ === "SNat") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KNum, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KNum, _k_0));
       } else if (_s_0.$ === "SNatIn") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KNum, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KNum, _k_0));
       } else if (_s_0.$ === "SInt") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KNum, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KNum, _k_0));
       } else if (_s_0.$ === "SIntIn") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KNum, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KNum, _k_0));
       } else if (_s_0.$ === "SStr") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KStr, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KStr, _k_0));
       } else if (_s_0.$ === "SEnum") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KStr, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KStr, _k_0));
       } else if (_s_0.$ === "SBool") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KBool, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KBool, _k_0));
       } else if (_s_0.$ === "STrue") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KBool, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KBool, _k_0));
       } else if (_s_0.$ === "SList") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KList, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KList, _k_0));
       } else if (_s_0.$ === "STuple") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KList, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KList, _k_0));
       } else if (_s_0.$ === "STEnd") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KList, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KList, _k_0));
       } else if (_s_0.$ === "SField") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "SEnd") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "STagged") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "STagEnd") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "SVariant") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "SVEnd") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KObj, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KObj, _k_0));
       } else if (_s_0.$ === "SJson") {
-        return be$unwind(be$stk, $kind_eq$(be$N$KJson, _k_0));
+        return be$unwind(be$stk, $kind_eq(be$N$KJson, _k_0));
       } else if (_s_0.$ === "SOpt") {
         const _i_0 = _s_0["inner"];
-        const _x_0 = ($kind_eq$(be$N$KNull, _k_0));
+        const _x_0 = ($kind_eq(be$N$KNull, _k_0));
         {
           be$stk.push((be$r) => { const _x_1 = (be$r); return (_x_0 || _x_1); });
           const be$a0 = _i_0; const be$a1 = _k_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SOptional") {
         const _i_1 = _s_0["inner"];
-        const _x_2 = ($kind_eq$(be$N$KAbsent, _k_0));
+        const _x_2 = ($kind_eq(be$N$KAbsent, _k_0));
         {
           be$stk.push((be$r) => { const _x_3 = (be$r); return (_x_2 || _x_3); });
           const be$a0 = _i_1; const be$a1 = _k_0; $0 = be$a0; $1 = be$a1; continue;
@@ -816,7 +835,7 @@ function $has_kind$($0, $1) {
       } else {
         const _l_0 = _s_0["l"];
         const _r_0 = _s_0["r"];
-        const _x_4 = ($has_kind$(_l_0, _k_0));
+        const _x_4 = ($has_kind(_l_0, _k_0));
         {
           be$stk.push((be$r) => { const _x_5 = (be$r); return (_x_4 || _x_5); });
           const be$a0 = _r_0; const be$a1 = _k_0; $0 = be$a0; $1 = be$a1; continue;
@@ -826,27 +845,27 @@ function $has_kind$($0, $1) {
   }
 }
 
-function $apart$(_l_0, _r_0, _k_0) {
-  return $Bool$not$(($Bool$and$(($has_kind$(_l_0, _k_0)), ($has_kind$(_r_0, _k_0)))));
+function $apart(_l_0, _r_0, _k_0) {
+  return $Bool_not(($Bool_and(($has_kind(_l_0, _k_0)), ($has_kind(_r_0, _k_0)))));
 }
 
-function $disjoint$(_l_0, _r_0) {
-  return $Bool$and$(($apart$(_l_0, _r_0, be$N$KNum)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KStr)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KBool)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KList)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KObj)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KNull)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KAbsent)), ($Bool$and$(($apart$(_l_0, _r_0, be$N$KJson)), ($apart$(_l_0, _r_0, be$N$KOther)))))))))))))))));
+function $disjoint(_l_0, _r_0) {
+  return $Bool_and(($apart(_l_0, _r_0, be$N$KNum)), ($Bool_and(($apart(_l_0, _r_0, be$N$KStr)), ($Bool_and(($apart(_l_0, _r_0, be$N$KBool)), ($Bool_and(($apart(_l_0, _r_0, be$N$KList)), ($Bool_and(($apart(_l_0, _r_0, be$N$KObj)), ($Bool_and(($apart(_l_0, _r_0, be$N$KNull)), ($Bool_and(($apart(_l_0, _r_0, be$N$KAbsent)), ($Bool_and(($apart(_l_0, _r_0, be$N$KJson)), ($apart(_l_0, _r_0, be$N$KOther)))))))))))))))));
 }
 
-function $alt_ok$(_s_0) {
-  return $Bool$and$(($Bool$not$(($has_kind$(_s_0, be$N$KAbsent)))), ($Bool$not$(($has_kind$(_s_0, be$N$KJson)))));
+function $alt_ok(_s_0) {
+  return $Bool_and(($Bool_not(($has_kind(_s_0, be$N$KAbsent)))), ($Bool_not(($has_kind(_s_0, be$N$KJson)))));
 }
 
-function $no_alt$(_s_0) {
-  return new be$C$NoAlternative$num$str$bool$list$obj$null(($has_kind$(_s_0, be$N$KNum)), ($has_kind$(_s_0, be$N$KStr)), ($has_kind$(_s_0, be$N$KBool)), ($has_kind$(_s_0, be$N$KList)), ($has_kind$(_s_0, be$N$KObj)), ($has_kind$(_s_0, be$N$KNull)));
+function $no_alt(_s_0) {
+  return new be$C$NoAlternative$num$str$bool$list$obj$null(($has_kind(_s_0, be$N$KNum)), ($has_kind(_s_0, be$N$KStr)), ($has_kind(_s_0, be$N$KBool)), ($has_kind(_s_0, be$N$KList)), ($has_kind(_s_0, be$N$KObj)), ($has_kind(_s_0, be$N$KNull)));
 }
 
-function $here$(_w_0) {
+function $here(_w_0) {
   return new be$C$Some$value(new be$C$Err$path$why(be$N$Nil, _w_0));
 }
 
-function $under$(_st_0, _m_0) {
+function $under(_st_0, _m_0) {
   if (_m_0.$ === "None") {
     return be$N$None;
   } else {
@@ -857,20 +876,20 @@ function $under$(_st_0, _m_0) {
   }
 }
 
-function $len_err$(_lo_0, _hi_0, _r_0) {
+function $len_err(_lo_0, _hi_0, _r_0) {
   if (_r_0.$ === "RStr") {
     const _x_0 = _r_0["s"];
-    return $in_err$(($str_len_ok$(_lo_0, _hi_0, _x_0)), new be$C$LengthNotIn$lo$hi(_lo_0, _hi_0));
+    return $in_err(($str_len_ok(_lo_0, _hi_0, _x_0)), new be$C$LengthNotIn$lo$hi(_lo_0, _hi_0));
   } else if (_r_0.$ === "RMissing") {
-    return $here$(be$N$Missing);
+    return $here(be$N$Missing);
   } else if (_r_0.$ === "RTooBig") {
-    return $here$(be$N$TooLarge);
+    return $here(be$N$TooLarge);
   } else {
-    return $here$(be$N$NotString);
+    return $here(be$N$NotString);
   }
 }
 
-function $later_l_path$(_p_0) {
+function $later_l_path(_p_0) {
   if (_p_0.$ === "Con") {
     const _t_0 = _p_0["head"];
     if (_t_0.$ === "AtIndex") {
@@ -886,18 +905,18 @@ function $later_l_path$(_p_0) {
   }
 }
 
-function $later_l$(_m_0) {
+function $later_l(_m_0) {
   if (_m_0.$ === "None") {
     return be$N$None;
   } else {
     const _t_0 = _m_0["value"];
     const _p_0 = _t_0["path"];
     const _w_0 = _t_0["why"];
-    return new be$C$Some$value(new be$C$Err$path$why(($later_l_path$(_p_0)), _w_0));
+    return new be$C$Some$value(new be$C$Err$path$why(($later_l_path(_p_0)), _w_0));
   }
 }
 
-function $later_i_path$(_p_0) {
+function $later_i_path(_p_0) {
   if (_p_0.$ === "Con") {
     const _t_0 = _p_0["head"];
     if (_t_0.$ === "AtIndex") {
@@ -918,18 +937,18 @@ function $later_i_path$(_p_0) {
   }
 }
 
-function $later_i$(_m_0) {
+function $later_i(_m_0) {
   if (_m_0.$ === "None") {
     return be$N$None;
   } else {
     const _t_0 = _m_0["value"];
     const _p_0 = _t_0["path"];
     const _w_0 = _t_0["why"];
-    return new be$C$Some$value(new be$C$Err$path$why(($later_i_path$(_p_0)), _w_0));
+    return new be$C$Some$value(new be$C$Err$path$why(($later_i_path(_p_0)), _w_0));
   }
 }
 
-function $later_f_path$(_p_0) {
+function $later_f_path(_p_0) {
   if (_p_0.$ === "Con") {
     const _t_0 = _p_0["head"];
     if (_t_0.$ === "AtField") {
@@ -946,18 +965,18 @@ function $later_f_path$(_p_0) {
   }
 }
 
-function $later_f$(_m_0) {
+function $later_f(_m_0) {
   if (_m_0.$ === "None") {
     return be$N$None;
   } else {
     const _t_0 = _m_0["value"];
     const _p_0 = _t_0["path"];
     const _w_0 = _t_0["why"];
-    return new be$C$Some$value(new be$C$Err$path$why(($later_f_path$(_p_0)), _w_0));
+    return new be$C$Some$value(new be$C$Err$path$why(($later_f_path(_p_0)), _w_0));
   }
 }
 
-function $first$(_m_0, _n_0) {
+function $first(_m_0, _n_0) {
   if (_m_0.$ === "None") {
     return _n_0;
   } else {
@@ -966,7 +985,7 @@ function $first$(_m_0, _n_0) {
   }
 }
 
-function $missing_or$(_r_0, _w_0) {
+function $missing_or(_r_0, _w_0) {
   if (_r_0.$ === "RMissing") {
     return be$N$Missing;
   } else if (_r_0.$ === "RTooBig") {
@@ -976,7 +995,7 @@ function $missing_or$(_r_0, _w_0) {
   }
 }
 
-function $pick_err$(_b_0, _x_0, _y_0) {
+function $pick_err(_b_0, _x_0, _y_0) {
   if (_b_0) {
     return _x_0;
   } else {
@@ -984,31 +1003,31 @@ function $pick_err$(_b_0, _x_0, _y_0) {
   }
 }
 
-function $true_err$(_b_0) {
+function $true_err(_b_0) {
   if (_b_0) {
     return be$N$None;
   } else {
-    return $here$(be$N$NotTrue);
+    return $here(be$N$NotTrue);
   }
 }
 
-function $enum_err$(_b_0) {
+function $enum_err(_b_0) {
   if (_b_0) {
     return be$N$None;
   } else {
-    return $here$(be$N$NotOneOf);
+    return $here(be$N$NotOneOf);
   }
 }
 
-function $dup_err$(_s_0, _r_0) {
+function $dup_err(_s_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SVariant") {
     const _n_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
-    if (($is_missing$(($lookup$(_n_0, _r_0))))) {
+    if (($is_missing(($lookup(_n_0, _r_0))))) {
       {
-        be$stk.push((be$r) => (($later_f$((be$r)))));
+        be$stk.push((be$r) => (($later_f((be$r)))));
         const be$a0 = _rest_0; _s_0 = be$a0; continue;
       }
     } else {
@@ -1020,13 +1039,13 @@ function $dup_err$(_s_0, _r_0) {
   }
 }
 
-function $extra_err$(_ns_0, _r_0) {
+function $extra_err(_ns_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
-    if (($in_names$(_k_0, _ns_0))) {
+    if (($in_names(_k_0, _ns_0))) {
       {
         const be$a1 = _o_0; _r_0 = be$a1; continue;
       }
@@ -1039,32 +1058,32 @@ function $extra_err$(_ns_0, _r_0) {
   }
 }
 
-function $tag_err$(_k_0, _r_0) {
+function $tag_err(_k_0, _r_0) {
   if (_r_0.$ === "REnd") {
     return new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtKey$key(_k_0), be$N$Nil), be$N$Missing));
   } else if (_r_0.$ === "RKey") {
     const _j_0 = _r_0["key"];
     const _v_0 = _r_0["val"];
     const _o_0 = _r_0["rest"];
-    return new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtKey$key(_k_0), be$N$Nil), ($missing_or$(($lookup$(_k_0, new be$C$RKey$key$val$rest(_j_0, _v_0, _o_0))), be$N$NotOneOf))));
+    return new be$C$Some$value(new be$C$Err$path$why(new be$C$Con$head$tail(new be$C$AtKey$key(_k_0), be$N$Nil), ($missing_or(($lookup(_k_0, new be$C$RKey$key$val$rest(_j_0, _v_0, _o_0))), be$N$NotOneOf))));
   } else {
-    return $here$(($missing_or$(_r_0, be$N$NotObject)));
+    return $here(($missing_or(_r_0, be$N$NotObject)));
   }
 }
 
-function $count_err$(_lo_0, _hi_0, _r_0) {
+function $count_err(_lo_0, _hi_0, _r_0) {
   if (_r_0.$ === "RNil") {
-    return $in_err$(($list_len_ok$(_lo_0, _hi_0, be$N$RNil)), new be$C$CountNotIn$lo$hi(_lo_0, _hi_0));
+    return $in_err(($list_len_ok(_lo_0, _hi_0, be$N$RNil)), new be$C$CountNotIn$lo$hi(_lo_0, _hi_0));
   } else if (_r_0.$ === "RCons") {
     const _h_0 = _r_0["head"];
     const _t_0 = _r_0["tail"];
-    return $in_err$(($list_len_ok$(_lo_0, _hi_0, new be$C$RCons$head$tail(_h_0, _t_0))), new be$C$CountNotIn$lo$hi(_lo_0, _hi_0));
+    return $in_err(($list_len_ok(_lo_0, _hi_0, new be$C$RCons$head$tail(_h_0, _t_0))), new be$C$CountNotIn$lo$hi(_lo_0, _hi_0));
   } else {
-    return $here$(($missing_or$(_r_0, be$N$NotList)));
+    return $here(($missing_or(_r_0, be$N$NotList)));
   }
 }
 
-function $guard$(_b_0, _m_0) {
+function $guard(_b_0, _m_0) {
   if (_b_0) {
     return _m_0;
   } else {
@@ -1072,24 +1091,24 @@ function $guard$(_b_0, _m_0) {
   }
 }
 
-function $nat_in_defect$(_lo_0, _hi_0, _r_0, _p_0) {
+function $nat_in_defect(_lo_0, _hi_0, _r_0, _p_0) {
   if (_r_0.$ === "RNum") {
     const _n_0 = _r_0["n"];
     if (_p_0.$ === "Nil") {
-      return $guard$(($Bool$not$(($num_ok$(_lo_0, _hi_0, _n_0)))), new be$C$Some$value(new be$C$NotIn$lo$hi(_lo_0, _hi_0)));
+      return $guard(($Bool_not(($num_ok(_lo_0, _hi_0, _n_0)))), new be$C$Some$value(new be$C$NotIn$lo$hi(_lo_0, _hi_0)));
     } else {
       return be$N$None;
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotNat)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotNat)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $int_defect$(_r_0, _p_0) {
+function $int_defect(_r_0, _p_0) {
   if (_r_0.$ === "RNum") {
     if (_p_0.$ === "Nil") {
       return be$N$None;
@@ -1104,38 +1123,38 @@ function $int_defect$(_r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotInt)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotInt)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $int_in_defect$(_lo_0, _hi_0, _r_0, _p_0) {
+function $int_in_defect(_lo_0, _hi_0, _r_0, _p_0) {
   if (_r_0.$ === "RNum") {
     const _n_0 = _r_0["n"];
     if (_p_0.$ === "Nil") {
-      return $guard$(($Bool$not$(($int_ok$(_lo_0, _hi_0, new be$C$IPos$n(_n_0))))), new be$C$Some$value(new be$C$IntNotIn$lo$hi(_lo_0, _hi_0)));
+      return $guard(($Bool_not(($int_ok(_lo_0, _hi_0, new be$C$IPos$n(_n_0))))), new be$C$Some$value(new be$C$IntNotIn$lo$hi(_lo_0, _hi_0)));
     } else {
       return be$N$None;
     }
   } else if (_r_0.$ === "RNeg") {
     const _n_1 = _r_0["n"];
     if (_p_0.$ === "Nil") {
-      return $guard$(($Bool$not$(($int_ok$(_lo_0, _hi_0, new be$C$INeg$n(_n_1))))), new be$C$Some$value(new be$C$IntNotIn$lo$hi(_lo_0, _hi_0)));
+      return $guard(($Bool_not(($int_ok(_lo_0, _hi_0, new be$C$INeg$n(_n_1))))), new be$C$Some$value(new be$C$IntNotIn$lo$hi(_lo_0, _hi_0)));
     } else {
       return be$N$None;
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotInt)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotInt)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $bool_defect$(_r_0, _p_0) {
+function $bool_defect(_r_0, _p_0) {
   if (_r_0.$ === "RBool") {
     if (_p_0.$ === "Nil") {
       return be$N$None;
@@ -1144,18 +1163,18 @@ function $bool_defect$(_r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotBool)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotBool)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $no_rule$(_tag_0, _r_0) {
+function $no_rule(_tag_0, _r_0) {
   return be$N$None;
 }
 
-function $first_why$(_m_0, _n_0) {
+function $first_why(_m_0, _n_0) {
   if (_m_0.$ === "None") {
     return _n_0;
   } else {
@@ -1164,12 +1183,12 @@ function $first_why$(_m_0, _n_0) {
   }
 }
 
-function $step_eq$(_x_0, _y_0) {
+function $step_eq(_x_0, _y_0) {
   if (_x_0.$ === "AtIndex") {
     const _i_0 = _x_0["i"];
     if (_y_0.$ === "AtIndex") {
       const _j_0 = _y_0["i"];
-      return $Nat$is_eq$(_i_0, _j_0);
+      return $Nat_is_eq(_i_0, _j_0);
     } else {
       return false;
     }
@@ -1179,7 +1198,7 @@ function $step_eq$(_x_0, _y_0) {
     if (_y_0.$ === "AtField") {
       const _b_0 = _y_0["skip"];
       const _m_0 = _y_0["name"];
-      return $Bool$and$(($Nat$is_eq$(_a_0, _b_0)), ($String$eq$(_n_0, _m_0)));
+      return $Bool_and(($Nat_is_eq(_a_0, _b_0)), ($String_eq(_n_0, _m_0)));
     } else {
       return false;
     }
@@ -1189,7 +1208,7 @@ function $step_eq$(_x_0, _y_0) {
     if (_y_0.$ === "BoundAt") {
       const _j_1 = _y_0["i"];
       const _m_1 = _y_0["key"];
-      return $Bool$and$(($Nat$is_eq$(_i_1, _j_1)), ($String$eq$(_k_0, _m_1)));
+      return $Bool_and(($Nat_is_eq(_i_1, _j_1)), ($String_eq(_k_0, _m_1)));
     } else {
       return false;
     }
@@ -1197,14 +1216,14 @@ function $step_eq$(_x_0, _y_0) {
     const _k_1 = _x_0["key"];
     if (_y_0.$ === "AtKey") {
       const _m_2 = _y_0["key"];
-      return $String$eq$(_k_1, _m_2);
+      return $String_eq(_k_1, _m_2);
     } else {
       return false;
     }
   }
 }
 
-function $path_eq$(_x_0, _y_0) {
+function $path_eq(_x_0, _y_0) {
   const be$stk = [];
   for (;;) {
   if (_x_0.$ === "Nil") {
@@ -1220,8 +1239,8 @@ function $path_eq$(_x_0, _y_0) {
       const _b_0 = _y_0["head"];
       const _bt_0 = _y_0["tail"];
       {
-        const be$t0 = ($step_eq$(_a_0, _b_0));
-        be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+        const be$t0 = ($step_eq(_a_0, _b_0));
+        be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
         const be$a0 = _at_0; const be$a1 = _bt_0; _x_0 = be$a0; _y_0 = be$a1; continue;
       }
     } else {
@@ -1231,34 +1250,34 @@ function $path_eq$(_x_0, _y_0) {
   }
 }
 
-function $rule_defect$(_m_0, _p_0) {
+function $rule_defect(_m_0, _p_0) {
   if (_m_0.$ === "Some") {
     const _t_0 = _m_0["value"];
     const _q_0 = _t_0["path"];
     const _w_0 = _t_0["why"];
-    return $guard$(($path_eq$(_q_0, _p_0)), new be$C$Some$value(_w_0));
+    return $guard(($path_eq(_q_0, _p_0)), new be$C$Some$value(_w_0));
   } else {
     return be$N$None;
   }
 }
 
-function $not_list$(_x_0, _p_0) {
+function $not_list(_x_0, _p_0) {
   if (_p_0.$ === "Nil") {
-    return new be$C$Some$value(($missing_or$(_x_0, be$N$NotList)));
+    return new be$C$Some$value(($missing_or(_x_0, be$N$NotList)));
   } else {
     return be$N$None;
   }
 }
 
-function $not_object$(_x_0, _p_0) {
+function $not_object(_x_0, _p_0) {
   if (_p_0.$ === "Nil") {
-    return new be$C$Some$value(($missing_or$(_x_0, be$N$NotObject)));
+    return new be$C$Some$value(($missing_or(_x_0, be$N$NotObject)));
   } else {
     return be$N$None;
   }
 }
 
-function $nat_defect$(_r_0, _p_0) {
+function $nat_defect(_r_0, _p_0) {
   if (_r_0.$ === "RNum") {
     if (_p_0.$ === "Nil") {
       return be$N$None;
@@ -1267,14 +1286,14 @@ function $nat_defect$(_r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotNat)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotNat)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $str_defect$(_r_0, _p_0) {
+function $str_defect(_r_0, _p_0) {
   if (_r_0.$ === "RStr") {
     if (_p_0.$ === "Nil") {
       return be$N$None;
@@ -1283,14 +1302,14 @@ function $str_defect$(_r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotString)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotString)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $pick_why$(_b_0, _x_0, _y_0) {
+function $pick_why(_b_0, _x_0, _y_0) {
   if (_b_0) {
     return _x_0;
   } else {
@@ -1298,7 +1317,7 @@ function $pick_why$(_b_0, _x_0, _y_0) {
   }
 }
 
-function $true_defect$(_r_0, _p_0) {
+function $true_defect(_r_0, _p_0) {
   if (_r_0.$ === "RBool") {
     const _t_0 = _r_0["b"];
     if (_t_0) {
@@ -1316,31 +1335,31 @@ function $true_defect$(_r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotTrue)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotTrue)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $enum_defect$(_names_0, _r_0, _p_0) {
+function $enum_defect(_names_0, _r_0, _p_0) {
   if (_r_0.$ === "RStr") {
     const _x_0 = _r_0["s"];
     if (_p_0.$ === "Nil") {
-      return $guard$(($Bool$not$(($in_names$(_x_0, _names_0)))), new be$C$Some$value(be$N$NotOneOf));
+      return $guard(($Bool_not(($in_names(_x_0, _names_0)))), new be$C$Some$value(be$N$NotOneOf));
     } else {
       return be$N$None;
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotOneOf)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotOneOf)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $no_variant$(_p_0) {
+function $no_variant(_p_0) {
   if (_p_0.$ === "Nil") {
     return new be$C$Some$value(be$N$NoVariant);
   } else {
@@ -1348,7 +1367,7 @@ function $no_variant$(_p_0) {
   }
 }
 
-function $dup_defect$(_s_0, _r_0, _p_0) {
+function $dup_defect(_s_0, _r_0, _p_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SVariant") {
@@ -1362,7 +1381,7 @@ function $dup_defect$(_s_0, _r_0, _p_0) {
           const _m_0 = _t_0["name"];
           const _t_2 = _p_0["tail"];
           if (_t_2.$ === "Nil") {
-            return be$unwind(be$stk, $guard$(($Bool$and$(($String$eq$(_m_0, _n2_0)), ($Bool$not$(($is_missing$(($lookup$(_n2_0, _r_0)))))))), new be$C$Some$value(be$N$TwoVariants)));
+            return be$unwind(be$stk, $guard(($Bool_and(($String_eq(_m_0, _n2_0)), ($Bool_not(($is_missing(($lookup(_n2_0, _r_0)))))))), new be$C$Some$value(be$N$TwoVariants)));
           } else {
             return be$unwind(be$stk, be$N$None);
           }
@@ -1371,8 +1390,8 @@ function $dup_defect$(_s_0, _r_0, _p_0) {
           const _m_1 = _t_0["name"];
           const _41_0 = _p_0["tail"];
           {
-            const be$t0 = ($is_missing$(($lookup$(_n2_0, _r_0))));
-            be$stk.push((be$r) => ($guard$(be$t0, (be$r))));
+            const be$t0 = ($is_missing(($lookup(_n2_0, _r_0))));
+            be$stk.push((be$r) => ($guard(be$t0, (be$r))));
             const be$a0 = _rr_0; const be$a2 = new be$C$Con$head$tail(new be$C$AtField$skip$name(_j_0, _m_1), _41_0); _s_0 = be$a0; _p_0 = be$a2; continue;
           }
         }
@@ -1388,7 +1407,7 @@ function $dup_defect$(_s_0, _r_0, _p_0) {
   }
 }
 
-function $at_end$(_w_0, _p_0) {
+function $at_end(_w_0, _p_0) {
   if (_p_0.$ === "Nil") {
     return new be$C$Some$value(_w_0);
   } else {
@@ -1396,14 +1415,14 @@ function $at_end$(_w_0, _p_0) {
   }
 }
 
-function $extra_defect$(_ns_0, _r_0, _p_0) {
+function $extra_defect(_ns_0, _r_0, _p_0) {
   if (_p_0.$ === "Con") {
     const _t_0 = _p_0["head"];
     if (_t_0.$ === "AtKey") {
       const _k_0 = _t_0["key"];
       const _t_1 = _p_0["tail"];
       if (_t_1.$ === "Nil") {
-        return $guard$(($Bool$and$(($has_key$(_k_0, _r_0)), ($Bool$not$(($in_names$(_k_0, _ns_0)))))), new be$C$Some$value(be$N$UnknownKey));
+        return $guard(($Bool_and(($has_key(_k_0, _r_0)), ($Bool_not(($in_names(_k_0, _ns_0)))))), new be$C$Some$value(be$N$UnknownKey));
       } else {
         return be$N$None;
       }
@@ -1415,7 +1434,7 @@ function $extra_defect$(_ns_0, _r_0, _p_0) {
   }
 }
 
-function $tag_defect$(_k_0, _r_0, _p_0) {
+function $tag_defect(_k_0, _r_0, _p_0) {
   if (_r_0.$ === "REnd") {
     if (_p_0.$ === "Con") {
       const _t_0 = _p_0["head"];
@@ -1423,7 +1442,7 @@ function $tag_defect$(_k_0, _r_0, _p_0) {
         const _j_0 = _t_0["key"];
         const _t_1 = _p_0["tail"];
         if (_t_1.$ === "Nil") {
-          return $guard$(($String$eq$(_j_0, _k_0)), new be$C$Some$value(be$N$Missing));
+          return $guard(($String_eq(_j_0, _k_0)), new be$C$Some$value(be$N$Missing));
         } else {
           return be$N$None;
         }
@@ -1443,7 +1462,7 @@ function $tag_defect$(_k_0, _r_0, _p_0) {
         const _i_0 = _t_2["key"];
         const _t_3 = _p_0["tail"];
         if (_t_3.$ === "Nil") {
-          return $guard$(($String$eq$(_i_0, _k_0)), new be$C$Some$value(($missing_or$(($lookup$(_k_0, new be$C$RKey$key$val$rest(_j_1, _v_0, _o_0))), be$N$NotOneOf))));
+          return $guard(($String_eq(_i_0, _k_0)), new be$C$Some$value(($missing_or(($lookup(_k_0, new be$C$RKey$key$val$rest(_j_1, _v_0, _o_0))), be$N$NotOneOf))));
         } else {
           return be$N$None;
         }
@@ -1455,14 +1474,14 @@ function $tag_defect$(_k_0, _r_0, _p_0) {
     }
   } else {
     if (_p_0.$ === "Nil") {
-      return new be$C$Some$value(($missing_or$(_r_0, be$N$NotObject)));
+      return new be$C$Some$value(($missing_or(_r_0, be$N$NotObject)));
     } else {
       return be$N$None;
     }
   }
 }
 
-function $tag_key_defect$(_b_0, _k_0, _p_0) {
+function $tag_key_defect(_b_0, _k_0, _p_0) {
   if (!_b_0) {
     return be$N$None;
   } else {
@@ -1474,7 +1493,7 @@ function $tag_key_defect$(_b_0, _k_0, _p_0) {
           const _j_0 = _t_0["name"];
           const _t_2 = _p_0["tail"];
           if (_t_2.$ === "Nil") {
-            if (($String$eq$(_j_0, _k_0))) {
+            if (($String_eq(_j_0, _k_0))) {
               return new be$C$Some$value(new be$C$RepeatedKey$key(_k_0));
             } else {
               return be$N$None;
@@ -1494,15 +1513,15 @@ function $tag_key_defect$(_b_0, _k_0, _p_0) {
   }
 }
 
-function $check0$(_s_0, _r_0) {
-  return $check$1260$(_s_0, _r_0, be$N$None);
+function $check0(_s_0, _r_0) {
+  return $check_0(_s_0, _r_0, be$N$None);
 }
 
-function $conforms0$(_s_0, _r_0) {
-  return $conforms$1260$(_s_0, _r_0, be$N$None);
+function $conforms0(_s_0, _r_0) {
+  return $conforms_0(_s_0, _r_0, be$N$None);
 }
 
-function $is_chain$($0) {
+function $is_chain($0) {
   for (;;) {
     {
       const _s_0 = $0;
@@ -1519,7 +1538,7 @@ function $is_chain$($0) {
   }
 }
 
-function $is_object$(_r_0) {
+function $is_object(_r_0) {
   if (_r_0.$ === "REnd") {
     return true;
   } else if (_r_0.$ === "RKey") {
@@ -1529,7 +1548,7 @@ function $is_object$(_r_0) {
   }
 }
 
-function $one_if_there$(_b_0) {
+function $one_if_there(_b_0) {
   if (_b_0) {
     return 0;
   } else {
@@ -1537,13 +1556,13 @@ function $one_if_there$(_b_0) {
   }
 }
 
-function $count_present$(_s_0, _r_0) {
+function $count_present(_s_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SVariant") {
     const _n_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
-    const _x_0 = ($one_if_there$(($is_missing$(($lookup$(_n_0, _r_0))))));
+    const _x_0 = ($one_if_there(($is_missing(($lookup(_n_0, _r_0))))));
     {
       be$stk.push((be$r) => { const _x_1 = (be$r); return nat_chk(_x_0 + _x_1); });
       const be$a0 = _rest_0; _s_0 = be$a0; continue;
@@ -1554,7 +1573,7 @@ function $count_present$(_s_0, _r_0) {
   }
 }
 
-function $tuple_of$(_ss_0) {
+function $tuple_of(_ss_0) {
   const be$stk = [];
   for (;;) {
   if (_ss_0.$ === "Nil") {
@@ -1570,7 +1589,7 @@ function $tuple_of$(_ss_0) {
   }
 }
 
-function $at_raw$($0, $1) {
+function $at_raw($0, $1) {
   for (;;) {
     {
       const _r_0 = $0;
@@ -1593,13 +1612,13 @@ function $at_raw$($0, $1) {
   }
 }
 
-function $count_unknown$(_ns_0, _r_0) {
+function $count_unknown(_ns_0, _r_0) {
   const be$stk = [];
   for (;;) {
   if (_r_0.$ === "RKey") {
     const _k_0 = _r_0["key"];
     const _o_0 = _r_0["rest"];
-    const _x_0 = ($one_if_there$(($in_names$(_k_0, _ns_0))));
+    const _x_0 = ($one_if_there(($in_names(_k_0, _ns_0))));
     {
       be$stk.push((be$r) => { const _x_1 = (be$r); return nat_chk(_x_0 + _x_1); });
       const be$a1 = _o_0; _r_0 = be$a1; continue;
@@ -1610,7 +1629,7 @@ function $count_unknown$(_ns_0, _r_0) {
   }
 }
 
-function $Meaning$($0) {
+function $Meaning($0) {
   for (;;) {
     {
       const _s_0 = $0;
@@ -1677,7 +1696,7 @@ function $Meaning$($0) {
   }
 }
 
-function $enc$($0, $1) {
+function $enc($0, $1) {
   const be$stk = [];
   for (;;) {
     {
@@ -1727,7 +1746,7 @@ function $enc$($0, $1) {
           const _h_0 = _x_0["head"];
           const _t_0 = _x_0["tail"];
           {
-            const be$t0 = ($enc$(_e_0, _h_0));
+            const be$t0 = ($enc(_e_0, _h_0));
             be$stk.push((be$r) => (new be$C$RCons$head$tail(be$t0, (be$r))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; $0 = be$a0; $1 = be$a1; continue;
           }
@@ -1739,7 +1758,7 @@ function $enc$($0, $1) {
         const _a_0 = _x_0["a"];
         const _b_0 = _x_0["b"];
         {
-          const be$t0 = ($enc$(_fs_0, _a_0));
+          const be$t0 = ($enc(_fs_0, _a_0));
           be$stk.push((be$r) => (new be$C$RKey$key$val$rest(_n_0, be$t0, (be$r))));
           const be$a0 = _rest_0; const be$a1 = _b_0; $0 = be$a0; $1 = be$a1; continue;
         }
@@ -1773,7 +1792,7 @@ function $enc$($0, $1) {
           continue;
         }
       } else if (_s_0.$ === "STagEnd") {
-        return be$unwind(be$stk, $Empty$absurd$(_x_0));
+        return be$unwind(be$stk, $Empty_absurd(_x_0));
       } else if (_s_0.$ === "STrue") {
         return be$unwind(be$stk, new be$C$RBool$b(true));
       } else if (_s_0.$ === "SBool") {
@@ -1797,14 +1816,14 @@ function $enc$($0, $1) {
           continue;
         }
       } else if (_s_0.$ === "SVEnd") {
-        return be$unwind(be$stk, $Empty$absurd$(_x_0));
+        return be$unwind(be$stk, $Empty_absurd(_x_0));
       } else if (_s_0.$ === "STuple") {
         const _ts_0 = _s_0["s"];
         const _rest_3 = _s_0["rest"];
         const _a_3 = _x_0["a"];
         const _b_3 = _x_0["b"];
         {
-          const be$t0 = ($enc$(_ts_0, _a_3));
+          const be$t0 = ($enc(_ts_0, _a_3));
           be$stk.push((be$r) => (new be$C$RCons$head$tail(be$t0, (be$r))));
           const be$a0 = _rest_3; const be$a1 = _b_3; $0 = be$a0; $1 = be$a1; continue;
         }
@@ -1813,9 +1832,9 @@ function $enc$($0, $1) {
       } else if (_s_0.$ === "SJson") {
         return be$unwind(be$stk, new be$C$RJson$value(_x_0));
       } else if (_s_0.$ === "SInt") {
-        return be$unwind(be$stk, $int_raw$(_x_0));
+        return be$unwind(be$stk, $int_raw(_x_0));
       } else if (_s_0.$ === "SIntIn") {
-        return be$unwind(be$stk, $int_raw$(_x_0));
+        return be$unwind(be$stk, $int_raw(_x_0));
       } else {
         const _l_0 = _s_0["l"];
         const _r_0 = _s_0["r"];
@@ -1835,7 +1854,7 @@ function $enc$($0, $1) {
   }
 }
 
-function $lcons$(_h_0, _t_0) {
+function $lcons(_h_0, _t_0) {
   if (_h_0.$ === "Some") {
     const _x_0 = _h_0["value"];
     if (_t_0.$ === "Some") {
@@ -1849,7 +1868,7 @@ function $lcons$(_h_0, _t_0) {
   }
 }
 
-function $both$(_p_0, _q_0) {
+function $both(_p_0, _q_0) {
   if (_p_0.$ === "Some") {
     const _x_0 = _p_0["value"];
     if (_q_0.$ === "Some") {
@@ -1863,7 +1882,7 @@ function $both$(_p_0, _q_0) {
   }
 }
 
-function $opt_some$(_m_0) {
+function $opt_some(_m_0) {
   if (_m_0.$ === "Some") {
     const _v_0 = _m_0["value"];
     return new be$C$Some$value(new be$C$Some$value(_v_0));
@@ -1872,7 +1891,7 @@ function $opt_some$(_m_0) {
   }
 }
 
-function $map_inl$(_m_0) {
+function $map_inl(_m_0) {
   if (_m_0.$ === "Some") {
     const _v_0 = _m_0["value"];
     return new be$C$Some$value(new be$C$Inl$value(_v_0));
@@ -1881,7 +1900,7 @@ function $map_inl$(_m_0) {
   }
 }
 
-function $map_inr$(_m_0) {
+function $map_inr(_m_0) {
   if (_m_0.$ === "Some") {
     const _v_0 = _m_0["value"];
     return new be$C$Some$value(new be$C$Inr$value(_v_0));
@@ -1890,7 +1909,7 @@ function $map_inr$(_m_0) {
   }
 }
 
-function $pick_m$(_b_0, _x_0, _y_0) {
+function $pick_m(_b_0, _x_0, _y_0) {
   if (_b_0) {
     return _x_0;
   } else {
@@ -1898,7 +1917,7 @@ function $pick_m$(_b_0, _x_0, _y_0) {
   }
 }
 
-function $true_unit$(_b_0) {
+function $true_unit(_b_0) {
   if (_b_0) {
     return new be$C$Some$value(be$N$Unit);
   } else {
@@ -1906,7 +1925,7 @@ function $true_unit$(_b_0) {
   }
 }
 
-function $nullish$(_r_0) {
+function $nullish(_r_0) {
   if (_r_0.$ === "RNull") {
     return true;
   } else if (_r_0.$ === "RMissing") {
@@ -1916,7 +1935,7 @@ function $nullish$(_r_0) {
   }
 }
 
-function $dec$($0, $1) {
+function $dec($0, $1) {
   const be$stk = [];
   for (;;) {
     {
@@ -1955,21 +1974,21 @@ function $dec$($0, $1) {
         continue;
       } else if (_s_0.$ === "SOpt") {
         const _i_0 = _s_0["inner"];
-        if (($nullish$(_r_0))) {
+        if (($nullish(_r_0))) {
           return be$unwind(be$stk, new be$C$Some$value(be$N$None));
         } else {
           {
-            be$stk.push((be$r) => (($opt_some$((be$r)))));
+            be$stk.push((be$r) => (($opt_some((be$r)))));
             const be$a0 = _i_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
           }
         }
       } else if (_s_0.$ === "SOptional") {
         const _i_1 = _s_0["inner"];
-        if (($is_missing$(_r_0))) {
+        if (($is_missing(_r_0))) {
           return be$unwind(be$stk, new be$C$Some$value(be$N$None));
         } else {
           {
-            be$stk.push((be$r) => (($opt_some$((be$r)))));
+            be$stk.push((be$r) => (($opt_some((be$r)))));
             const be$a0 = _i_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
           }
         }
@@ -1981,8 +2000,8 @@ function $dec$($0, $1) {
           const _h_0 = _r_0["head"];
           const _t_0 = _r_0["tail"];
           {
-            const be$t0 = ($dec$(_e_0, _h_0));
-            be$stk.push((be$r) => ($lcons$(be$t0, (be$r))));
+            const be$t0 = ($dec(_e_0, _h_0));
+            be$stk.push((be$r) => ($lcons(be$t0, (be$r))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; $0 = be$a0; $1 = be$a1; continue;
           }
         } else {
@@ -1993,8 +2012,8 @@ function $dec$($0, $1) {
         const _fs_0 = _s_0["s"];
         const _rest_0 = _s_0["rest"];
         {
-          const be$t0 = ($dec$(_fs_0, ($lookup$(_n_2, _r_0))));
-          be$stk.push((be$r) => ($both$(be$t0, (be$r))));
+          const be$t0 = ($dec(_fs_0, ($lookup(_n_2, _r_0))));
+          be$stk.push((be$r) => ($both(be$t0, (be$r))));
           const be$a0 = _rest_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SEnd") {
@@ -2014,21 +2033,21 @@ function $dec$($0, $1) {
         const _n_3 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        if (($is_tag$(_k_0, _n_3, _r_0))) {
+        if (($is_tag(_k_0, _n_3, _r_0))) {
           {
-            be$stk.push((be$r) => (($map_inl$((be$r)))));
-            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_0, _r_0)); $0 = be$a0; $1 = be$a1; continue;
+            be$stk.push((be$r) => (($map_inl((be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key(_k_0, _r_0)); $0 = be$a0; $1 = be$a1; continue;
           }
         } else {
           {
-            be$stk.push((be$r) => (($map_inr$((be$r)))));
+            be$stk.push((be$r) => (($map_inr((be$r)))));
             const be$a0 = _rest_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
           }
         }
       } else if (_s_0.$ === "STrue") {
         if (_r_0.$ === "RBool") {
           const _b_0 = _r_0["b"];
-          return be$unwind(be$stk, $true_unit$(_b_0));
+          return be$unwind(be$stk, $true_unit(_b_0));
         } else {
           return be$unwind(be$stk, be$N$None);
         }
@@ -2050,15 +2069,15 @@ function $dec$($0, $1) {
         const _n_4 = _s_0["name"];
         const _vs_0 = _s_0["s"];
         const _rest_2 = _s_0["rest"];
-        if (($is_missing$(($lookup$(_n_4, _r_0))))) {
+        if (($is_missing(($lookup(_n_4, _r_0))))) {
           {
-            be$stk.push((be$r) => (($map_inr$((be$r)))));
+            be$stk.push((be$r) => (($map_inr((be$r)))));
             const be$a0 = _rest_2; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
           }
         } else {
           {
-            be$stk.push((be$r) => (($map_inl$((be$r)))));
-            const be$a0 = _vs_0; const be$a1 = ($lookup$(_n_4, _r_0)); $0 = be$a0; $1 = be$a1; continue;
+            be$stk.push((be$r) => (($map_inl((be$r)))));
+            const be$a0 = _vs_0; const be$a1 = ($lookup(_n_4, _r_0)); $0 = be$a0; $1 = be$a1; continue;
           }
         }
       } else if (_s_0.$ === "STuple") {
@@ -2068,8 +2087,8 @@ function $dec$($0, $1) {
           const _h_1 = _r_0["head"];
           const _t_1 = _r_0["tail"];
           {
-            const be$t0 = ($dec$(_ts_0, _h_1));
-            be$stk.push((be$r) => ($both$(be$t0, (be$r))));
+            const be$t0 = ($dec(_ts_0, _h_1));
+            be$stk.push((be$r) => ($both(be$t0, (be$r))));
             const be$a0 = _rest_3; const be$a1 = _t_1; $0 = be$a0; $1 = be$a1; continue;
           }
         } else {
@@ -2111,15 +2130,15 @@ function $dec$($0, $1) {
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+        if (($has_kind(_l_0, ($kind_of(_r_0))))) {
           {
-            be$stk.push((be$r) => (($map_inl$((be$r)))));
+            be$stk.push((be$r) => (($map_inl((be$r)))));
             const be$a0 = _l_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
           }
         } else {
-          if (($has_kind$(_r_1, ($kind_of$(_r_0))))) {
+          if (($has_kind(_r_1, ($kind_of(_r_0))))) {
             {
-              be$stk.push((be$r) => (($map_inr$((be$r)))));
+              be$stk.push((be$r) => (($map_inr((be$r)))));
               const be$a0 = _r_1; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
             }
           } else {
@@ -2133,7 +2152,7 @@ function $dec$($0, $1) {
   }
 }
 
-function $opt_at$($0) {
+function $opt_at($0) {
   for (;;) {
     {
       const _s_0 = $0;
@@ -2174,7 +2193,7 @@ function $opt_at$($0) {
   }
 }
 
-function $nullable$($0) {
+function $nullable($0) {
   const be$stk = [];
   for (;;) {
     {
@@ -2210,7 +2229,7 @@ function $nullable$($0) {
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_0 = _s_0["r"];
-        const _x_0 = ($nullable$(_l_0));
+        const _x_0 = ($nullable(_l_0));
         {
           be$stk.push((be$r) => { const _x_1 = (be$r); return (_x_0 || _x_1); });
           const be$a0 = _r_0; $0 = be$a0; continue;
@@ -2222,7 +2241,7 @@ function $nullable$($0) {
   }
 }
 
-function $no_key$($0, $1) {
+function $no_key($0, $1) {
   const be$stk = [];
   for (;;) {
     {
@@ -2232,18 +2251,18 @@ function $no_key$($0, $1) {
         const _n_0 = _s_0["name"];
         const _rest_0 = _s_0["rest"];
         {
-          const be$t0 = ($Bool$not$(($String$eq$(_n_0, _k_0))));
-          const be$t1 = ($Bool$not$(($String$eq$(_k_0, _n_0))));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+          const be$t0 = ($Bool_not(($String_eq(_n_0, _k_0))));
+          const be$t1 = ($Bool_not(($String_eq(_k_0, _n_0))));
+          be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
           const be$a0 = _k_0; const be$a1 = _rest_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SVariant") {
         const _n_1 = _s_0["name"];
         const _rest_1 = _s_0["rest"];
         {
-          const be$t0 = ($Bool$not$(($String$eq$(_n_1, _k_0))));
-          const be$t1 = ($Bool$not$(($String$eq$(_k_0, _n_1))));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+          const be$t0 = ($Bool_not(($String_eq(_n_1, _k_0))));
+          const be$t1 = ($Bool_not(($String_eq(_k_0, _n_1))));
+          be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
           const be$a0 = _k_0; const be$a1 = _rest_1; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SStrict") {
@@ -2280,8 +2299,8 @@ function $no_key$($0, $1) {
         const _l_0 = _s_0["l"];
         const _r_0 = _s_0["r"];
         {
-          const be$t0 = ($no_key$(_k_0, _l_0));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($no_key(_k_0, _l_0));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _k_0; const be$a1 = _r_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "STagged") {
@@ -2289,10 +2308,10 @@ function $no_key$($0, $1) {
         const _cs2_0 = _s_0["s"];
         const _rest2_0 = _s_0["rest"];
         {
-          const be$t0 = ($Bool$not$(($String$eq$(_k2_0, _k_0))));
-          const be$t1 = ($Bool$not$(($String$eq$(_k_0, _k2_0))));
-          const be$t2 = ($no_key$(_k_0, _cs2_0));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, ($Bool$and$(be$t2, (be$r))))))));
+          const be$t0 = ($Bool_not(($String_eq(_k2_0, _k_0))));
+          const be$t1 = ($Bool_not(($String_eq(_k_0, _k2_0))));
+          const be$t2 = ($no_key(_k_0, _cs2_0));
+          be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, ($Bool_and(be$t2, (be$r))))))));
           const be$a0 = _k_0; const be$a1 = _rest2_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else {
@@ -2302,16 +2321,16 @@ function $no_key$($0, $1) {
   }
 }
 
-function $fresh_f$(_n_0, _s_0) {
+function $fresh_f(_n_0, _s_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SField") {
     const _m_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
     {
-      const be$t0 = ($Bool$not$(($String$eq$(_m_0, _n_0))));
-      const be$t1 = ($Bool$not$(($String$eq$(_n_0, _m_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+      const be$t0 = ($Bool_not(($String_eq(_m_0, _n_0))));
+      const be$t1 = ($Bool_not(($String_eq(_n_0, _m_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
       const be$a1 = _rest_0; _s_0 = be$a1; continue;
     }
   } else if (_s_0.$ === "SEnd") {
@@ -2322,16 +2341,16 @@ function $fresh_f$(_n_0, _s_0) {
   }
 }
 
-function $fresh_v$(_n_0, _s_0) {
+function $fresh_v(_n_0, _s_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SVariant") {
     const _m_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
     {
-      const be$t0 = ($Bool$not$(($String$eq$(_m_0, _n_0))));
-      const be$t1 = ($Bool$not$(($String$eq$(_n_0, _m_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+      const be$t0 = ($Bool_not(($String_eq(_m_0, _n_0))));
+      const be$t1 = ($Bool_not(($String_eq(_n_0, _m_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
       const be$a1 = _rest_0; _s_0 = be$a1; continue;
     }
   } else if (_s_0.$ === "SVEnd") {
@@ -2342,7 +2361,7 @@ function $fresh_v$(_n_0, _s_0) {
   }
 }
 
-function $is_keyed$($0) {
+function $is_keyed($0) {
   for (;;) {
     {
       const _s_0 = $0;
@@ -2365,7 +2384,7 @@ function $is_keyed$($0) {
   }
 }
 
-function $fresh_t$(_k_0, _n_0, _s_0) {
+function $fresh_t(_k_0, _n_0, _s_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "STagged") {
@@ -2373,56 +2392,56 @@ function $fresh_t$(_k_0, _n_0, _s_0) {
     const _m_0 = _s_0["name"];
     const _rest_0 = _s_0["rest"];
     {
-      const be$t0 = ($String$eq$(_k2_0, _k_0));
-      const be$t1 = ($Bool$not$(($String$eq$(_m_0, _n_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+      const be$t0 = ($String_eq(_k2_0, _k_0));
+      const be$t1 = ($Bool_not(($String_eq(_m_0, _n_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
       const be$a2 = _rest_0; _s_0 = be$a2; continue;
     }
   } else if (_s_0.$ === "STagEnd") {
     const _k2_1 = _s_0["key"];
-    return be$unwind(be$stk, $String$eq$(_k2_1, _k_0));
+    return be$unwind(be$stk, $String_eq(_k2_1, _k_0));
   } else {
     return be$unwind(be$stk, false);
   }
   }
 }
 
-function $wf$(_s_0) {
+function $wf(_s_0) {
   const be$stk = [];
   for (;;) {
   if (_s_0.$ === "SOpt") {
     const _i_0 = _s_0["inner"];
     {
-      const be$t0 = ($Bool$not$(($nullable$(_i_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($nullable(_i_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _i_0; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SOptional") {
     const _i_1 = _s_0["inner"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_i_1))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($opt_at(_i_1))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _i_1; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SList") {
     const _e_0 = _s_0["elem"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_e_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($opt_at(_e_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _e_0; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SListLen") {
     const _s2_0 = _s_0["s"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_s2_0))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($opt_at(_s2_0))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _s2_0; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SStrLen") {
     const _s2_1 = _s_0["s"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_s2_1))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($opt_at(_s2_1))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _s2_1; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SField") {
@@ -2430,24 +2449,24 @@ function $wf$(_s_0) {
     const _fs_0 = _s_0["s"];
     const _rest_0 = _s_0["rest"];
     {
-      const be$t0 = ($wf$(_fs_0));
-      const be$t1 = ($fresh_f$(_n_0, _rest_0));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+      const be$t0 = ($wf(_fs_0));
+      const be$t1 = ($fresh_f(_n_0, _rest_0));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
       const be$a0 = _rest_0; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SRule") {
     const _s2_2 = _s_0["s"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_s2_2))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+      const be$t0 = ($Bool_not(($opt_at(_s2_2))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
       const be$a0 = _s2_2; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SStrict") {
     const _s2_3 = _s_0["s"];
     {
-      const be$t0 = ($is_keyed$(_s2_3));
-      const be$t1 = ($Bool$not$(($opt_at$(_s2_3))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+      const be$t0 = ($is_keyed(_s2_3));
+      const be$t1 = ($Bool_not(($opt_at(_s2_3))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
       const be$a0 = _s2_3; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "STagged") {
@@ -2456,11 +2475,11 @@ function $wf$(_s_0) {
     const _cs_0 = _s_0["s"];
     const _rest_1 = _s_0["rest"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_cs_0))));
-      const be$t1 = ($wf$(_cs_0));
-      const be$t2 = ($no_key$(_k_0, _cs_0));
-      const be$t3 = ($fresh_t$(_k_0, _n_1, _rest_1));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, ($Bool$and$(be$t2, ($Bool$and$(be$t3, (be$r))))))))));
+      const be$t0 = ($Bool_not(($opt_at(_cs_0))));
+      const be$t1 = ($wf(_cs_0));
+      const be$t2 = ($no_key(_k_0, _cs_0));
+      const be$t3 = ($fresh_t(_k_0, _n_1, _rest_1));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, ($Bool_and(be$t2, ($Bool_and(be$t3, (be$r))))))))));
       const be$a0 = _rest_1; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SVariant") {
@@ -2468,20 +2487,20 @@ function $wf$(_s_0) {
     const _vs_0 = _s_0["s"];
     const _rest_2 = _s_0["rest"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_vs_0))));
-      const be$t1 = ($wf$(_vs_0));
-      const be$t2 = ($fresh_v$(_n_2, _rest_2));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, ($Bool$and$(be$t2, (be$r))))))));
+      const be$t0 = ($Bool_not(($opt_at(_vs_0))));
+      const be$t1 = ($wf(_vs_0));
+      const be$t2 = ($fresh_v(_n_2, _rest_2));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, ($Bool_and(be$t2, (be$r))))))));
       const be$a0 = _rest_2; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "STuple") {
     const _ts_0 = _s_0["s"];
     const _rest_3 = _s_0["rest"];
     {
-      const be$t0 = ($Bool$not$(($opt_at$(_ts_0))));
-      const be$t1 = ($wf$(_ts_0));
-      const be$t2 = ($Bool$not$(($opt_at$(_rest_3))));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, ($Bool$and$(be$t2, (be$r))))))));
+      const be$t0 = ($Bool_not(($opt_at(_ts_0))));
+      const be$t1 = ($wf(_ts_0));
+      const be$t2 = ($Bool_not(($opt_at(_rest_3))));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, ($Bool_and(be$t2, (be$r))))))));
       const be$a0 = _rest_3; _s_0 = be$a0; continue;
     }
   } else if (_s_0.$ === "SJson") {
@@ -2490,11 +2509,11 @@ function $wf$(_s_0) {
     const _l_0 = _s_0["l"];
     const _r_0 = _s_0["r"];
     {
-      const be$t0 = ($alt_ok$(_l_0));
-      const be$t1 = ($alt_ok$(_r_0));
-      const be$t2 = ($disjoint$(_l_0, _r_0));
-      const be$t3 = ($wf$(_l_0));
-      be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, ($Bool$and$(be$t2, ($Bool$and$(be$t3, (be$r))))))))));
+      const be$t0 = ($alt_ok(_l_0));
+      const be$t1 = ($alt_ok(_r_0));
+      const be$t2 = ($disjoint(_l_0, _r_0));
+      const be$t3 = ($wf(_l_0));
+      be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, ($Bool_and(be$t2, ($Bool_and(be$t3, (be$r))))))))));
       const be$a0 = _r_0; _s_0 = be$a0; continue;
     }
   } else {
@@ -2503,7 +2522,7 @@ function $wf$(_s_0) {
   }
 }
 
-function $names_ok$($0, $1) {
+function $names_ok($0, $1) {
   const be$stk = [];
   for (;;) {
     {
@@ -2527,8 +2546,8 @@ function $names_ok$($0, $1) {
           const _h_0 = _x_0["head"];
           const _t_0 = _x_0["tail"];
           {
-            const be$t0 = ($names_ok$(_e_0, _h_0));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+            const be$t0 = ($names_ok(_e_0, _h_0));
+            be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; $0 = be$a0; $1 = be$a1; continue;
           }
         }
@@ -2538,8 +2557,8 @@ function $names_ok$($0, $1) {
         const _a_0 = _x_0["a"];
         const _b_0 = _x_0["b"];
         {
-          const be$t0 = ($names_ok$(_fs_0, _a_0));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($names_ok(_fs_0, _a_0));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _rest_0; const be$a1 = _b_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SRule") {
@@ -2588,7 +2607,7 @@ function $names_ok$($0, $1) {
         }
       } else if (_s_0.$ === "SEnum") {
         const _names_0 = _s_0["names"];
-        return be$unwind(be$stk, $in_names$(_x_0, _names_0));
+        return be$unwind(be$stk, $in_names(_x_0, _names_0));
       } else if (_s_0.$ === "SVariant") {
         const _vs_0 = _s_0["s"];
         const _rest_2 = _s_0["rest"];
@@ -2609,8 +2628,8 @@ function $names_ok$($0, $1) {
         const _a_3 = _x_0["a"];
         const _b_3 = _x_0["b"];
         {
-          const be$t0 = ($names_ok$(_ts_0, _a_3));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($names_ok(_ts_0, _a_3));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _rest_3; const be$a1 = _b_3; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SJson") {
@@ -2636,7 +2655,7 @@ function $names_ok$($0, $1) {
   }
 }
 
-function $bounds_ok$($0, $1) {
+function $bounds_ok($0, $1) {
   const be$stk = [];
   for (;;) {
     {
@@ -2660,8 +2679,8 @@ function $bounds_ok$($0, $1) {
           const _h_0 = _x_0["head"];
           const _t_0 = _x_0["tail"];
           {
-            const be$t0 = ($bounds_ok$(_e_0, _h_0));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+            const be$t0 = ($bounds_ok(_e_0, _h_0));
+            be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; $0 = be$a0; $1 = be$a1; continue;
           }
         }
@@ -2671,8 +2690,8 @@ function $bounds_ok$($0, $1) {
         const _a_0 = _x_0["a"];
         const _b_0 = _x_0["b"];
         {
-          const be$t0 = ($bounds_ok$(_fs_0, _a_0));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($bounds_ok(_fs_0, _a_0));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _rest_0; const be$a1 = _b_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SRule") {
@@ -2702,13 +2721,13 @@ function $bounds_ok$($0, $1) {
       } else if (_s_0.$ === "SNatIn") {
         const _lo_0 = _s_0["lo"];
         const _hi_0 = _s_0["hi"];
-        return be$unwind(be$stk, $num_ok$(_lo_0, _hi_0, _x_0));
+        return be$unwind(be$stk, $num_ok(_lo_0, _hi_0, _x_0));
       } else if (_s_0.$ === "SStrLen") {
         const _lo_1 = _s_0["lo"];
         const _hi_1 = _s_0["hi"];
         const _s2_2 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($Bool$and$((be$r), ($len_ok$(_lo_1, _hi_1, ($enc$(_s2_2, _x_0)))))));
+          be$stk.push((be$r) => ($Bool_and((be$r), ($len_ok(_lo_1, _hi_1, ($enc(_s2_2, _x_0)))))));
           const be$a0 = _s2_2; const be$a1 = _x_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SListLen") {
@@ -2716,7 +2735,7 @@ function $bounds_ok$($0, $1) {
         const _hi_2 = _s_0["hi"];
         const _s2_3 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($Bool$and$((be$r), ($list_len_ok$(_lo_2, _hi_2, ($enc$(_s2_3, _x_0)))))));
+          be$stk.push((be$r) => ($Bool_and((be$r), ($list_len_ok(_lo_2, _hi_2, ($enc(_s2_3, _x_0)))))));
           const be$a0 = _s2_3; const be$a1 = _x_0; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SOptional") {
@@ -2749,16 +2768,16 @@ function $bounds_ok$($0, $1) {
         const _a_3 = _x_0["a"];
         const _b_3 = _x_0["b"];
         {
-          const be$t0 = ($bounds_ok$(_ts_0, _a_3));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($bounds_ok(_ts_0, _a_3));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _rest_3; const be$a1 = _b_3; $0 = be$a0; $1 = be$a1; continue;
         }
       } else if (_s_0.$ === "SJson") {
-        return be$unwind(be$stk, $valid_json$(_x_0));
+        return be$unwind(be$stk, $valid_json(_x_0));
       } else if (_s_0.$ === "SIntIn") {
         const _lo_3 = _s_0["lo"];
         const _hi_3 = _s_0["hi"];
-        return be$unwind(be$stk, $int_ok$(_lo_3, _hi_3, _x_0));
+        return be$unwind(be$stk, $int_ok(_lo_3, _hi_3, _x_0));
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_0 = _s_0["r"];
@@ -2780,7 +2799,7 @@ function $bounds_ok$($0, $1) {
   }
 }
 
-function $Bool$not$(_b_0) {
+function $Bool_not(_b_0) {
   if (!_b_0) {
     return true;
   } else {
@@ -2788,7 +2807,7 @@ function $Bool$not$(_b_0) {
   }
 }
 
-function $Bool$and$(_a_0, _b_0) {
+function $Bool_and(_a_0, _b_0) {
   if (!_a_0) {
     return false;
   } else {
@@ -2796,19 +2815,19 @@ function $Bool$and$(_a_0, _b_0) {
   }
 }
 
-function $String$eq$(_a_0, _b_0) {
-  return $Cmp$is_eq$(($String$order$(_a_0, _b_0)));
+function $String_eq(_a_0, _b_0) {
+  return $Cmp_is_eq(($String_order(_a_0, _b_0)));
 }
 
-function $Nat$is_le$(_a_0, _b_0) {
-  return $Cmp$is_le$(cmp_new(_a_0, _b_0));
+function $Nat_is_le(_a_0, _b_0) {
+  return $Cmp_is_le(cmp_new(_a_0, _b_0));
 }
 
-function $Nat$is_eq$(_a_0, _b_0) {
-  return $Cmp$is_eq$(cmp_new(_a_0, _b_0));
+function $Nat_is_eq(_a_0, _b_0) {
+  return $Cmp_is_eq(cmp_new(_a_0, _b_0));
 }
 
-function $check$1260$($0, $1, $2) {
+function $check_0($0, $1, $2) {
   const be$stk = [];
   for (;;) {
     {
@@ -2819,29 +2838,29 @@ function $check$1260$($0, $1, $2) {
         if (_r_0.$ === "RNum") {
           return be$unwind(be$stk, be$N$None);
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotNat))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotNat))));
         }
       } else if (_s_0.$ === "SStr") {
         if (_r_0.$ === "RStr") {
           return be$unwind(be$stk, be$N$None);
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotString))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotString))));
         }
       } else if (_s_0.$ === "SNatIn") {
         const _lo_0 = _s_0["lo"];
         const _hi_0 = _s_0["hi"];
         if (_r_0.$ === "RNum") {
           const _n_1 = _r_0["n"];
-          return be$unwind(be$stk, $nat_in$(_lo_0, _hi_0, new be$C$RNum$n(_n_1)));
+          return be$unwind(be$stk, $nat_in(_lo_0, _hi_0, new be$C$RNum$n(_n_1)));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotNat))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotNat))));
         }
       } else if (_s_0.$ === "SStrLen") {
         const _lo_1 = _s_0["lo"];
         const _hi_1 = _s_0["hi"];
         const _s2_0 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($first$((be$r), ($len_err$(_lo_1, _hi_1, _r_0)))));
+          be$stk.push((be$r) => ($first((be$r), ($len_err(_lo_1, _hi_1, _r_0)))));
           const be$a0 = _s2_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SListLen") {
@@ -2849,8 +2868,8 @@ function $check$1260$($0, $1, $2) {
         const _hi_2 = _s_0["hi"];
         const _s2_1 = _s_0["s"];
         {
-          const be$t0 = ($count_err$(_lo_2, _hi_2, _r_0));
-          be$stk.push((be$r) => ($first$(be$t0, (be$r))));
+          const be$t0 = ($count_err(_lo_2, _hi_2, _r_0));
+          be$stk.push((be$r) => ($first(be$t0, (be$r))));
           const be$a0 = _s2_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SOpt") {
@@ -2881,19 +2900,19 @@ function $check$1260$($0, $1, $2) {
           const _h_0 = _r_0["head"];
           const _t_0 = _r_0["tail"];
           {
-            const be$t0 = ($under$(new be$C$AtIndex$i(0), ($check$1260$(_e_0, _h_0, be$N$None))));
-            be$stk.push((be$r) => ($first$(be$t0, ($later_l$((be$r))))));
+            const be$t0 = ($under(new be$C$AtIndex$i(0), ($check_0(_e_0, _h_0, be$N$None))));
+            be$stk.push((be$r) => ($first(be$t0, ($later_l((be$r))))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotList))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotList))));
         }
       } else if (_s_0.$ === "SJson") {
         if (_r_0.$ === "RJson") {
           const _value_0 = _r_0["value"];
-          return be$unwind(be$stk, $in_err$(($valid_json$(_value_0)), be$N$NotJson));
+          return be$unwind(be$stk, $in_err(($valid_json(_value_0)), be$N$NotJson));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotJson))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotJson))));
         }
       } else if (_s_0.$ === "SInt") {
         if (_r_0.$ === "RNum") {
@@ -2901,19 +2920,19 @@ function $check$1260$($0, $1, $2) {
         } else if (_r_0.$ === "RNeg") {
           return be$unwind(be$stk, be$N$None);
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotInt))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotInt))));
         }
       } else if (_s_0.$ === "SIntIn") {
         const _lo_3 = _s_0["lo"];
         const _hi_3 = _s_0["hi"];
         if (_r_0.$ === "RNum") {
           const _n_4 = _r_0["n"];
-          return be$unwind(be$stk, $in_err$(($int_ok$(_lo_3, _hi_3, new be$C$IPos$n(_n_4))), new be$C$IntNotIn$lo$hi(_lo_3, _hi_3)));
+          return be$unwind(be$stk, $in_err(($int_ok(_lo_3, _hi_3, new be$C$IPos$n(_n_4))), new be$C$IntNotIn$lo$hi(_lo_3, _hi_3)));
         } else if (_r_0.$ === "RNeg") {
           const _n_5 = _r_0["n"];
-          return be$unwind(be$stk, $in_err$(($int_ok$(_lo_3, _hi_3, new be$C$INeg$n(_n_5))), new be$C$IntNotIn$lo$hi(_lo_3, _hi_3)));
+          return be$unwind(be$stk, $in_err(($int_ok(_lo_3, _hi_3, new be$C$INeg$n(_n_5))), new be$C$IntNotIn$lo$hi(_lo_3, _hi_3)));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotInt))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotInt))));
         }
       } else if (_s_0.$ === "SField") {
         const _name_0 = _s_0["name"];
@@ -2921,8 +2940,8 @@ function $check$1260$($0, $1, $2) {
         const _rest_0 = _s_0["rest"];
         if (_r_0.$ === "REnd") {
           {
-            const be$t0 = ($under$(new be$C$AtField$skip$name(0, _name_0), ($check$1260$(_fs_0, be$N$RMissing, be$N$None))));
-            be$stk.push((be$r) => ($first$(be$t0, ($later_f$((be$r))))));
+            const be$t0 = ($under(new be$C$AtField$skip$name(0, _name_0), ($check_0(_fs_0, be$N$RMissing, be$N$None))));
+            be$stk.push((be$r) => ($first(be$t0, ($later_f((be$r))))));
             const be$a0 = _rest_0; const be$a1 = be$N$REnd; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else if (_r_0.$ === "RKey") {
@@ -2930,13 +2949,13 @@ function $check$1260$($0, $1, $2) {
           const _v_0 = _r_0["val"];
           const _o_0 = _r_0["rest"];
           {
-            const be$t0 = ($key_err$(($key_once$(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), _name_0));
-            const be$t1 = ($under$(new be$C$AtField$skip$name(0, _name_0), ($check$1260$(_fs_0, ($lookup$(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), be$N$None))));
-            be$stk.push((be$r) => ($first$(be$t0, ($first$(be$t1, ($later_f$((be$r))))))));
+            const be$t0 = ($key_err(($key_once(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), _name_0));
+            const be$t1 = ($under(new be$C$AtField$skip$name(0, _name_0), ($check_0(_fs_0, ($lookup(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), be$N$None))));
+            be$stk.push((be$r) => ($first(be$t0, ($first(be$t1, ($later_f((be$r))))))));
             const be$a0 = _rest_0; const be$a1 = new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotObject))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotObject))));
         }
       } else if (_s_0.$ === "SEnd") {
         if (_r_0.$ === "REnd") {
@@ -2944,19 +2963,19 @@ function $check$1260$($0, $1, $2) {
         } else if (_r_0.$ === "RKey") {
           return be$unwind(be$stk, be$N$None);
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotObject))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotObject))));
         }
       } else if (_s_0.$ === "SRule") {
         const _s2_2 = _s_0["s"];
         const _tag_0 = _s_0["tag"];
         {
-          be$stk.push((be$r) => ($first$((be$r), ($no_rule$(_tag_0, _r_0)))));
+          be$stk.push((be$r) => ($first((be$r), ($no_rule(_tag_0, _r_0)))));
           const be$a0 = _s2_2; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SStrict") {
         const _s2_3 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($first$((be$r), ($extra_err$(($key_names$(_s2_3)), _r_0)))));
+          be$stk.push((be$r) => ($first((be$r), ($extra_err(($key_names(_s2_3)), _r_0)))));
           const be$a0 = _s2_3; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "STagged") {
@@ -2964,11 +2983,11 @@ function $check$1260$($0, $1, $2) {
         const _n_6 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        if (($is_tag$(_k_2, _n_6, _r_0))) {
+        if (($is_tag(_k_2, _n_6, _r_0))) {
           {
-            const be$t0 = ($key_err$(($key_once$(_k_2, _r_0)), _k_2));
-            be$stk.push((be$r) => (($first$(be$t0, (be$r)))));
-            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            const be$t0 = ($key_err(($key_once(_k_2, _r_0)), _k_2));
+            be$stk.push((be$r) => (($first(be$t0, (be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
           {
@@ -2977,27 +2996,27 @@ function $check$1260$($0, $1, $2) {
         }
       } else if (_s_0.$ === "STagEnd") {
         const _k_3 = _s_0["key"];
-        return be$unwind(be$stk, $tag_err$(_k_3, _r_0));
+        return be$unwind(be$stk, $tag_err(_k_3, _r_0));
       } else if (_s_0.$ === "SBool") {
         if (_r_0.$ === "RBool") {
           return be$unwind(be$stk, be$N$None);
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotBool))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotBool))));
         }
       } else if (_s_0.$ === "STrue") {
         if (_r_0.$ === "RBool") {
           const _b_1 = _r_0["b"];
-          return be$unwind(be$stk, $true_err$(_b_1));
+          return be$unwind(be$stk, $true_err(_b_1));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotTrue))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotTrue))));
         }
       } else if (_s_0.$ === "SEnum") {
         const _names_0 = _s_0["names"];
         if (_r_0.$ === "RStr") {
           const _x_1 = _r_0["s"];
-          return be$unwind(be$stk, $enum_err$(($in_names$(_x_1, _names_0))));
+          return be$unwind(be$stk, $enum_err(($in_names(_x_1, _names_0))));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotOneOf))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotOneOf))));
         }
       } else if (_s_0.$ === "SVariant") {
         const _name_1 = _s_0["name"];
@@ -3005,35 +3024,35 @@ function $check$1260$($0, $1, $2) {
         const _rest_2 = _s_0["rest"];
         if (_r_0.$ === "REnd") {
           {
-            be$stk.push((be$r) => ($later_f$((be$r))));
+            be$stk.push((be$r) => ($later_f((be$r))));
             const be$a0 = _rest_2; const be$a1 = be$N$REnd; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else if (_r_0.$ === "RKey") {
           const _k_4 = _r_0["key"];
           const _v_2 = _r_0["val"];
           const _o_2 = _r_0["rest"];
-          if (($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
+          if (($is_missing(($lookup(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
             {
-              be$stk.push((be$r) => (($later_f$((be$r)))));
+              be$stk.push((be$r) => (($later_f((be$r)))));
               const be$a0 = _rest_2; const be$a1 = new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
             }
           } else {
             {
-              const be$t0 = ($key_err$(($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))), _name_1));
-              be$stk.push((be$r) => (($first$(be$t0, ($first$(($under$(new be$C$AtField$skip$name(0, _name_1), (be$r))), ($later_f$(($dup_err$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))))));
-              const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+              const be$t0 = ($key_err(($key_once(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))), _name_1));
+              be$stk.push((be$r) => (($first(be$t0, ($first(($under(new be$C$AtField$skip$name(0, _name_1), (be$r))), ($later_f(($dup_err(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))))));
+              const be$a0 = _vs_0; const be$a1 = ($lookup(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
             }
           }
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotObject))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotObject))));
         }
       } else if (_s_0.$ === "SVEnd") {
         if (_r_0.$ === "REnd") {
-          return be$unwind(be$stk, $here$(be$N$NoVariant));
+          return be$unwind(be$stk, $here(be$N$NoVariant));
         } else if (_r_0.$ === "RKey") {
-          return be$unwind(be$stk, $here$(be$N$NoVariant));
+          return be$unwind(be$stk, $here(be$N$NoVariant));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotObject))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotObject))));
         }
       } else if (_s_0.$ === "STuple") {
         const _ts_0 = _s_0["s"];
@@ -3042,37 +3061,37 @@ function $check$1260$($0, $1, $2) {
           const _h_1 = _r_0["head"];
           const _t_1 = _r_0["tail"];
           {
-            const be$t0 = ($under$(new be$C$AtIndex$i(0), ($check$1260$(_ts_0, _h_1, be$N$None))));
-            be$stk.push((be$r) => ($first$(be$t0, ($later_l$((be$r))))));
+            const be$t0 = ($under(new be$C$AtIndex$i(0), ($check_0(_ts_0, _h_1, be$N$None))));
+            be$stk.push((be$r) => ($first(be$t0, ($later_l((be$r))))));
             const be$a0 = _rest_3; const be$a1 = _t_1; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else if (_r_0.$ === "RNil") {
-          return be$unwind(be$stk, $here$(be$N$TooShort));
+          return be$unwind(be$stk, $here(be$N$TooShort));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotList))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotList))));
         }
       } else if (_s_0.$ === "STEnd") {
         if (_r_0.$ === "RNil") {
           return be$unwind(be$stk, be$N$None);
         } else if (_r_0.$ === "RCons") {
-          return be$unwind(be$stk, $here$(be$N$TooLong));
+          return be$unwind(be$stk, $here(be$N$TooLong));
         } else {
-          return be$unwind(be$stk, $here$(($missing_or$(_r_0, be$N$NotList))));
+          return be$unwind(be$stk, $here(($missing_or(_r_0, be$N$NotList))));
         }
       } else {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+        if (($has_kind(_l_0, ($kind_of(_r_0))))) {
           {
             const be$a0 = _l_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
-          if (($has_kind$(_r_1, ($kind_of$(_r_0))))) {
+          if (($has_kind(_r_1, ($kind_of(_r_0))))) {
             {
               const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
             }
           } else {
-            return be$unwind(be$stk, ($here$(($missing_or$(_r_0, ($no_alt$(new be$C$SEither$l$r(_l_0, _r_1))))))));
+            return be$unwind(be$stk, ($here(($missing_or(_r_0, ($no_alt(new be$C$SEither$l$r(_l_0, _r_1))))))));
           }
         }
       }
@@ -3080,7 +3099,7 @@ function $check$1260$($0, $1, $2) {
   }
 }
 
-function $conforms$1260$($0, $1, $2) {
+function $conforms_0($0, $1, $2) {
   const be$stk = [];
   for (;;) {
     {
@@ -3098,7 +3117,7 @@ function $conforms$1260$($0, $1, $2) {
         const _hi_0 = _s_0["hi"];
         if (_r_0.$ === "RNum") {
           const _n_1 = _r_0["n"];
-          return be$unwind(be$stk, $num_ok$(_lo_0, _hi_0, _n_1));
+          return be$unwind(be$stk, $num_ok(_lo_0, _hi_0, _n_1));
         } else {
           return be$unwind(be$stk, false);
         }
@@ -3113,7 +3132,7 @@ function $conforms$1260$($0, $1, $2) {
         const _hi_1 = _s_0["hi"];
         const _s2_0 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($Bool$and$((be$r), ($len_ok$(_lo_1, _hi_1, _r_0)))));
+          be$stk.push((be$r) => ($Bool_and((be$r), ($len_ok(_lo_1, _hi_1, _r_0)))));
           const be$a0 = _s2_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SListLen") {
@@ -3121,8 +3140,8 @@ function $conforms$1260$($0, $1, $2) {
         const _hi_2 = _s_0["hi"];
         const _s2_1 = _s_0["s"];
         {
-          const be$t0 = ($list_len_ok$(_lo_2, _hi_2, _r_0));
-          be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+          const be$t0 = ($list_len_ok(_lo_2, _hi_2, _r_0));
+          be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
           const be$a0 = _s2_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SOpt") {
@@ -3137,7 +3156,7 @@ function $conforms$1260$($0, $1, $2) {
         }
       } else if (_s_0.$ === "SOptional") {
         const _inner_1 = _s_0["inner"];
-        const _x_1 = ($is_missing$(_r_0));
+        const _x_1 = ($is_missing(_r_0));
         {
           be$stk.push((be$r) => { const _x_2 = (be$r); return (_x_1 || _x_2); });
           const be$a0 = _inner_1; const be$a1 = _r_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
@@ -3150,8 +3169,8 @@ function $conforms$1260$($0, $1, $2) {
           const _h_0 = _r_0["head"];
           const _t_0 = _r_0["tail"];
           {
-            const be$t0 = ($conforms$1260$(_e_0, _h_0, be$N$None));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+            const be$t0 = ($conforms_0(_e_0, _h_0, be$N$None));
+            be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
             const be$a0 = new be$C$SList$elem(_e_0); const be$a1 = _t_0; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
@@ -3160,7 +3179,7 @@ function $conforms$1260$($0, $1, $2) {
       } else if (_s_0.$ === "SJson") {
         if (_r_0.$ === "RJson") {
           const _value_0 = _r_0["value"];
-          return be$unwind(be$stk, $valid_json$(_value_0));
+          return be$unwind(be$stk, $valid_json(_value_0));
         } else {
           return be$unwind(be$stk, false);
         }
@@ -3177,10 +3196,10 @@ function $conforms$1260$($0, $1, $2) {
         const _hi_3 = _s_0["hi"];
         if (_r_0.$ === "RNum") {
           const _n_4 = _r_0["n"];
-          return be$unwind(be$stk, $int_ok$(_lo_3, _hi_3, new be$C$IPos$n(_n_4)));
+          return be$unwind(be$stk, $int_ok(_lo_3, _hi_3, new be$C$IPos$n(_n_4)));
         } else if (_r_0.$ === "RNeg") {
           const _n_5 = _r_0["n"];
-          return be$unwind(be$stk, $int_ok$(_lo_3, _hi_3, new be$C$INeg$n(_n_5)));
+          return be$unwind(be$stk, $int_ok(_lo_3, _hi_3, new be$C$INeg$n(_n_5)));
         } else {
           return be$unwind(be$stk, false);
         }
@@ -3190,8 +3209,8 @@ function $conforms$1260$($0, $1, $2) {
         const _rest_0 = _s_0["rest"];
         if (_r_0.$ === "REnd") {
           {
-            const be$t0 = ($conforms$1260$(_fs_0, be$N$RMissing, be$N$None));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+            const be$t0 = ($conforms_0(_fs_0, be$N$RMissing, be$N$None));
+            be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
             const be$a0 = _rest_0; const be$a1 = be$N$REnd; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else if (_r_0.$ === "RKey") {
@@ -3199,9 +3218,9 @@ function $conforms$1260$($0, $1, $2) {
           const _v_0 = _r_0["val"];
           const _o_0 = _r_0["rest"];
           {
-            const be$t0 = ($key_once$(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0)));
-            const be$t1 = ($conforms$1260$(_fs_0, ($lookup$(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), be$N$None));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, ($Bool$and$(be$t1, (be$r))))));
+            const be$t0 = ($key_once(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0)));
+            const be$t1 = ($conforms_0(_fs_0, ($lookup(_name_0, new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0))), be$N$None));
+            be$stk.push((be$r) => ($Bool_and(be$t0, ($Bool_and(be$t1, (be$r))))));
             const be$a0 = _rest_0; const be$a1 = new be$C$RKey$key$val$rest(_k_0, _v_0, _o_0); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
@@ -3219,13 +3238,13 @@ function $conforms$1260$($0, $1, $2) {
         const _s2_2 = _s_0["s"];
         const _tag_0 = _s_0["tag"];
         {
-          be$stk.push((be$r) => ($Bool$and$((be$r), ($Maybe$is_none$(($no_rule$(_tag_0, _r_0)))))));
+          be$stk.push((be$r) => ($Bool_and((be$r), ($Maybe_is_none(($no_rule(_tag_0, _r_0)))))));
           const be$a0 = _s2_2; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "SStrict") {
         const _s2_3 = _s_0["s"];
         {
-          be$stk.push((be$r) => ($Bool$and$((be$r), ($no_extra$(($key_names$(_s2_3)), _r_0)))));
+          be$stk.push((be$r) => ($Bool_and((be$r), ($no_extra(($key_names(_s2_3)), _r_0)))));
           const be$a0 = _s2_3; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
         }
       } else if (_s_0.$ === "STagged") {
@@ -3233,11 +3252,11 @@ function $conforms$1260$($0, $1, $2) {
         const _n_6 = _s_0["name"];
         const _cs_0 = _s_0["s"];
         const _rest_1 = _s_0["rest"];
-        if (($is_tag$(_k_2, _n_6, _r_0))) {
+        if (($is_tag(_k_2, _n_6, _r_0))) {
           {
-            const be$t0 = ($key_once$(_k_2, _r_0));
-            be$stk.push((be$r) => (($Bool$and$(be$t0, (be$r)))));
-            const be$a0 = _cs_0; const be$a1 = ($drop_key$(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+            const be$t0 = ($key_once(_k_2, _r_0));
+            be$stk.push((be$r) => (($Bool_and(be$t0, (be$r)))));
+            const be$a0 = _cs_0; const be$a1 = ($drop_key(_k_2, _r_0)); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
           {
@@ -3263,7 +3282,7 @@ function $conforms$1260$($0, $1, $2) {
         const _names_0 = _s_0["names"];
         if (_r_0.$ === "RStr") {
           const _x_3 = _r_0["s"];
-          return be$unwind(be$stk, $in_names$(_x_3, _names_0));
+          return be$unwind(be$stk, $in_names(_x_3, _names_0));
         } else {
           return be$unwind(be$stk, false);
         }
@@ -3280,15 +3299,15 @@ function $conforms$1260$($0, $1, $2) {
           const _k_4 = _r_0["key"];
           const _v_2 = _r_0["val"];
           const _o_2 = _r_0["rest"];
-          if (($is_missing$(($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
+          if (($is_missing(($lookup(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))) {
             {
               const be$a0 = _rest_2; const be$a1 = new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
             }
           } else {
             {
-              const be$t0 = ($key_once$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)));
-              be$stk.push((be$r) => (($Bool$and$(be$t0, ($Bool$and$((be$r), ($none_present$(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))));
-              const be$a0 = _vs_0; const be$a1 = ($lookup$(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
+              const be$t0 = ($key_once(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)));
+              be$stk.push((be$r) => (($Bool_and(be$t0, ($Bool_and((be$r), ($none_present(_rest_2, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2)))))))));
+              const be$a0 = _vs_0; const be$a1 = ($lookup(_name_1, new be$C$RKey$key$val$rest(_k_4, _v_2, _o_2))); const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
             }
           }
         } else {
@@ -3301,8 +3320,8 @@ function $conforms$1260$($0, $1, $2) {
           const _h_1 = _r_0["head"];
           const _t_1 = _r_0["tail"];
           {
-            const be$t0 = ($conforms$1260$(_ts_0, _h_1, be$N$None));
-            be$stk.push((be$r) => ($Bool$and$(be$t0, (be$r))));
+            const be$t0 = ($conforms_0(_ts_0, _h_1, be$N$None));
+            be$stk.push((be$r) => ($Bool_and(be$t0, (be$r))));
             const be$a0 = _rest_3; const be$a1 = _t_1; const be$a2 = be$N$None; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
@@ -3317,14 +3336,14 @@ function $conforms$1260$($0, $1, $2) {
       } else if (_s_0.$ === "SEither") {
         const _l_0 = _s_0["l"];
         const _r_1 = _s_0["r"];
-        if (($has_kind$(_l_0, ($kind_of$(_r_0))))) {
+        if (($has_kind(_l_0, ($kind_of(_r_0))))) {
           {
             const be$a0 = _l_0; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         } else {
           {
-            const be$t0 = ($has_kind$(_r_1, ($kind_of$(_r_0))));
-            be$stk.push((be$r) => (($Bool$and$(be$t0, (be$r)))));
+            const be$t0 = ($has_kind(_r_1, ($kind_of(_r_0))));
+            be$stk.push((be$r) => (($Bool_and(be$t0, (be$r)))));
             const be$a0 = _r_1; const be$a1 = _r_0; const be$a2 = _prev_0; $0 = be$a0; $1 = be$a1; $2 = be$a2; continue;
           }
         }
@@ -3335,11 +3354,11 @@ function $conforms$1260$($0, $1, $2) {
   }
 }
 
-function $Empty$absurd$(_e_0) {
+function $Empty_absurd(_e_0) {
   throw "bend: runtime fail-stop";
 }
 
-function $Cmp$is_eq$(_c_0) {
+function $Cmp_is_eq(_c_0) {
   if (_c_0.$ === "EQ") {
     return true;
   } else {
@@ -3347,11 +3366,11 @@ function $Cmp$is_eq$(_c_0) {
   }
 }
 
-function $String$order$(_a_0, _b_0) {
-  return $Pair$snd$(($String$cmp$(_a_0, _b_0)));
+function $String_order(_a_0, _b_0) {
+  return $String_order_go(_a_0, _b_0, be$N$EQ);
 }
 
-function $Cmp$is_le$(_c_0) {
+function $Cmp_is_le(_c_0) {
   if (_c_0.$ === "GT") {
     return false;
   } else {
@@ -3359,177 +3378,143 @@ function $Cmp$is_le$(_c_0) {
   }
 }
 
-function $Maybe$is_none$(_m_0) {
-  return $Bool$not$(($Maybe$is_some$(_m_0)));
+function $Maybe_is_none(_m_0) {
+  return $Bool_not(($Maybe_is_some(_m_0)));
 }
 
-function $Pair$snd$(_p_0) {
-  const _b_0 = _p_0["snd"];
-  return _b_0;
-}
-
-function $String$cmp$(_a_0, _b_0) {
-  // bend-emit: Base's String.cmp, natively: lexicographic by code point.
-  let be$o = 0;
-  if (_a_0 !== _b_0) {
-    for (let be$i = 0, be$j = 0;;) {
-      if (be$i >= _a_0.length) { be$o = be$j >= _b_0.length ? 0 : -1; break; }
-      if (be$j >= _b_0.length) { be$o = 1; break; }
-      const be$x = _a_0.codePointAt(be$i), be$y = _b_0.codePointAt(be$j);
-      if (be$x !== be$y) { be$o = be$x < be$y ? -1 : 1; break; }
-      be$i += be$x > 0xFFFF ? 2 : 1;
-      be$j += be$y > 0xFFFF ? 2 : 1;
-    }
+function $String_order_go(_a_0, _b_0, _c_0) {
+  // bend-emit: Base's String.order.go, natively: by Char code, then length.
+  if (_c_0.$ !== "EQ" || _a_0 === _b_0) return _c_0;
+  for (let be$i = 0, be$j = 0;;) {
+    if (be$i >= _a_0.length) return be$j >= _b_0.length ? be$N$EQ : be$N$LT;
+    if (be$j >= _b_0.length) return be$N$GT;
+    let be$x = _a_0.charCodeAt(be$i), be$y = _b_0.charCodeAt(be$j), be$m = 1, be$n = 1;
+    if (be$x >= 0xD800 && be$x < 0xE000) { be$m = char_len(_a_0, be$i); be$x = char_code(_a_0.slice(be$i, be$i + be$m)); }
+    if (be$y >= 0xD800 && be$y < 0xE000) { be$n = char_len(_b_0, be$j); be$y = char_code(_b_0.slice(be$j, be$j + be$n)); }
+    if (be$x !== be$y) return be$x < be$y ? be$N$LT : be$N$GT;
+    be$i += be$m;
+    be$j += be$n;
   }
-  return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd(_a_0, _b_0), (be$o < 0 ? be$N$LT : be$o > 0 ? be$N$GT : be$N$EQ));
 }
 
-function $Maybe$is_some$(_m_0) {
+function $Maybe_is_some(_m_0) {
   if (_m_0.$ === "None") {
     return false;
   } else {
     return true;
   }
 }
-
-function $String$cmp$fin$(_t1_0, _t2_0, _hc_0) {
-  const _t_0 = _hc_0["fst"];
-  const _h1b_0 = _t_0["fst"];
-  const _h2b_0 = _t_0["snd"];
-  const _t_1 = _hc_0["snd"];
-  if (_t_1.$ === "LT") {
-    return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd((_h1b_0 + _t1_0), (_h2b_0 + _t2_0)), be$N$LT);
-  } else if (_t_1.$ === "EQ") {
-    return $String$cmp$rec$(_h1b_0, _h2b_0, ($String$cmp$(_t1_0, _t2_0)));
-  } else {
-    return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd((_h1b_0 + _t1_0), (_h2b_0 + _t2_0)), be$N$GT);
-  }
-}
-
-function $Char$cmp$(_a_0, _b_0) {
-  const _x_0 = _a_0.codePointAt(0);
-  const _x_1 = _b_0.codePointAt(0);
-  return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd(_a_0, _b_0), cmp_new(_x_0, _x_1));
-}
-
-function $String$cmp$rec$(_h1b_0, _h2b_0, _rr_0) {
-  const _t_0 = _rr_0["fst"];
-  const _t1b_0 = _t_0["fst"];
-  const _t2b_0 = _t_0["snd"];
-  const _r_0 = _rr_0["snd"];
-  return new be$C$Tuple$fst$snd(new be$C$Tuple$fst$snd((_h1b_0 + _t1b_0), (_h2b_0 + _t2b_0)), _r_0);
-}
 const be$default = {
-  "finite_number": run_lib((a0) => $finite_number$(a0), 1),
-  "valid_json": run_lib((a0) => $valid_json$(a0), 1),
-  "pick_raw": run_lib((a0,a1,a2) => $pick_raw$(a0,a1,a2), 3),
-  "lookup": run_lib((a0,a1) => $lookup$(a0,a1), 2),
-  "pick_bool": run_lib((a0,a1,a2) => $pick_bool$(a0,a1,a2), 3),
-  "is_rnil": run_lib((a0) => $is_rnil$(a0), 1),
-  "is_missing": run_lib((a0) => $is_missing$(a0), 1),
-  "in_names": run_lib((a0,a1) => $in_names$(a0,a1), 2),
-  "none_present": run_lib((a0,a1) => $none_present$(a0,a1), 2),
-  "key_names": run_lib((a0) => $key_names$(a0), 1),
-  "no_extra": run_lib((a0,a1) => $no_extra$(a0,a1), 2),
-  "drop_key": run_lib((a0,a1) => $drop_key$(a0,a1), 2),
-  "is_str": run_lib((a0,a1) => $is_str$(a0,a1), 2),
-  "is_tag": run_lib((a0,a1,a2) => $is_tag$(a0,a1,a2), 3),
-  "in_err": run_lib((a0,a1) => $in_err$(a0,a1), 2),
-  "str_len_ok": run_lib((a0,a1,a2) => $str_len_ok$(nat_in(a0),nat_in(a1),a2), 3),
-  "num_ok": run_lib((a0,a1,a2) => $num_ok$(nat_in(a0),nat_in(a1),nat_in(a2)), 3),
-  "int_le": run_lib((a0,a1) => $int_le$(a0,a1), 2),
-  "int_ok": run_lib((a0,a1,a2) => $int_ok$(a0,a1,a2), 3),
-  "int_raw": run_lib((a0) => $int_raw$(a0), 1),
-  "len_ok": run_lib((a0,a1,a2) => $len_ok$(nat_in(a0),nat_in(a1),a2), 3),
-  "str_len_in": run_lib((a0,a1,a2) => $str_len_in$(nat_in(a0),nat_in(a1),a2), 3),
-  "nat_in": run_lib((a0,a1,a2) => $nat_in$(nat_in(a0),nat_in(a1),a2), 3),
-  "is_bool": run_lib((a0) => $is_bool$(a0), 1),
-  "raw_list": run_lib((a0) => $raw_list$(a0), 1),
-  "raw_len": run_lib((a0) => $raw_len$(a0), 1),
-  "count_ok": run_lib((a0,a1,a2) => $count_ok$(nat_in(a0),nat_in(a1),a2), 3),
-  "list_len_ok": run_lib((a0,a1,a2) => $list_len_ok$(nat_in(a0),nat_in(a1),a2), 3),
-  "has_key": run_lib((a0,a1) => $has_key$(a0,a1), 2),
-  "key_once_at": run_lib((a0,a1,a2) => $key_once_at$(a0,a1,a2), 3),
-  "key_once": run_lib((a0,a1) => $key_once$(a0,a1), 2),
-  "key_err": run_lib((a0,a1) => $key_err$(a0,a1), 2),
-  "kind_eq": run_lib((a0,a1) => $kind_eq$(a0,a1), 2),
-  "kind_of": run_lib((a0) => $kind_of$(a0), 1),
-  "has_kind": run_lib((a0,a1) => $has_kind$(a0,a1), 2),
-  "apart": run_lib((a0,a1,a2) => $apart$(a0,a1,a2), 3),
-  "disjoint": run_lib((a0,a1) => $disjoint$(a0,a1), 2),
-  "alt_ok": run_lib((a0) => $alt_ok$(a0), 1),
-  "no_alt": run_lib((a0) => $no_alt$(a0), 1),
-  "here": run_lib((a0) => $here$(a0), 1),
-  "under": run_lib((a0,a1) => $under$(a0,a1), 2),
-  "len_err": run_lib((a0,a1,a2) => $len_err$(nat_in(a0),nat_in(a1),a2), 3),
-  "later_l_path": run_lib((a0) => $later_l_path$(a0), 1),
-  "later_l": run_lib((a0) => $later_l$(a0), 1),
-  "later_i_path": run_lib((a0) => $later_i_path$(a0), 1),
-  "later_i": run_lib((a0) => $later_i$(a0), 1),
-  "later_f_path": run_lib((a0) => $later_f_path$(a0), 1),
-  "later_f": run_lib((a0) => $later_f$(a0), 1),
-  "first": run_lib((a0,a1) => $first$(a0,a1), 2),
-  "missing_or": run_lib((a0,a1) => $missing_or$(a0,a1), 2),
-  "pick_err": run_lib((a0,a1,a2) => $pick_err$(a0,a1,a2), 3),
-  "true_err": run_lib((a0) => $true_err$(a0), 1),
-  "enum_err": run_lib((a0) => $enum_err$(a0), 1),
-  "dup_err": run_lib((a0,a1) => $dup_err$(a0,a1), 2),
-  "extra_err": run_lib((a0,a1) => $extra_err$(a0,a1), 2),
-  "tag_err": run_lib((a0,a1) => $tag_err$(a0,a1), 2),
-  "count_err": run_lib((a0,a1,a2) => $count_err$(nat_in(a0),nat_in(a1),a2), 3),
-  "guard": run_lib((a0,a1) => $guard$(a0,a1), 2),
-  "nat_in_defect": run_lib((a0,a1,a2,a3) => $nat_in_defect$(nat_in(a0),nat_in(a1),a2,a3), 4),
-  "int_defect": run_lib((a0,a1) => $int_defect$(a0,a1), 2),
-  "int_in_defect": run_lib((a0,a1,a2,a3) => $int_in_defect$(a0,a1,a2,a3), 4),
-  "bool_defect": run_lib((a0,a1) => $bool_defect$(a0,a1), 2),
-  "no_rule": run_lib((a0,a1) => $no_rule$(nat_in(a0),a1), 2),
-  "first_why": run_lib((a0,a1) => $first_why$(a0,a1), 2),
-  "step_eq": run_lib((a0,a1) => $step_eq$(a0,a1), 2),
-  "path_eq": run_lib((a0,a1) => $path_eq$(a0,a1), 2),
-  "rule_defect": run_lib((a0,a1) => $rule_defect$(a0,a1), 2),
-  "not_list": run_lib((a0,a1) => $not_list$(a0,a1), 2),
-  "not_object": run_lib((a0,a1) => $not_object$(a0,a1), 2),
-  "nat_defect": run_lib((a0,a1) => $nat_defect$(a0,a1), 2),
-  "str_defect": run_lib((a0,a1) => $str_defect$(a0,a1), 2),
-  "pick_why": run_lib((a0,a1,a2) => $pick_why$(a0,a1,a2), 3),
-  "true_defect": run_lib((a0,a1) => $true_defect$(a0,a1), 2),
-  "enum_defect": run_lib((a0,a1,a2) => $enum_defect$(a0,a1,a2), 3),
-  "no_variant": run_lib((a0) => $no_variant$(a0), 1),
-  "dup_defect": run_lib((a0,a1,a2) => $dup_defect$(a0,a1,a2), 3),
-  "at_end": run_lib((a0,a1) => $at_end$(a0,a1), 2),
-  "extra_defect": run_lib((a0,a1,a2) => $extra_defect$(a0,a1,a2), 3),
-  "tag_defect": run_lib((a0,a1,a2) => $tag_defect$(a0,a1,a2), 3),
-  "tag_key_defect": run_lib((a0,a1,a2) => $tag_key_defect$(a0,a1,a2), 3),
-  "check0": run_lib((a0,a1) => $check0$(a0,a1), 2),
-  "conforms0": run_lib((a0,a1) => $conforms0$(a0,a1), 2),
-  "is_chain": run_lib((a0) => $is_chain$(a0), 1),
-  "is_object": run_lib((a0) => $is_object$(a0), 1),
-  "one_if_there": run_lib((a0) => $one_if_there$(a0), 1),
-  "count_present": run_lib((a0,a1) => $count_present$(a0,a1), 2),
-  "tuple_of": run_lib((a0) => $tuple_of$(a0), 1),
-  "at_raw": run_lib((a0,a1) => $at_raw$(a0,nat_in(a1)), 2),
-  "count_unknown": run_lib((a0,a1) => $count_unknown$(a0,a1), 2),
-  "Meaning": run_lib((a0) => $Meaning$(a0), 1),
-  "enc": run_lib((a0,a1) => $enc$(a0,a1), 2),
-  "lcons": run_lib((a0,a1) => $lcons$(a0,a1), 2),
-  "both": run_lib((a0,a1) => $both$(a0,a1), 2),
-  "opt_some": run_lib((a0) => $opt_some$(a0), 1),
-  "map_inl": run_lib((a0) => $map_inl$(a0), 1),
-  "map_inr": run_lib((a0) => $map_inr$(a0), 1),
-  "pick_m": run_lib((a0,a1,a2) => $pick_m$(a0,a1,a2), 3),
-  "true_unit": run_lib((a0) => $true_unit$(a0), 1),
-  "nullish": run_lib((a0) => $nullish$(a0), 1),
-  "dec": run_lib((a0,a1) => $dec$(a0,a1), 2),
-  "opt_at": run_lib((a0) => $opt_at$(a0), 1),
-  "nullable": run_lib((a0) => $nullable$(a0), 1),
-  "no_key": run_lib((a0,a1) => $no_key$(a0,a1), 2),
-  "fresh_f": run_lib((a0,a1) => $fresh_f$(a0,a1), 2),
-  "fresh_v": run_lib((a0,a1) => $fresh_v$(a0,a1), 2),
-  "is_keyed": run_lib((a0) => $is_keyed$(a0), 1),
-  "fresh_t": run_lib((a0,a1,a2) => $fresh_t$(a0,a1,a2), 3),
-  "wf": run_lib((a0) => $wf$(a0), 1),
-  "names_ok": run_lib((a0,a1) => $names_ok$(a0,a1), 2),
-  "bounds_ok": run_lib((a0,a1) => $bounds_ok$(a0,a1), 2),
+  "finite_number": run_lib((a0) => run_loop($finite_number(a0)), 1),
+  "valid_json": run_lib((a0) => run_loop($valid_json(a0)), 1),
+  "pick_raw": run_lib((a0,a1,a2) => run_loop($pick_raw(a0,a1,a2)), 3),
+  "lookup": run_lib((a0,a1) => run_loop($lookup(str_in(a0),a1)), 2),
+  "pick_bool": run_lib((a0,a1,a2) => run_loop($pick_bool(a0,a1,a2)), 3),
+  "is_rnil": run_lib((a0) => run_loop($is_rnil(a0)), 1),
+  "is_missing": run_lib((a0) => run_loop($is_missing(a0)), 1),
+  "in_names": run_lib((a0,a1) => run_loop($in_names(str_in(a0),a1)), 2),
+  "none_present": run_lib((a0,a1) => run_loop($none_present(a0,a1)), 2),
+  "key_names": run_lib((a0) => run_loop($key_names(a0)), 1),
+  "no_extra": run_lib((a0,a1) => run_loop($no_extra(a0,a1)), 2),
+  "drop_key": run_lib((a0,a1) => run_loop($drop_key(str_in(a0),a1)), 2),
+  "is_str": run_lib((a0,a1) => run_loop($is_str(str_in(a0),a1)), 2),
+  "is_tag": run_lib((a0,a1,a2) => run_loop($is_tag(str_in(a0),str_in(a1),a2)), 3),
+  "in_err": run_lib((a0,a1) => run_loop($in_err(a0,a1)), 2),
+  "str_len_ok": run_lib((a0,a1,a2) => run_loop($str_len_ok(nat_in(a0),nat_in(a1),str_in(a2))), 3),
+  "num_ok": run_lib((a0,a1,a2) => run_loop($num_ok(nat_in(a0),nat_in(a1),nat_in(a2))), 3),
+  "int_le": run_lib((a0,a1) => run_loop($int_le(a0,a1)), 2),
+  "int_ok": run_lib((a0,a1,a2) => run_loop($int_ok(a0,a1,a2)), 3),
+  "int_raw": run_lib((a0) => run_loop($int_raw(a0)), 1),
+  "len_ok": run_lib((a0,a1,a2) => run_loop($len_ok(nat_in(a0),nat_in(a1),a2)), 3),
+  "str_len_in": run_lib((a0,a1,a2) => run_loop($str_len_in(nat_in(a0),nat_in(a1),a2)), 3),
+  "nat_in": run_lib((a0,a1,a2) => run_loop($nat_in(nat_in(a0),nat_in(a1),a2)), 3),
+  "is_bool": run_lib((a0) => run_loop($is_bool(a0)), 1),
+  "raw_list": run_lib((a0) => run_loop($raw_list(a0)), 1),
+  "raw_len": run_lib((a0) => run_loop($raw_len(a0)), 1),
+  "count_ok": run_lib((a0,a1,a2) => run_loop($count_ok(nat_in(a0),nat_in(a1),a2)), 3),
+  "list_len_ok": run_lib((a0,a1,a2) => run_loop($list_len_ok(nat_in(a0),nat_in(a1),a2)), 3),
+  "has_key": run_lib((a0,a1) => run_loop($has_key(str_in(a0),a1)), 2),
+  "key_once_at": run_lib((a0,a1,a2) => run_loop($key_once_at(a0,a1,str_in(a2))), 3),
+  "key_once": run_lib((a0,a1) => run_loop($key_once(str_in(a0),a1)), 2),
+  "key_err": run_lib((a0,a1) => run_loop($key_err(a0,str_in(a1))), 2),
+  "kind_eq": run_lib((a0,a1) => run_loop($kind_eq(a0,a1)), 2),
+  "kind_of": run_lib((a0) => run_loop($kind_of(a0)), 1),
+  "has_kind": run_lib((a0,a1) => run_loop($has_kind(a0,a1)), 2),
+  "apart": run_lib((a0,a1,a2) => run_loop($apart(a0,a1,a2)), 3),
+  "disjoint": run_lib((a0,a1) => run_loop($disjoint(a0,a1)), 2),
+  "alt_ok": run_lib((a0) => run_loop($alt_ok(a0)), 1),
+  "no_alt": run_lib((a0) => run_loop($no_alt(a0)), 1),
+  "here": run_lib((a0) => run_loop($here(a0)), 1),
+  "under": run_lib((a0,a1) => run_loop($under(a0,a1)), 2),
+  "len_err": run_lib((a0,a1,a2) => run_loop($len_err(nat_in(a0),nat_in(a1),a2)), 3),
+  "later_l_path": run_lib((a0) => run_loop($later_l_path(a0)), 1),
+  "later_l": run_lib((a0) => run_loop($later_l(a0)), 1),
+  "later_i_path": run_lib((a0) => run_loop($later_i_path(a0)), 1),
+  "later_i": run_lib((a0) => run_loop($later_i(a0)), 1),
+  "later_f_path": run_lib((a0) => run_loop($later_f_path(a0)), 1),
+  "later_f": run_lib((a0) => run_loop($later_f(a0)), 1),
+  "first": run_lib((a0,a1) => run_loop($first(a0,a1)), 2),
+  "missing_or": run_lib((a0,a1) => run_loop($missing_or(a0,a1)), 2),
+  "pick_err": run_lib((a0,a1,a2) => run_loop($pick_err(a0,a1,a2)), 3),
+  "true_err": run_lib((a0) => run_loop($true_err(a0)), 1),
+  "enum_err": run_lib((a0) => run_loop($enum_err(a0)), 1),
+  "dup_err": run_lib((a0,a1) => run_loop($dup_err(a0,a1)), 2),
+  "extra_err": run_lib((a0,a1) => run_loop($extra_err(a0,a1)), 2),
+  "tag_err": run_lib((a0,a1) => run_loop($tag_err(str_in(a0),a1)), 2),
+  "count_err": run_lib((a0,a1,a2) => run_loop($count_err(nat_in(a0),nat_in(a1),a2)), 3),
+  "guard": run_lib((a0,a1) => run_loop($guard(a0,a1)), 2),
+  "nat_in_defect": run_lib((a0,a1,a2,a3) => run_loop($nat_in_defect(nat_in(a0),nat_in(a1),a2,a3)), 4),
+  "int_defect": run_lib((a0,a1) => run_loop($int_defect(a0,a1)), 2),
+  "int_in_defect": run_lib((a0,a1,a2,a3) => run_loop($int_in_defect(a0,a1,a2,a3)), 4),
+  "bool_defect": run_lib((a0,a1) => run_loop($bool_defect(a0,a1)), 2),
+  "no_rule": run_lib((a0,a1) => run_loop($no_rule(nat_in(a0),a1)), 2),
+  "first_why": run_lib((a0,a1) => run_loop($first_why(a0,a1)), 2),
+  "step_eq": run_lib((a0,a1) => run_loop($step_eq(a0,a1)), 2),
+  "path_eq": run_lib((a0,a1) => run_loop($path_eq(a0,a1)), 2),
+  "rule_defect": run_lib((a0,a1) => run_loop($rule_defect(a0,a1)), 2),
+  "not_list": run_lib((a0,a1) => run_loop($not_list(a0,a1)), 2),
+  "not_object": run_lib((a0,a1) => run_loop($not_object(a0,a1)), 2),
+  "nat_defect": run_lib((a0,a1) => run_loop($nat_defect(a0,a1)), 2),
+  "str_defect": run_lib((a0,a1) => run_loop($str_defect(a0,a1)), 2),
+  "pick_why": run_lib((a0,a1,a2) => run_loop($pick_why(a0,a1,a2)), 3),
+  "true_defect": run_lib((a0,a1) => run_loop($true_defect(a0,a1)), 2),
+  "enum_defect": run_lib((a0,a1,a2) => run_loop($enum_defect(a0,a1,a2)), 3),
+  "no_variant": run_lib((a0) => run_loop($no_variant(a0)), 1),
+  "dup_defect": run_lib((a0,a1,a2) => run_loop($dup_defect(a0,a1,a2)), 3),
+  "at_end": run_lib((a0,a1) => run_loop($at_end(a0,a1)), 2),
+  "extra_defect": run_lib((a0,a1,a2) => run_loop($extra_defect(a0,a1,a2)), 3),
+  "tag_defect": run_lib((a0,a1,a2) => run_loop($tag_defect(str_in(a0),a1,a2)), 3),
+  "tag_key_defect": run_lib((a0,a1,a2) => run_loop($tag_key_defect(a0,str_in(a1),a2)), 3),
+  "check0": run_lib((a0,a1) => run_loop($check0(a0,a1)), 2),
+  "conforms0": run_lib((a0,a1) => run_loop($conforms0(a0,a1)), 2),
+  "is_chain": run_lib((a0) => run_loop($is_chain(a0)), 1),
+  "is_object": run_lib((a0) => run_loop($is_object(a0)), 1),
+  "one_if_there": run_lib((a0) => run_loop($one_if_there(a0)), 1),
+  "count_present": run_lib((a0,a1) => run_loop($count_present(a0,a1)), 2),
+  "tuple_of": run_lib((a0) => run_loop($tuple_of(a0)), 1),
+  "at_raw": run_lib((a0,a1) => run_loop($at_raw(a0,nat_in(a1))), 2),
+  "count_unknown": run_lib((a0,a1) => run_loop($count_unknown(a0,a1)), 2),
+  "Meaning": run_lib((a0) => run_loop($Meaning(a0)), 1),
+  "enc": run_lib((a0,a1) => run_loop($enc(a0,a1)), 2),
+  "lcons": run_lib((a0,a1) => run_loop($lcons(a0,a1)), 2),
+  "both": run_lib((a0,a1) => run_loop($both(a0,a1)), 2),
+  "opt_some": run_lib((a0) => run_loop($opt_some(a0)), 1),
+  "map_inl": run_lib((a0) => run_loop($map_inl(a0)), 1),
+  "map_inr": run_lib((a0) => run_loop($map_inr(a0)), 1),
+  "pick_m": run_lib((a0,a1,a2) => run_loop($pick_m(a0,a1,a2)), 3),
+  "true_unit": run_lib((a0) => run_loop($true_unit(a0)), 1),
+  "nullish": run_lib((a0) => run_loop($nullish(a0)), 1),
+  "dec": run_lib((a0,a1) => run_loop($dec(a0,a1)), 2),
+  "opt_at": run_lib((a0) => run_loop($opt_at(a0)), 1),
+  "nullable": run_lib((a0) => run_loop($nullable(a0)), 1),
+  "no_key": run_lib((a0,a1) => run_loop($no_key(str_in(a0),a1)), 2),
+  "fresh_f": run_lib((a0,a1) => run_loop($fresh_f(str_in(a0),a1)), 2),
+  "fresh_v": run_lib((a0,a1) => run_loop($fresh_v(str_in(a0),a1)), 2),
+  "is_keyed": run_lib((a0) => run_loop($is_keyed(a0)), 1),
+  "fresh_t": run_lib((a0,a1,a2) => run_loop($fresh_t(str_in(a0),str_in(a1),a2)), 3),
+  "wf": run_lib((a0) => run_loop($wf(a0)), 1),
+  "names_ok": run_lib((a0,a1) => run_loop($names_ok(a0,a1)), 2),
+  "bounds_ok": run_lib((a0,a1) => run_loop($bounds_ok(a0,a1)), 2),
 };
 export default be$default;
 const be$0 = be$default["finite_number"];

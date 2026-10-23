@@ -123,15 +123,15 @@ bun src/gen-cli.ts src/gen.schemas.ts "$GEN/schemas.bend"
 tools/bend-check "$GEN/schemas.bend"
 
 echo "== 5. the facts this core rests on =="
-# They come from the hub: PROOF.bend imports bend-mathlib@0.7.1.0 by name, and
+# They come from the hub: PROOF.bend imports bend-mathlib@0.7.4.0 by name, and
 # step 1 checks the imported lemmas too. bendlib's own gate holds their
 # negative controls.
 #
 # The hub pins bend-mathlib to the one bend it checks on, so the version in
-# PROOF.bend is not free to move: 0.7.1.0 is from the 2.0.34 line, it checks
-# under this package's bend (2.0.37), and it fails to check under 2.0.32. Raise
-# it only with the bend in BEND_VERSION.
-echo "  bend-mathlib@0.7.1.0, from the hub"
+# PROOF.bend is not free to move: 0.7.4.0 is from the 2.0.38 line and checks
+# under this package's bend (2.0.38), while 0.7.2.0 (the 2.0.37 line) fails to
+# check under 2.0.38. Raise it only with the bend in BEND_VERSION.
+echo "  bend-mathlib@0.7.4.0, from the hub"
 
 echo "== 6. what the package ships =="
 # Two things a consumer hits and this repo's own tests cannot see.
