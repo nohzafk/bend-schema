@@ -128,9 +128,9 @@ echo "== 5. the facts this core rests on =="
 # negative controls.
 #
 # The hub pins bend-mathlib to the one bend it checks on, so the version in
-# PROOF.bend is not free to move: 0.7.4.0 is from the 2.0.38 line and checks
-# under this package's bend (2.0.38), while 0.7.2.0 (the 2.0.37 line) fails to
-# check under 2.0.38. Raise it only with the bend in BEND_VERSION.
+# PROOF.bend is not free to move: 0.7.4.0 is the latest on the hub and checks
+# under this package's bend (2.0.39), while 0.7.2.0 (the 2.0.37 line) fails to
+# check under it. Raise it only with the bend in BEND_VERSION.
 echo "  bend-mathlib@0.7.4.0, from the hub"
 
 echo "== 6. what the package ships =="
