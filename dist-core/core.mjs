@@ -131,9 +131,12 @@ function cmp_new(a, b) {
   return {$: a < b ? "LT" : a === b ? "EQ" : "GT"};
 }
 
+function tup_new(a, b) {
+  return new be$C$Tuple$fst$snd(a, b);
+}
+
 function nat_divmod(a, b) {
-  return b === 0 ? new be$C$Tuple$fst$snd(0, a)
-    : new be$C$Tuple$fst$snd(Math.trunc(a / b), a % b);
+  return tup_new(b && Math.trunc(a / b), b ? a % b : a);
 }
 
 function nat_chk(n) {
@@ -168,8 +171,8 @@ function f32_from_bits(u) {
 
 function f32_read(s) {
   const re = /^[\t\n\v\f\r ]*[+-]?((\d+(?:\.\d*)?|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
-  const v = f32_round(s.replace(/inf\w*/i, "Infinity"));
-  return re.test(s) ? new be$C$Some$value(v) : be$N$None;
+  return re.test(s) ? new be$C$Some$value(f32_round(
+    s.replace(/inf\w*/i, "Infinity"))) : be$N$None;
 }
 
 const f32_round = function f32_round(s) {
@@ -205,7 +208,7 @@ function char_code(s) {
 }
 
 function string_contains(s, p) {
-  // A match must start at a Char boundary, not inside a packed U32 code.
+  // A match starts at a Char, not inside a packed U32 code.
   for (let at = 0; at <= s.length; at += char_len(s, at)) {
     if (s.startsWith(p, at)) {
       return true;
@@ -225,9 +228,9 @@ function str_in(s) {
 // Array
 // =====
 
-function array_new(d, v) {
-  if (d > 31) {
-    throw "bend: an array past the deepest block class 31";
+function array_new(d, v, lgs) {
+  if (d > 31 - lgs) {
+    throw "bend: an array past the deepest block class 31 (depth + log2 words per cell)";
   }
   return Array(2 ** d).fill(v);
 }
@@ -240,10 +243,9 @@ function array_node(a, b) {
 }
 
 function array_rmw(a, i, f) {
-  const at = i % a.length;
-  const old = a[at];
-  a[at] = f(old);
-  return new be$C$Tuple$fst$snd(a, old);
+  const old = a[i %= a.length];
+  a[i] = f(old);
+  return tup_new(a, old);
 }
 
 // Run
@@ -276,6 +278,7 @@ function run_lib(f, n) {
 // ======
 
 const $0eff = Object.create(null);
+const io_file_append = new Set();
 
 function io_eff(k, run) {
   if (arguments.length > 2) {
@@ -1377,7 +1380,7 @@ function $dup_defect(_s_0, _r_0, _p_0) {
       const _t_0 = _p_0["head"];
       if (_t_0.$ === "AtField") {
         const _t_1 = _t_0["skip"];
-        if (_t_1 === 0) {
+        if (_t_1 == 0) {
           const _m_0 = _t_0["name"];
           const _t_2 = _p_0["tail"];
           if (_t_2.$ === "Nil") {
@@ -1489,7 +1492,7 @@ function $tag_key_defect(_b_0, _k_0, _p_0) {
       const _t_0 = _p_0["head"];
       if (_t_0.$ === "AtField") {
         const _t_1 = _t_0["skip"];
-        if (_t_1 === 0) {
+        if (_t_1 == 0) {
           const _j_0 = _t_0["name"];
           const _t_2 = _p_0["tail"];
           if (_t_2.$ === "Nil") {
@@ -1597,7 +1600,7 @@ function $at_raw($0, $1) {
       if (_r_0.$ === "RCons") {
         const _h_0 = _r_0["head"];
         const _t_0 = _r_0["tail"];
-        if (_i_0 === 0) {
+        if (_i_0 == 0) {
           return _h_0;
         } else {
           const _j_0 = (_i_0 - 1);
@@ -3404,6 +3407,7 @@ function $Maybe_is_some(_m_0) {
     return true;
   }
 }
+
 const be$default = {
   "finite_number": run_lib((a0) => run_loop($finite_number(a0)), 1),
   "valid_json": run_lib((a0) => run_loop($valid_json(a0)), 1),
